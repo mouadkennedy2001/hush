@@ -1,3 +1,5 @@
+import { MicFx, loadMicSettings, saveMicSettings } from './mic-fx.js';
+
 const ICE_SERVERS = [
   {
     urls: [
@@ -17,6 +19,17 @@ const AUDIO_CONSTRAINTS = {
   noiseSuppression: true,
   autoGainControl: true
 };
+
+function audioConstraintsFrom(settings) {
+  return {
+    echoCancellation: Boolean(settings.echoCancellation),
+    noiseSuppression: Boolean(settings.noiseSuppression),
+    autoGainControl: Boolean(settings.autoGainControl),
+    ...(settings.deviceId ? { deviceId: { exact: settings.deviceId } } : {})
+  };
+}
+
+const NATIVE_MIC_KEYS = ['echoCancellation', 'noiseSuppression', 'autoGainControl', 'deviceId'];
 
 const VIDEO_CONSTRAINTS = {
   width: { ideal: 1280 },
@@ -69,6 +82,11 @@ export class MediaMesh {
     };
     this.monitors = new Map();
     this.audioContext = null;
+    this.micSettings = loadMicSettings();
+    this.micFx = null;
+    this.rawAudioTrack = null;
+    this.processedAudioTrack = null;
+    this._switchingMic = false;
 
     this.#bindSignaling();
   }
@@ -81,18 +99,18 @@ export class MediaMesh {
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: mic ? AUDIO_CONSTRAINTS : false,
+        audio: mic ? audioConstraintsFrom(this.micSettings) : false,
         video: camera ? VIDEO_CONSTRAINTS : false
       });
-      this.#adoptStream(stream);
+      await this.#adoptStream(stream);
       return { warning: null };
     } catch (error) {
       if (mic && camera) {
         try {
           const audioOnly = await navigator.mediaDevices.getUserMedia({
-            audio: AUDIO_CONSTRAINTS
+            audio: audioConstraintsFrom(this.micSettings)
           });
-          this.#adoptStream(audioOnly);
+          await this.#adoptStream(audioOnly);
           return { warning: this.translate('media.cameraOnlyWarning') };
         } catch (secondError) {
           return { warning: this.translate(friendlyMediaError(secondError)) };
@@ -106,12 +124,11 @@ export class MediaMesh {
     if (this.tracks.audio) return true;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: AUDIO_CONSTRAINTS
+        audio: audioConstraintsFrom(this.micSettings)
       });
       const track = stream.getAudioTracks()[0];
       if (!track) throw new Error('no-audio-track');
-      this.#watchTrack(track, 'audio');
-      this.#setTrack('audio', track);
+      await this.#attachAudioTrack(track);
       this.onChange(null, 'audio');
       this.resumeAudio();
       return true;
@@ -122,8 +139,9 @@ export class MediaMesh {
   }
 
   disableMic() {
-    if (!this.tracks.audio) return;
-    this.#setTrack('audio', null);
+    if (!this.tracks.audio && !this.rawAudioTrack) return;
+    this.#stopAudioPipeline();
+    if (this.tracks.audio) this.#setTrack('audio', null);
     this.onChange(null, 'audio');
   }
 
@@ -189,8 +207,115 @@ export class MediaMesh {
       context.resume().catch(() => {});
     }
     for (const peer of this.peers.values()) {
+      const media = peer.channels.media;
+      if (media) this.#attachRemoteAudio(peer, media);
       peer.audioEl?.play?.().catch(() => {});
     }
+  }
+
+  /* ---------------- Mic voice processing (MicFx) ---------------- */
+
+  getMicSettings() {
+    return { ...this.micSettings };
+  }
+
+  getMicLevel() {
+    return this.micFx?.getLevel() ?? { rms: 0, db: -60, gateOpen: true };
+  }
+
+  async listMicDevices() {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      return devices.filter((d) => d.kind === 'audioinput');
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Update mic settings. Live WebAudio params apply instantly via
+   * replaceTrack-free param changes; native (getUserMedia) params need a
+   * fresh capture, swapped in place without renegotiation.
+   */
+  async setMicSettings(partial = {}) {
+    const nativeChanged = NATIVE_MIC_KEYS.some(
+      (key) => key in partial && partial[key] !== this.micSettings[key]
+    );
+    const enabledChanged =
+      'enabled' in partial && partial.enabled !== this.micSettings.enabled;
+    this.micSettings = { ...this.micSettings, ...partial };
+    saveMicSettings(this.micSettings);
+    if (nativeChanged && this.tracks.audio && !this._switchingMic) {
+      await this.#refreshAudioTrack();
+    } else if (enabledChanged && this.tracks.audio && this.rawAudioTrack) {
+      // Rebuild (or bypass) the WebAudio chain on the same raw capture.
+      await this.#attachAudioTrack(this.rawAudioTrack);
+    } else {
+      this.micFx?.update(this.micSettings);
+    }
+    return this.getMicSettings();
+  }
+
+  async #attachAudioTrack(rawTrack) {
+    const previousFx = this.micFx;
+    const previousRaw = this.rawAudioTrack;
+    const fx = new MicFx(this.micSettings);
+    const processed = await fx.process(rawTrack);
+    this.micFx = fx;
+    this.rawAudioTrack = rawTrack;
+    this.processedAudioTrack = processed;
+    rawTrack.addEventListener(
+      'ended',
+      () => {
+        if (this.rawAudioTrack !== rawTrack) return; // already swapped
+        this.#stopAudioPipeline();
+        this.#setTrack('audio', null);
+        this.onChange(null, 'audio');
+        this.onError(this.translate('media.micDisconnected'));
+      },
+      { once: true }
+    );
+    // Swap the sent track, then retire the previous pipeline.
+    this.#setTrack('audio', processed);
+    if (previousFx && previousFx !== fx) previousFx.teardown(false);
+    if (previousRaw && previousRaw !== rawTrack) {
+      try { previousRaw.stop(); } catch { /* ignore */ }
+    }
+    return processed;
+  }
+
+  async #refreshAudioTrack() {
+    if (this._switchingMic) return;
+    this._switchingMic = true;
+    const previousRaw = this.rawAudioTrack;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: audioConstraintsFrom(this.micSettings)
+      });
+      const track = stream.getAudioTracks()[0];
+      if (!track) throw new Error('no-audio-track');
+      await this.#attachAudioTrack(track);
+      if (previousRaw && previousRaw !== track) {
+        try { previousRaw.stop(); } catch { /* ignore */ }
+      }
+      this.onChange(null, 'audio');
+    } catch (error) {
+      this.onError(this.translate(friendlyMediaError(error)));
+    } finally {
+      this._switchingMic = false;
+    }
+  }
+
+  #stopAudioPipeline() {
+    if (this.micFx) {
+      this.micFx.teardown(false);
+      this.micFx = null;
+    }
+    if (this.rawAudioTrack && this.rawAudioTrack !== this.processedAudioTrack) {
+      try { this.rawAudioTrack.stop(); } catch { /* ignore */ }
+    }
+    this.rawAudioTrack = null;
+    this.processedAudioTrack = null;
   }
 
   /* ---------------- Streams ---------------- */
@@ -254,6 +379,7 @@ export class MediaMesh {
 
   dispose() {
     this.closeAll();
+    this.#stopAudioPipeline();
     for (const kind of Object.keys(this.tracks)) {
       if (this.tracks[kind]) {
         try {
@@ -339,7 +465,13 @@ export class MediaMesh {
       return;
     }
     try {
-      await channel.pc.addIceCandidate(candidate);
+      // Rebuild a real RTCIceCandidate when available; a plain dict also
+      // works in most browsers, but the constructor is the portable form.
+      const init =
+        typeof RTCIceCandidate === 'function'
+          ? (() => { try { return new RTCIceCandidate(candidate); } catch { return candidate; } })()
+          : candidate;
+      await channel.pc.addIceCandidate(init);
     } catch {
       // Candidates arriving after close are harmless.
     }
@@ -371,6 +503,8 @@ export class MediaMesh {
     const audioEl = document.createElement('audio');
     audioEl.autoplay = true;
     audioEl.playsInline = true;
+    audioEl.muted = false;
+    audioEl.volume = 1;
     audioEl.dataset.peer = id;
     this.audioContainer.append(audioEl);
 
@@ -416,10 +550,16 @@ export class MediaMesh {
 
     pc.onicecandidate = (event) => {
       if (!event.candidate) return;
+      // A raw RTCIceCandidate does not always survive Socket.IO's JSON
+      // encoding — send a plain object explicitly.
+      const candidate =
+        typeof event.candidate.toJSON === 'function'
+          ? event.candidate.toJSON()
+          : event.candidate;
       this.socket.emit('webrtc:ice', {
         to: peer.id,
         channel: name,
-        candidate: event.candidate
+        candidate
       });
     };
 
@@ -433,6 +573,11 @@ export class MediaMesh {
     };
 
     pc.onconnectionstatechange = () => {
+      if (pc.connectionState === 'connected' && name === 'media') {
+        // (Re)bind the audio element once the transport is up — ontrack
+        // may have fired before the element was ready to play.
+        this.#attachRemoteAudio(peer, channel);
+      }
       if (pc.connectionState === 'failed') {
         this.onError(this.translate('media.peerFailed'));
       }
@@ -489,7 +634,11 @@ export class MediaMesh {
     const pending = channel.pendingCandidates.splice(0);
     for (const candidate of pending) {
       try {
-        await channel.pc.addIceCandidate(candidate);
+        const init =
+          typeof RTCIceCandidate === 'function'
+            ? (() => { try { return new RTCIceCandidate(candidate); } catch { return candidate; } })()
+            : candidate;
+        await channel.pc.addIceCandidate(init);
       } catch {
         // Ignore stale candidates.
       }
@@ -505,18 +654,26 @@ export class MediaMesh {
   }
 
   #attachRemoteAudio(peer, channel) {
-    peer.audioEl.srcObject = channel.streams.audio;
+    // Only the media channel carries audio. The screen channel has an
+    // (empty) audio stream placeholder — assigning it would overwrite the
+    // real media stream and silence the peer.
+    if (channel.name !== 'media') return;
+    if (peer.audioEl.srcObject !== channel.streams.audio) {
+      peer.audioEl.srcObject = channel.streams.audio;
+    }
+    peer.audioEl.muted = false;
+    peer.audioEl.volume = 1;
     peer.audioEl.play?.().catch(() => {});
     this.#monitor(`remote:${peer.id}`, channel.streams.audio);
   }
 
   /* ---------------- Local tracks ---------------- */
 
-  #adoptStream(stream) {
+  async #adoptStream(stream) {
     for (const track of stream.getTracks()) {
       if (track.kind === 'audio') {
-        this.#watchTrack(track, 'audio');
-        this.#setTrack('audio', track);
+        // Raw mic -> MicFx -> processed track actually sent to peers.
+        await this.#attachAudioTrack(track);
       } else if (track.kind === 'video') {
         this.#watchTrack(track, 'camera');
         this.#setTrack('camera', track);

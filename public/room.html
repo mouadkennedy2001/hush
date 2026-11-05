@@ -320,6 +320,10 @@
                 <svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg>
                 <span>Search chat</span>
               </button>
+              <button class="tool-button" id="mic-settings-btn" type="button">
+                <svg class="icon" aria-hidden="true"><use href="#i-mic"></use></svg>
+                <span>Mic settings</span>
+              </button>
             </div>
             <p class="tools-credit">
               <span>Built by</span>
@@ -358,6 +362,105 @@
         <li><span>Send a message</span><kbd>Enter</kbd></li>
         <li><span>Close dialogs</span><kbd>Esc</kbd></li>
       </ul>
+    </div>
+  </dialog>
+
+  <dialog class="shortcuts-dialog mic-dialog" id="mic-dialog" aria-labelledby="mic-title">
+    <div class="shortcuts-inner">
+      <div class="dialog-head">
+        <h2 id="mic-title">Mic settings</h2>
+        <button class="icon-button dialog-close" id="mic-close" type="button">
+          <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg>
+        </button>
+      </div>
+      <p class="shortcuts-lead muted" id="mic-lead"></p>
+
+      <div class="mic-meter-row">
+        <span>Input level</span>
+        <span class="mic-meter"><span class="mic-meter-fill" id="mic-meter-fill"></span></span>
+        <span class="mic-gate-state" id="mic-gate-state"></span>
+      </div>
+
+      <label class="field mic-field">
+        <span>Preset</span>
+        <select id="mic-preset">
+          <option value="off">Off (raw mic)</option>
+          <option value="voice">Voice</option>
+          <option value="podcast">Podcast</option>
+          <option value="gaming">Gaming / voice chat</option>
+          <option value="quiet">Quiet room</option>
+        </select>
+      </label>
+
+      <label class="field mic-field">
+        <span>Microphone</span>
+        <select id="mic-device"><option value="">Default microphone</option></select>
+      </label>
+
+      <div class="mic-slider-row">
+        <label for="mic-amp">Amplification</label>
+        <input type="range" id="mic-amp" min="0" max="24" step="1" value="6" />
+        <output id="mic-amp-value"></output>
+      </div>
+
+      <div class="mic-slider-row">
+        <label for="mic-gate-threshold">Gate threshold</label>
+        <input type="range" id="mic-gate-threshold" min="-60" max="-20" step="1" value="-42" />
+        <output id="mic-gate-threshold-value"></output>
+      </div>
+
+      <div class="mic-slider-row">
+        <label for="mic-de-distort">De-distortion (soft clip)</label>
+        <input type="range" id="mic-de-distort" min="0" max="100" step="5" value="25" />
+        <output id="mic-de-distort-value"></output>
+      </div>
+
+      <div class="join-media mic-toggles">
+        <label class="check-row">
+          <input type="checkbox" id="mic-enabled" checked />
+          <span class="check-box" aria-hidden="true"><svg class="icon"><use href="#i-check"></use></svg></span>
+          <span class="check-copy"><strong>Voice effects</strong><small id="mic-enabled-note"></small></span>
+        </label>
+        <label class="check-row">
+          <input type="checkbox" id="mic-gate" checked />
+          <span class="check-box" aria-hidden="true"><svg class="icon"><use href="#i-check"></use></svg></span>
+          <span class="check-copy"><strong>Noise gate</strong></span>
+        </label>
+        <label class="check-row">
+          <input type="checkbox" id="mic-noise" checked />
+          <span class="check-box" aria-hidden="true"><svg class="icon"><use href="#i-check"></use></svg></span>
+          <span class="check-copy"><strong>Noise suppression (browser / hardware)</strong></span>
+        </label>
+        <label class="check-row">
+          <input type="checkbox" id="mic-echo" checked />
+          <span class="check-box" aria-hidden="true"><svg class="icon"><use href="#i-check"></use></svg></span>
+          <span class="check-copy"><strong>Echo cancellation</strong></span>
+        </label>
+        <label class="check-row">
+          <input type="checkbox" id="mic-agc" checked />
+          <span class="check-box" aria-hidden="true"><svg class="icon"><use href="#i-check"></use></svg></span>
+          <span class="check-copy"><strong>Auto gain</strong></span>
+        </label>
+        <label class="check-row">
+          <input type="checkbox" id="mic-monitor" />
+          <span class="check-box" aria-hidden="true"><svg class="icon"><use href="#i-check"></use></svg></span>
+          <span class="check-copy"><strong>Monitor my voice (speakers)</strong><small id="mic-monitor-warn"></small></span>
+        </label>
+      </div>
+
+      <label class="field mic-field">
+        <span>Processing quality</span>
+        <select id="mic-quality">
+          <option value="auto">Auto (based on CPU)</option>
+          <option value="performance">Performance (light CPU)</option>
+          <option value="quality">Quality (full effects)</option>
+        </select>
+      </label>
+
+      <div class="mic-actions">
+        <button class="btn btn-quiet btn-sm" id="mic-reset" type="button">Reset</button>
+        <button class="btn btn-primary btn-sm" id="mic-done" type="button">Close</button>
+      </div>
     </div>
   </dialog>
 

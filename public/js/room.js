@@ -1,4 +1,5 @@
 import { MediaMesh } from './room/media.js';
+import { MIC_PRESETS, DEFAULT_MIC_SETTINGS } from './room/mic-fx.js';
 import { initI18n, onLanguageChange, t, locale } from './i18n.js';
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -78,7 +79,32 @@ const els = {
   shortcutsBtn: $('#shortcuts-btn'),
   shortcutsDialog: $('#shortcuts-dialog'),
   shortcutsClose: $('#shortcuts-close'),
-  focusSearch: $('#focus-search')
+  focusSearch: $('#focus-search'),
+  micSettingsBtn: $('#mic-settings-btn'),
+  micDialog: $('#mic-dialog'),
+  micClose: $('#mic-close'),
+  micDone: $('#mic-done'),
+  micLead: $('#mic-lead'),
+  micPreset: $('#mic-preset'),
+  micDevice: $('#mic-device'),
+  micAmp: $('#mic-amp'),
+  micAmpValue: $('#mic-amp-value'),
+  micGateThreshold: $('#mic-gate-threshold'),
+  micGateThresholdValue: $('#mic-gate-threshold-value'),
+  micDeDistort: $('#mic-de-distort'),
+  micDeDistortValue: $('#mic-de-distort-value'),
+  micEnabled: $('#mic-enabled'),
+  micEnabledNote: $('#mic-enabled-note'),
+  micGate: $('#mic-gate'),
+  micNoise: $('#mic-noise'),
+  micEcho: $('#mic-echo'),
+  micAgc: $('#mic-agc'),
+  micMonitor: $('#mic-monitor'),
+  micMonitorWarn: $('#mic-monitor-warn'),
+  micQuality: $('#mic-quality'),
+  micReset: $('#mic-reset'),
+  micMeterFill: $('#mic-meter-fill'),
+  micGateState: $('#mic-gate-state')
 };
 
 const state = {
@@ -111,7 +137,8 @@ const state = {
   audioCtx: null,
   joinErrorKey: null,
   statusMode: 'connecting',
-  statusKey: 'status.joining'
+  statusKey: 'status.joining',
+  micMeterTimer: null
 };
 
 initI18n();
@@ -216,6 +243,49 @@ function bindEvents() {
   els.focusSearch?.addEventListener('click', focusSearch);
   els.saveChat?.addEventListener('click', saveTranscript);
   els.soundToggle?.addEventListener('click', toggleSounds);
+  els.micSettingsBtn?.addEventListener('click', openMicSettings);
+  els.micClose?.addEventListener('click', closeMicSettings);
+  els.micDone?.addEventListener('click', closeMicSettings);
+  els.micPreset?.addEventListener('change', applyMicPreset);
+  els.micDevice?.addEventListener('change', () => {
+    void state.mesh?.setMicSettings({ deviceId: els.micDevice.value, preset: 'custom' });
+  });
+  els.micQuality?.addEventListener('change', () => {
+    void state.mesh?.setMicSettings({ quality: els.micQuality.value, preset: 'custom' });
+  });
+  for (const [el, key] of [
+    [els.micEnabled, 'enabled'],
+    [els.micGate, 'gate'],
+    [els.micNoise, 'noiseSuppression'],
+    [els.micEcho, 'echoCancellation'],
+    [els.micAgc, 'autoGainControl'],
+    [els.micMonitor, 'monitor']
+  ]) {
+    el?.addEventListener('change', () => {
+      void state.mesh?.setMicSettings({ [key]: el.checked, preset: 'custom' });
+      if (key === 'enabled' && !el.checked) toast(t('tools.micOffNote'), 'info', 3200);
+    });
+  }
+  els.micAmp?.addEventListener('input', () => {
+    updateMicOutputs();
+    void state.mesh?.setMicSettings({ amplificationDb: Number(els.micAmp.value), preset: 'custom' });
+  });
+  els.micGateThreshold?.addEventListener('input', () => {
+    updateMicOutputs();
+    void state.mesh?.setMicSettings({ gateThresholdDb: Number(els.micGateThreshold.value), preset: 'custom' });
+  });
+  els.micDeDistort?.addEventListener('input', () => {
+    updateMicOutputs();
+    void state.mesh?.setMicSettings({ deDistort: Number(els.micDeDistort.value), preset: 'custom' });
+  });
+  els.micReset?.addEventListener('click', async () => {
+    await state.mesh?.setMicSettings({ ...DEFAULT_MIC_SETTINGS });
+    renderMicSettings();
+    toast(t('tools.micSaved'), 'info', 2200);
+  });
+  els.micDialog?.addEventListener('click', (event) => {
+    if (event.target === els.micDialog) closeMicSettings();
+  });
   els.shortcutsBtn?.addEventListener('click', openShortcuts);
   els.shortcutsClose?.addEventListener('click', closeShortcuts);
 
@@ -1801,6 +1871,129 @@ function closeShortcuts() {
   }
 }
 
+/* ---------------- Mic settings (Voice FX) ---------------- */
+
+async function openMicSettings() {
+  if (!els.micDialog) return;
+  renderMicSettings();
+  if (typeof els.micDialog.showModal === 'function') {
+    if (!els.micDialog.open) els.micDialog.showModal();
+  } else {
+    els.micDialog.setAttribute('open', '');
+  }
+  await refreshMicDevices();
+  startMicMeter();
+}
+
+function closeMicSettings() {
+  stopMicMeter();
+  if (!els.micDialog) return;
+  if (typeof els.micDialog.close === 'function') {
+    if (els.micDialog.open) els.micDialog.close();
+  } else {
+    els.micDialog.removeAttribute('open');
+  }
+  toast(t('tools.micSaved'), 'info', 1800);
+}
+
+async function refreshMicDevices() {
+  if (!els.micDevice || !state.mesh) return;
+  const current = state.mesh.getMicSettings().deviceId || '';
+  const devices = await state.mesh.listMicDevices();
+  const previous = els.micDevice.value;
+  els.micDevice.replaceChildren();
+  const fallback = document.createElement('option');
+  fallback.value = '';
+  fallback.textContent = t('tools.micDeviceDefault');
+  els.micDevice.append(fallback);
+  devices.forEach((device, index) => {
+    const option = document.createElement('option');
+    option.value = device.deviceId || '';
+    option.textContent = device.label || `${t('tools.micDevice')} ${index + 1}`;
+    els.micDevice.append(option);
+  });
+  els.micDevice.value = [...els.micDevice.options].some((o) => o.value === current)
+    ? current
+    : previous || '';
+}
+
+function renderMicSettings() {
+  const settings = state.mesh?.getMicSettings() ?? { ...DEFAULT_MIC_SETTINGS };
+  if (els.micLead) els.micLead.textContent = t('tools.micLead');
+  if (els.micEnabledNote) els.micEnabledNote.textContent = t('tools.micOffNote');
+  if (els.micMonitorWarn) els.micMonitorWarn.textContent = t('tools.micMonitorWarn');
+  if (els.micPreset) {
+    const labels = {
+      off: t('tools.micPresetOff'),
+      voice: t('tools.micPresetVoice'),
+      podcast: t('tools.micPresetPodcast'),
+      gaming: t('tools.micPresetGaming'),
+      quiet: t('tools.micPresetQuiet')
+    };
+    for (const option of els.micPreset.options) {
+      if (labels[option.value]) option.textContent = labels[option.value];
+    }
+    els.micPreset.value = MIC_PRESETS[settings.preset] ? settings.preset : 'voice';
+  }
+  if (els.micQuality) {
+    const labels = {
+      auto: t('tools.micQualityAuto'),
+      performance: t('tools.micQualityPerformance'),
+      quality: t('tools.micQualityQuality')
+    };
+    for (const option of els.micQuality.options) {
+      if (labels[option.value]) option.textContent = labels[option.value];
+    }
+    els.micQuality.value = settings.quality || 'auto';
+  }
+  if (els.micEnabled) els.micEnabled.checked = Boolean(settings.enabled);
+  if (els.micGate) els.micGate.checked = Boolean(settings.gate);
+  if (els.micNoise) els.micNoise.checked = Boolean(settings.noiseSuppression);
+  if (els.micEcho) els.micEcho.checked = Boolean(settings.echoCancellation);
+  if (els.micAgc) els.micAgc.checked = Boolean(settings.autoGainControl);
+  if (els.micMonitor) els.micMonitor.checked = Boolean(settings.monitor);
+  if (els.micAmp) els.micAmp.value = String(settings.amplificationDb ?? 6);
+  if (els.micGateThreshold) els.micGateThreshold.value = String(settings.gateThresholdDb ?? -42);
+  if (els.micDeDistort) els.micDeDistort.value = String(settings.deDistort ?? 25);
+  updateMicOutputs();
+}
+
+function updateMicOutputs() {
+  if (els.micAmpValue && els.micAmp) els.micAmpValue.textContent = t('tools.micAmpValue', { value: els.micAmp.value });
+  if (els.micGateThresholdValue && els.micGateThreshold) {
+    els.micGateThresholdValue.textContent = t('tools.micGateThresholdValue', { value: els.micGateThreshold.value });
+  }
+  if (els.micDeDistortValue && els.micDeDistort) {
+    els.micDeDistortValue.textContent = t('tools.micDeDistortValue', { value: els.micDeDistort.value });
+  }
+}
+
+async function applyMicPreset() {
+  const preset = MIC_PRESETS[els.micPreset?.value];
+  if (!preset || !state.mesh) return;
+  await state.mesh.setMicSettings({ ...preset, preset: els.micPreset.value });
+  renderMicSettings();
+}
+
+function startMicMeter() {
+  stopMicMeter();
+  state.micMeterTimer = setInterval(() => {
+    const level = state.mesh?.getMicLevel() ?? { rms: 0, gateOpen: true };
+    const pct = Math.min(100, Math.max(0, (level.rms / 0.35) * 100));
+    if (els.micMeterFill) els.micMeterFill.style.width = `${pct}%`;
+    if (els.micGateState) {
+      els.micGateState.textContent = t(level.gateOpen ? 'tools.micGateOpen' : 'tools.micGateClosed');
+    }
+  }, 100);
+}
+
+function stopMicMeter() {
+  if (state.micMeterTimer) {
+    clearInterval(state.micMeterTimer);
+    state.micMeterTimer = null;
+  }
+}
+
 /* ---------------- Media controls ---------------- */
 
 async function toggleMic() {
@@ -1997,6 +2190,7 @@ function handleLanguageChange() {
     els.joinBtn.textContent = t('join.idle');
   }
   closeReactionPopover();
+  if (els.micDialog?.open) renderMicSettings();
 }
 
 /* ---------------- Keyboard shortcuts ---------------- */

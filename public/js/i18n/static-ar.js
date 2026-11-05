@@ -224,5 +224,22 @@ export const staticAr = {
   "The page or room code you followed doesn't exist. Check the link, or open a fresh room and invite the people you wanted to talk to.":
     'الصفحة أو رمز الغرفة الذي تبعته غير موجود. تحقّق من الرابط، أو افتح غرفة جديدة وادعُ الأشخاص الذين أردت التحدث إليهم.',
   'Back to Hush': 'العودة إلى Hush',
-  'How rooms work': 'كيف تعمل الغرف'
+  'How rooms work': 'كيف تعمل الغرف',
+
+  // Mic settings dialog (static labels)
+  'Mic settings': 'إعدادات الميكروفون',
+  'Input level': 'مستوى الإدخال',
+  'Preset': 'الإعداد المسبق',
+  'Amplification': 'التضخيم',
+  'Noise gate': 'بوابة الضوضاء',
+  'Gate threshold': 'عتبة البوابة',
+  'De-distortion (soft clip)': 'منع التشويش (قصّ ناعم)',
+  'Noise suppression (browser / hardware)': 'تنقية الضوضاء (المتصفح / الأجهزة)',
+  'Echo cancellation': 'إلغاء الصدى',
+  'Auto gain': 'الكسب التلقائي',
+  'Monitor my voice (speakers)': 'مراقبة صوتي (مكبرات الصوت)',
+  'Processing quality': 'جودة المعالجة',
+  Microphone: 'الميكروفون',
+  Reset: 'إعادة تعيين',
+  Close: 'إغلاق'
 };

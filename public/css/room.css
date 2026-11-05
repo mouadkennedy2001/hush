@@ -1720,7 +1720,104 @@
 }
 
 .remote-audio {
-  display: none;
+  /* Must NOT be display:none — browsers silence <audio> elements that
+     are not rendered. Keep it visually hidden but present in the layout
+     so remote audio actually plays. */
+  position: fixed;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.remote-audio audio {
+  width: 1px;
+  height: 1px;
+}
+
+/* ---------- Mic settings (Voice FX) ---------- */
+.mic-dialog .shortcuts-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.mic-meter-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.75rem;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-slate);
+}
+.mic-meter {
+  flex: 1;
+  height: 10px;
+  border: 1px solid var(--color-fog);
+  border-radius: 999px;
+  background: var(--color-paper);
+  overflow: hidden;
+}
+.mic-meter-fill {
+  display: block;
+  height: 100%;
+  width: 0%;
+  background: var(--color-signal-blue);
+  transition: width 90ms linear;
+}
+.mic-gate-state {
+  min-width: 86px;
+  text-align: end;
+  font-size: 0.625rem;
+}
+.mic-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.75rem;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-slate);
+}
+.mic-field select {
+  padding: 9px 10px;
+  border: 1.5px solid var(--color-fog);
+  border-radius: var(--radius-buttons);
+  background: var(--color-white);
+  color: var(--color-ink);
+  font: inherit;
+  font-size: 0.8125rem;
+}
+.mic-field select:focus {
+  outline: none;
+  border-color: var(--color-signal-blue);
+  box-shadow: 0 0 0 3px var(--wash-sky);
+}
+.mic-slider-row {
+  display: grid;
+  grid-template-columns: 150px 1fr 52px;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.75rem;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-slate);
+}
+.mic-slider-row output {
+  color: var(--color-ink);
+  font-size: 0.6875rem;
+  text-align: end;
+}
+.mic-slider-row input[type="range"] {
+  width: 100%;
+  accent-color: var(--color-deep-signal);
+}
+.mic-toggles {
+  margin: 0;
+}
+.mic-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
 }
 
 /* ---------- Shortcuts dialog ---------- */
