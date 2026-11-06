@@ -1,0 +1,164 @@
+# Hush
+
+Quiet rooms for text, voice, video, and screen sharing — styled with the Signal-inspired design system in [`DESIGN.md`](./DESIGN.md).
+
+No accounts, no build step. Open the page, pick a name, and share the room link.
+
+## Developer
+
+Built by **Zerouki Ahmed Mouad** (زروقي احمد معاذ).
+
+- GitHub: <https://github.com/mouadkennedy2001>
+- Instagram: <https://www.instagram.com/mouad_kennedy/>
+
+## Features
+
+- **Arabic and English** — full RTL/LTR support, Arabic typography, a language toggle on every page, and a saved language preference (`?lang=ar` / `?lang=en` also work).
+- **Light, dark, and automatic themes** — the theme toggles between light → dark → auto (follows the OS and reacts to OS changes live), saved per browser (`hush:theme`). `?theme=dark` / `?theme=light` / `?theme=auto` also work. Press `T` in a room.
+- **Pinned messages** — pin any message to the top of chat (pin icon on hover), jump to it from the pinned bar, unpin it, and it persists across reloads and syncs to everyone.
+- **Emoji picker** — insert emojis into the composer from the smile button (32 emojis, inserted at the cursor).
+- **FAQ section** — common questions (accounts, privacy, ping, theme) on the landing page.
+- **Join gate never hangs** — the volume `MutationObserver` is scoped to the remote-audio container (it previously watched the whole body and retriggered itself, freezing the page before the name form could be used); storage access at boot is guarded, fonts load non-blocking, and a `<noscript>` fallback explains the JS requirement.
+- **Live ping counter** — shows round-trip latency to the server (Socket.IO echo in a room, HTTP `GET /api/ping` elsewhere), with quality (excellent / fair / poor), average, jitter, and a sparkline chart in the room's Connection card. Press `P` to refresh.
+- **Improved dark design** — deep-navy surfaces, visible hairline borders with an accent glow, dark scrollbars, layered blue ambience gradients, tabular mono numerals for codes/ping/timers, and balanced typography. Light/dark surfaces share semantic tokens (`--color-border`, `--color-surface`, `--glow-accent`…).
+- **Display settings** — text size (small / normal / large), chat density (comfortable / compact), motion on/off, speaker volume, and mention notifications (browser Notification API), all saved in `hush:settings`.
+- **Focus mode** — hide the sidebar for a wider stage (`F`, or the focus button in the stage header / People panel).
+- **Session timer** — shows how long you have been in the room, next to the ping badge.
+- **Edit and delete your messages** — inline editing with `Enter` to save / `Esc` to cancel, plus delete with confirmation; both sync to everyone and persist (`edited` label shown).
+- **Draft persistence** — an unsent message is saved per room and restored when you return.
+- **Live landing stats** — the home page shows rooms online now and server uptime from `GET /api/health`, plus three new feature cards (dark theme, ping, focus/display, edit/delete).
+- **Room codes and invite links** — every room has a short code (for example `K7M-2QX`) and a copyable link.
+- **Text chat with history** — messages are saved per room in `data/`, so late joiners can catch up.
+- **Voice and video** — WebRTC peer-to-peer media with mute, camera, speaking detection, and audio playback handling.
+- **Screen sharing** — share a tab, window, or display. Camera can stay on while sharing, and multiple shares can be cycled from the stage.
+- **File and image sharing** — up to 8 MB per file, with an allow-list of image, document, and zip types.
+- **Message reactions and floating reactions** — react to messages, or send an emoji that floats across the call stage.
+- **Chat search** — filter messages by text, author, or file name, with highlighted matches and a result count.
+- **Room tools** — save the transcript as a text file, mute notification sounds, open the shortcuts dialog, or jump straight to search.
+- **Message helpers** — copy message text, click links, and highlight `@mentions` (your own name is emphasized).
+- **Small-room features** — participant list, typing indicators, unread badge, raise hand, join preferences, reconnect/rejoin, and keyboard shortcuts.
+- **Responsive layout** — the room stacks cleanly on phones and tablets.
+
+## Quick start
+
+```powershell
+cd "D:\P2P app"
+npm.cmd install
+npm.cmd start
+```
+
+Then open <http://localhost:3000>.
+
+> On Windows PowerShell, use `npm.cmd` if script execution is disabled.
+
+### Other scripts
+
+```powershell
+npm.cmd run dev    # restart on file changes (Node --watch)
+npm.cmd test       # unit + Socket.IO integration tests
+```
+
+## Configuration
+
+Environment variables (all optional):
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `PORT` | `3000` | HTTP port |
+| `HOST` | `0.0.0.0` | Bind address |
+| `DATA_DIR` | `./data` | Chat history JSON files |
+| `UPLOADS_DIR` | `./uploads` | Uploaded files |
+
+Example:
+
+```powershell
+$env:PORT = "8080"
+npm.cmd start
+```
+
+## How it works
+
+```
+server.js
+└── src/app.js          Express, Multer uploads, Socket.IO server, security headers
+    ├── src/realtime.js room join/leave, chat, reactions, presence, WebRTC signaling
+    ├── src/rooms.js    room codes, validation, chained JSON persistence
+    └── src/constants.js limits and allow-lists
+```
+
+The frontend is plain ES modules with no bundler:
+
+```
+public/
+├── index.html          landing page
+├── room.html           room shell and SVG icon sprite
+├── 404.html
+├── css/                tokens, base, landing, and room styles
+└── js/
+    ├── landing.js
+    ├── room.js         room state, chat, reactions, controls, search, tools
+    ├── room/media.js   MediaMesh WebRTC mesh implementation
+    ├── i18n.js         language detection, static DOM translation, t()
+    ├── i18n/
+    │   ├── ui.js       dynamic English → Arabic dictionary
+    │   └── static-ar.js static English → Arabic map
+    ├── lang-boot.js    applies the saved language before first paint
+    └── static-page.js  language toggle and title for the 404 page
+```
+
+### WebRTC mesh
+
+Each pair of participants opens two `RTCPeerConnection`s:
+
+- `media` — microphone and camera
+- `screen` — screen share
+
+Both channels pre-create transceivers in `sendrecv` mode, so turning the mic, camera, or screen on later uses `replaceTrack()` without renegotiation. The joiner is always the initiator. Signaling is relayed by Socket.IO; media never passes through the server.
+
+STUN servers are configured, but there is **no TURN server**. Peers behind strict/symmetric NATs may fail to connect. This is intended for small rooms on friendly networks.
+
+## Privacy notes
+
+- Media is encrypted in transit by WebRTC (DTLS-SRTP) and travels peer-to-peer.
+- **Chat is not end-to-end encrypted.** Messages and files are stored on the server that runs Hush.
+- There is no authentication. Anyone with the room link can join, and history is readable by anyone who joins that room.
+- Room history is capped at 200 messages per room and is purged after 7 days of file inactivity. Empty rooms are dropped after 30 minutes of inactivity.
+- Uploaded files are served from `/uploads` with a restrictive content security policy.
+
+Do not use this demo for sensitive conversations without adding authentication, a TURN server, and end-to-end encryption for chat.
+
+## Limits
+
+- 12 participants per room
+- 2,000 characters per message
+- 8 MB per upload
+- Room codes: 4–12 alphanumeric characters
+- Display names: 32 characters
+
+## Keyboard shortcuts
+
+| Key | Action |
+| --- | --- |
+| `/` | Jump to chat search |
+| `?` | Open the shortcuts dialog |
+| `M` | Mute / unmute microphone |
+| `V` | Camera on / off |
+| `S` | Start / stop screen sharing |
+| `H` | Raise / lower hand |
+| `C` | Switch between Chat and People |
+| `T` | Toggle dark / light theme |
+| `F` | Toggle focus mode |
+| `P` | Refresh ping |
+| `Esc` | Close menus, dialogs, and reaction popovers |
+
+Shortcuts are ignored while you are typing in a field.
+
+## Tests
+
+```powershell
+npm.cmd test
+```
+
+The suite covers room helpers, message and reaction persistence, HTTP health/room endpoints, a two-client chat/reaction/presence flow, the 12-person room cap, and the bilingual UI: dictionary completeness, placeholder parity, used-key coverage, static HTML coverage, early language boot, and the developer credit on every page.
+
+Static checks also run with `node --check` on every browser module.

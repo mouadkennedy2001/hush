@@ -1,0 +1,671 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Room — Hush</title>
+  <meta name="description" content="A quiet room for text, voice, video, and screen sharing." />
+  <meta name="theme-color" content="#f6f6f6" />
+  <meta name="robots" content="noindex" />
+  <script src="/js/lang-boot.js"></script>
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;800&display=swap" onload="this.onload=null;this.rel='stylesheet'" />
+  <noscript><link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;800&display=swap" rel="stylesheet" /></noscript>
+  <link rel="stylesheet" href="/css/tokens.css" />
+  <link rel="stylesheet" href="/css/base.css" />
+  <link rel="stylesheet" href="/css/room.css" />
+</head>
+<body class="room-body">
+  <svg class="svg-sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="i-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+      <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+      <path d="M12 19v3"/>
+    </symbol>
+    <symbol id="i-mic-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M2 2l20 20"/>
+      <path d="M18.9 13.2A7.1 7.1 0 0 0 19 12v-2"/>
+      <path d="M5 10v2a7 7 0 0 0 12 5"/>
+      <path d="M15 9.3V5a3 3 0 0 0-5.7-1.3"/>
+      <path d="M9 9v3a3 3 0 0 0 5.1 2.1"/>
+      <path d="M12 19v3"/>
+    </symbol>
+    <symbol id="i-video" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="m16 13 5.2 3.5a.5.5 0 0 0 .8-.4V7.9a.5.5 0 0 0-.8-.4L16 11"/>
+      <rect x="2" y="6" width="14" height="12" rx="2"/>
+    </symbol>
+    <symbol id="i-video-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M2 2l20 20"/>
+      <path d="M10.7 6H14a2 2 0 0 1 2 2v2.3"/>
+      <path d="M16 16a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h2"/>
+      <path d="m16 11 5.2-3.1a.5.5 0 0 1 .8.4v8.2"/>
+    </symbol>
+    <symbol id="i-screen" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="2" y="3" width="20" height="14" rx="2"/>
+      <path d="M8 21h8M12 17v4"/>
+      <path d="m9 10 3-3 3 3M12 13V7"/>
+    </symbol>
+    <symbol id="i-screen-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M2 2l20 20"/>
+      <path d="M4 3h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-3"/>
+      <path d="M2 15V5a2 2 0 0 1 2-2"/>
+      <path d="M8 21h8M12 17v4"/>
+    </symbol>
+    <symbol id="i-hand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M18 11V6a2 2 0 0 0-4 0v5"/>
+      <path d="M14 10V4a2 2 0 0 0-4 0v6"/>
+      <path d="M10 10.5V6a2 2 0 0 0-4 0v8"/>
+      <path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.9-6-2.3l-3.6-3.6a2 2 0 0 1 2.8-2.8L7 15"/>
+    </symbol>
+    <symbol id="i-smile" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="9"/>
+      <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
+      <path d="M9 9h.01M15 9h.01"/>
+    </symbol>
+    <symbol id="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="m22 2-7 20-4-9-9-4Z"/>
+      <path d="M22 2 11 13"/>
+    </symbol>
+    <symbol id="i-paperclip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="m21.4 11.1-9.2 9.2a6 6 0 0 1-8.5-8.5l8.6-8.6a4 4 0 0 1 5.7 5.7l-8.6 8.6a2 2 0 0 1-2.8-2.8l8.5-8.5"/>
+    </symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="8" y="8" width="13" height="13" rx="2"/>
+      <path d="M4 16a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2"/>
+    </symbol>
+    <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+      <circle cx="9" cy="7" r="4"/>
+      <path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/>
+    </symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+    </symbol>
+    <symbol id="i-phone-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 2 .7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.2a2 2 0 0 1 2.1-.5c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2Z"/>
+      <path d="m3 3 18 18"/>
+    </symbol>
+    <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+      <path d="M18 6 6 18M6 6l12 12"/>
+    </symbol>
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="m20 6-11 11-5-5"/>
+    </symbol>
+    <symbol id="i-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/>
+      <path d="M15 2v5h5"/>
+    </symbol>
+    <symbol id="i-globe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="9"/>
+      <path d="M3.5 9h17M3.5 15h17"/>
+      <path d="M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18Z"/>
+    </symbol>
+    <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="11" cy="11" r="7"/>
+      <path d="m20 20-3.5-3.5"/>
+    </symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/>
+      <path d="M13.7 21a2 2 0 0 1-3.4 0"/>
+    </symbol>
+    <symbol id="i-bell-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M2 2l20 20"/>
+      <path d="M18.6 13.3A6 6 0 0 0 18 8a6 6 0 0 0-9.3-5"/>
+      <path d="M6 8c0 7-3 9-3 9h13"/>
+      <path d="M13.7 21a2 2 0 0 1-3.4 0"/>
+    </symbol>
+    <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 3v12"/>
+      <path d="m7 10 5 5 5-5"/>
+      <path d="M5 21h14"/>
+    </symbol>
+    <symbol id="i-keyboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="2" y="5" width="20" height="14" rx="2"/>
+      <path d="M6 9h.01M10 9h.01M14 9h.01M18 9h.01M6 13h.01M10 13h.01M14 13h.01M18 13h.01M7 17h10"/>
+    </symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/>
+    </symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="4"/>
+      <path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>
+    </symbol>
+    <symbol id="i-activity" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M22 12h-4l-3 8L9 4l-3 8H2"/>
+    </symbol>
+    <symbol id="i-focus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/>
+      <circle cx="12" cy="12" r="3"/>
+    </symbol>
+    <symbol id="i-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
+    </symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+    </symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="9"/>
+      <path d="M12 7v5l3 2"/>
+    </symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 17v5M9 3h6l1 7 3 3H5l3-3 1-7Z"/>
+    </symbol>
+  </svg>
+
+  <div class="room-shell" id="room-shell">
+    <header class="room-bar">
+      <a class="brand brand-sm" href="/" aria-label="Hush home">
+        <svg viewBox="0 0 28 28" aria-hidden="true">
+          <path d="M4 6.5A3.5 3.5 0 0 1 7.5 3h13A3.5 3.5 0 0 1 24 6.5v9a3.5 3.5 0 0 1-3.5 3.5H13l-5.5 4v-4H7.5A3.5 3.5 0 0 1 4 15.5v-9Z" fill="currentColor"/>
+          <circle cx="9.5" cy="11.5" r="1.5" fill="#fff"/>
+          <circle cx="14" cy="11.5" r="1.5" fill="#fff"/>
+          <circle cx="18.5" cy="11.5" r="1.5" fill="#fff"/>
+        </svg>
+        <span>Hush</span>
+      </a>
+
+      <button class="room-code" id="copy-code" type="button" title="Copy invite link">
+        <span class="room-code-label">Room</span>
+        <code id="room-code">—</code>
+        <svg class="icon" aria-hidden="true"><use href="#i-copy"></use></svg>
+      </button>
+
+      <div class="room-status" id="connection-status" data-state="connecting">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span id="connection-label">Joining…</span>
+        <span class="ping-badge" data-ping-badge data-quality="offline" title="Ping">
+          <span class="ping-dot" aria-hidden="true"></span>
+          <span data-ping-value>-- ms</span>
+        </span>
+        <span class="session-timer" id="session-timer" hidden title="Session">
+          <svg class="icon" style="width:12px;height:12px" aria-hidden="true"><use href="#i-clock"></use></svg>
+          <span id="session-time">00:00</span>
+        </span>
+      </div>
+
+      <div class="room-bar-actions">
+        <button class="theme-toggle theme-toggle-sm" type="button" data-theme-toggle title="Switch to dark theme" aria-label="Switch to dark theme" aria-pressed="false">
+          <svg class="icon icon-moon" aria-hidden="true"><use href="#i-moon"></use></svg>
+          <svg class="icon icon-sun" aria-hidden="true"><use href="#i-sun"></use></svg>
+          <span data-theme-label>Dark</span>
+        </button>
+        <button class="lang-toggle lang-toggle-sm" type="button" data-lang-toggle title="Switch language" aria-label="Switch language">
+          <svg class="icon" aria-hidden="true"><use href="#i-globe"></use></svg>
+          <span data-lang-label>العربية</span>
+        </button>
+        <button class="btn btn-quiet btn-sm" id="invite-btn" type="button">
+          <svg class="icon" aria-hidden="true"><use href="#i-copy"></use></svg>
+          <span class="bar-action-label">Invite</span>
+        </button>
+        <button class="btn btn-ink btn-sm" id="leave-btn-top" type="button">
+          <svg class="icon" aria-hidden="true"><use href="#i-phone-off"></use></svg>
+          <span class="bar-action-label">Leave</span>
+        </button>
+      </div>
+    </header>
+
+    <main class="room-main">
+      <section class="stage" id="stage" aria-label="Call stage">
+        <div class="stage-topline">
+          <span class="stage-title" id="stage-title">Room</span>
+          <span style="display:inline-flex;align-items:center;gap:8px">
+            <span class="stage-count" id="stage-count">Connecting…</span>
+            <button class="icon-button focus-toggle" id="focus-toggle" type="button" title="Toggle focus mode" aria-label="Toggle focus mode" aria-pressed="false">
+              <svg class="icon" aria-hidden="true"><use href="#i-focus"></use></svg>
+            </button>
+          </span>
+        </div>
+
+        <div class="screen-stage" id="screen-stage" hidden>
+          <video id="screen-video" autoplay playsinline muted></video>
+          <div class="screen-placeholder" id="screen-placeholder" hidden>
+            <span class="screen-placeholder-mark" aria-hidden="true"></span>
+            <span>Waiting for the shared screen…</span>
+          </div>
+          <div class="screen-caption">
+            <span class="screen-caption-dot" aria-hidden="true"></span>
+            <span id="screen-label">Someone is sharing</span>
+          </div>
+        </div>
+
+        <div class="tile-grid" id="tile-grid" aria-live="polite"></div>
+
+        <div class="control-bar" role="toolbar" aria-label="Call controls">
+          <div class="control-group">
+            <button class="control" id="mic-btn" type="button" aria-pressed="false" title="Toggle microphone (M)">
+              <span class="control-icon">
+                <svg class="icon icon-when-off" aria-hidden="true"><use href="#i-mic-off"></use></svg>
+                <svg class="icon icon-when-on" aria-hidden="true"><use href="#i-mic"></use></svg>
+              </span>
+              <span class="control-label" id="mic-label">Unmute</span>
+            </button>
+
+            <button class="control" id="camera-btn" type="button" aria-pressed="false" title="Toggle camera (V)">
+              <span class="control-icon">
+                <svg class="icon icon-when-off" aria-hidden="true"><use href="#i-video-off"></use></svg>
+                <svg class="icon icon-when-on" aria-hidden="true"><use href="#i-video"></use></svg>
+              </span>
+              <span class="control-label" id="camera-label">Camera</span>
+            </button>
+
+            <button class="control" id="screen-btn" type="button" aria-pressed="false" title="Share screen (S)">
+              <span class="control-icon">
+                <svg class="icon icon-when-off" aria-hidden="true"><use href="#i-screen"></use></svg>
+                <svg class="icon icon-when-on" aria-hidden="true"><use href="#i-screen-off"></use></svg>
+              </span>
+              <span class="control-label" id="screen-label-btn">Share</span>
+            </button>
+          </div>
+
+          <div class="control-group">
+            <button class="control" id="hand-btn" type="button" aria-pressed="false" title="Raise hand (H)">
+              <span class="control-icon"><svg class="icon" aria-hidden="true"><use href="#i-hand"></use></svg></span>
+              <span class="control-label">Hand</span>
+            </button>
+
+            <div class="reaction-wrap">
+              <button class="control" id="reaction-btn" type="button" aria-haspopup="true" aria-expanded="false" title="Send a reaction">
+                <span class="control-icon"><svg class="icon" aria-hidden="true"><use href="#i-smile"></use></svg></span>
+                <span class="control-label">React</span>
+              </button>
+              <div class="reaction-menu" id="reaction-menu" hidden>
+                <button type="button" class="reaction-choice" data-emoji="👍" aria-label="Thumbs up">👍</button>
+                <button type="button" class="reaction-choice" data-emoji="❤️" aria-label="Heart">❤️</button>
+                <button type="button" class="reaction-choice" data-emoji="😂" aria-label="Laugh">😂</button>
+                <button type="button" class="reaction-choice" data-emoji="🎉" aria-label="Celebrate">🎉</button>
+                <button type="button" class="reaction-choice" data-emoji="👀" aria-label="Eyes">👀</button>
+                <button type="button" class="reaction-choice" data-emoji="🙌" aria-label="Raised hands">🙌</button>
+                <button type="button" class="reaction-choice" data-emoji="🔥" aria-label="Fire">🔥</button>
+                <button type="button" class="reaction-choice" data-emoji="✅" aria-label="Check">✅</button>
+              </div>
+            </div>
+
+            <button class="control control-danger" id="leave-btn" type="button" title="Leave the room">
+              <span class="control-icon"><svg class="icon" aria-hidden="true"><use href="#i-phone-off"></use></svg></span>
+              <span class="control-label">Leave</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="reaction-layer" id="reaction-layer" aria-hidden="true"></div>
+      </section>
+
+      <aside class="side-panel" aria-label="Room sidebar">
+        <div class="side-tabs" role="tablist" aria-label="Room panels">
+          <button class="side-tab is-active" id="tab-chat" type="button" role="tab" aria-selected="true" aria-controls="panel-chat">
+            <svg class="icon" aria-hidden="true"><use href="#i-chat"></use></svg>
+            <span>Chat</span>
+            <span class="tab-badge" id="unread-badge" hidden>0</span>
+          </button>
+          <button class="side-tab" id="tab-people" type="button" role="tab" aria-selected="false" aria-controls="panel-people">
+            <svg class="icon" aria-hidden="true"><use href="#i-users"></use></svg>
+            <span>People</span>
+            <span class="tab-badge tab-badge-quiet" id="people-count">0</span>
+          </button>
+        </div>
+
+        <section class="panel-chat" id="panel-chat" role="tabpanel" aria-labelledby="tab-chat">
+          <div class="chat-search" id="chat-search">
+            <svg class="icon chat-search-icon" aria-hidden="true"><use href="#i-search"></use></svg>
+            <input id="chat-search-input" type="search" placeholder="Search messages" aria-label="Search messages" autocomplete="off" spellcheck="false" dir="auto" />
+            <span class="chat-search-count" id="chat-search-count" hidden></span>
+            <button class="chat-search-clear" id="chat-search-clear" type="button" hidden title="Clear search" aria-label="Clear search">
+              <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg>
+            </button>
+          </div>
+
+          <p class="chat-empty" id="chat-empty">No messages yet. Say hello.</p>
+
+          <div class="pinned-bar" id="pinned-bar" hidden>
+            <svg class="icon" aria-hidden="true"><use href="#i-pin"></use></svg>
+            <button class="pinned-text" id="pinned-text" type="button" title="Jump to pinned message"></button>
+            <button class="chat-search-clear" id="pinned-clear" type="button" title="Unpin message" aria-label="Unpin message">
+              <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg>
+            </button>
+          </div>
+
+          <div class="messages" id="messages" role="log" aria-live="polite" aria-label="Room messages"></div>
+
+          <button class="jump-latest" id="jump-latest" type="button" hidden>New messages ↓</button>
+
+          <div class="typing" id="typing" aria-live="polite"></div>
+
+          <form class="composer" id="composer">
+            <div class="emoji-wrap">
+              <button class="icon-button composer-attach" id="emoji-btn" type="button" title="Insert emoji" aria-label="Insert emoji" aria-haspopup="true" aria-expanded="false">
+                <svg class="icon" aria-hidden="true"><use href="#i-smile"></use></svg>
+              </button>
+              <div class="emoji-menu" id="emoji-menu" hidden></div>
+            </div>
+            <button class="icon-button composer-attach" id="attach-btn" type="button" title="Attach a file">
+              <svg class="icon" aria-hidden="true"><use href="#i-paperclip"></use></svg>
+            </button>
+            <input type="file" id="file-input" hidden accept=".png,.jpg,.jpeg,.gif,.webp,.avif,.pdf,.txt,.md,.csv,.zip" />
+            <textarea id="message-input" rows="1" maxlength="2000" placeholder="Message the room…" aria-label="Message the room"></textarea>
+            <button class="send-btn" type="submit" aria-label="Send message" title="Send message">
+              <svg class="icon" aria-hidden="true"><use href="#i-send"></use></svg>
+            </button>
+          </form>
+          <p class="composer-hint" id="composer-hint" hidden></p>
+        </section>
+
+        <section class="panel-people" id="panel-people" role="tabpanel" aria-labelledby="tab-people" hidden>
+          <div class="invite-card">
+            <p class="invite-kicker">Invite people</p>
+            <div class="invite-row">
+              <code id="invite-code">—</code>
+              <button class="btn btn-primary btn-sm" id="invite-copy" type="button">Copy link</button>
+            </div>
+            <p class="invite-note">Anyone with this link can join the room.</p>
+          </div>
+
+          <div class="ping-card" aria-live="polite">
+            <div class="ping-card-head">
+              <p class="tools-kicker">Connection</p>
+              <span class="ping-badge" data-ping-badge data-quality="offline" title="Ping">
+                <span class="ping-dot" aria-hidden="true"></span>
+                <span data-ping-quality>Offline</span>
+              </span>
+            </div>
+            <p class="ping-card-big"><span data-ping-value>-- ms</span></p>
+            <canvas class="ping-chart" data-ping-chart width="300" height="56" aria-hidden="true"></canvas>
+            <div class="ping-card-stats">
+              <span>Average <strong data-ping-avg>--</strong></span>
+              <span>Jitter <strong data-ping-jitter>--</strong></span>
+            </div>
+          </div>
+
+          <div class="display-card">
+            <p class="tools-kicker">Display</p>
+            <div class="display-row">
+              <span>Text size</span>
+              <div class="segmented" data-setting-group="fontsize" role="group" aria-label="Text size">
+                <button type="button" data-setting-value="small" aria-pressed="false">Small</button>
+                <button type="button" data-setting-value="normal" aria-pressed="true">Normal</button>
+                <button type="button" data-setting-value="large" aria-pressed="false">Large</button>
+              </div>
+            </div>
+            <div class="display-row">
+              <span>Density</span>
+              <div class="segmented" data-setting-group="density" role="group" aria-label="Density">
+                <button type="button" data-setting-value="comfortable" aria-pressed="true">Comfortable</button>
+                <button type="button" data-setting-value="compact" aria-pressed="false">Compact</button>
+              </div>
+            </div>
+            <div class="display-row">
+              <span>Motion</span>
+              <div class="segmented" data-setting-group="motion" role="group" aria-label="Motion">
+                <button type="button" data-setting-value="on" aria-pressed="true">On</button>
+                <button type="button" data-setting-value="off" aria-pressed="false">Off</button>
+              </div>
+            </div>
+            <div class="display-row">
+              <span>Speaker volume</span>
+              <input type="range" min="0" max="100" value="100" data-volume-input aria-label="Speaker volume" />
+              <strong data-volume-value>100%</strong>
+            </div>
+            <div class="tools-actions" style="margin-top:10px">
+              <button class="tool-button" id="focus-mode-btn" type="button" aria-pressed="false">
+                <svg class="icon" aria-hidden="true"><use href="#i-focus"></use></svg>
+                <span>Focus mode</span>
+              </button>
+              <button class="tool-button" id="notifications-toggle" type="button" data-notifications-toggle aria-pressed="false">
+                <svg class="icon" aria-hidden="true"><use href="#i-bell"></use></svg>
+                <span data-notifications-label>Notifications off</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="tools-card">
+            <p class="tools-kicker">Room tools</p>
+            <div class="tools-actions">
+              <button class="tool-button" id="save-chat" type="button">
+                <svg class="icon" aria-hidden="true"><use href="#i-download"></use></svg>
+                <span>Save chat</span>
+              </button>
+              <button class="tool-button" id="sound-toggle" type="button" aria-pressed="true">
+                <svg class="icon" aria-hidden="true"><use href="#i-bell"></use></svg>
+                <span id="sound-label">Sounds on</span>
+              </button>
+              <button class="tool-button" id="shortcuts-btn" type="button">
+                <svg class="icon" aria-hidden="true"><use href="#i-keyboard"></use></svg>
+                <span>Shortcuts</span>
+              </button>
+              <button class="tool-button" id="focus-search" type="button">
+                <svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg>
+                <span>Search chat</span>
+              </button>
+              <button class="tool-button" id="mic-settings-btn" type="button">
+                <svg class="icon" aria-hidden="true"><use href="#i-mic"></use></svg>
+                <span>Mic settings</span>
+              </button>
+            </div>
+            <p class="tools-credit">
+              <span>Built by</span>
+              <a href="https://github.com/mouadkennedy2001" target="_blank" rel="noopener noreferrer" data-no-translate>Zerouki Ahmed Mouad</a>
+              <span class="tools-credit-links">
+                <a href="https://github.com/mouadkennedy2001" target="_blank" rel="noopener noreferrer">GitHub</a>
+                <span aria-hidden="true">·</span>
+                <a href="https://www.instagram.com/mouad_kennedy/" target="_blank" rel="noopener noreferrer">Instagram</a>
+              </span>
+            </p>
+          </div>
+
+          <ul class="people-list" id="people-list" aria-label="People in this room"></ul>
+        </section>
+      </aside>
+    </main>
+  </div>
+
+  <dialog class="shortcuts-dialog" id="shortcuts-dialog" aria-labelledby="shortcuts-title">
+    <div class="shortcuts-inner">
+      <div class="dialog-head">
+        <h2 id="shortcuts-title">Keyboard shortcuts</h2>
+        <button class="icon-button dialog-close" id="shortcuts-close" type="button" aria-label="Close">
+          <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg>
+        </button>
+      </div>
+      <p class="shortcuts-lead muted">Quick keys while you are in a room.</p>
+      <ul class="shortcut-list">
+        <li><span>Mute / unmute microphone</span><kbd>M</kbd></li>
+        <li><span>Turn camera on / off</span><kbd>V</kbd></li>
+        <li><span>Start / stop screen sharing</span><kbd>S</kbd></li>
+        <li><span>Raise / lower your hand</span><kbd>H</kbd></li>
+        <li><span>Switch chat and people</span><kbd>C</kbd></li>
+        <li><span>Focus chat search</span><kbd>/</kbd></li>
+        <li><span>Open this dialog</span><kbd>?</kbd></li>
+        <li><span>Send a message</span><kbd>Enter</kbd></li>
+        <li><span>Toggle dark / light theme</span><kbd>T</kbd></li>
+        <li><span>Toggle focus mode</span><kbd>F</kbd></li>
+        <li><span>Refresh ping</span><kbd>P</kbd></li>
+        <li><span>Close dialogs</span><kbd>Esc</kbd></li>
+      </ul>
+    </div>
+  </dialog>
+
+  <dialog class="shortcuts-dialog mic-dialog" id="mic-dialog" aria-labelledby="mic-title">
+    <div class="shortcuts-inner">
+      <div class="dialog-head">
+        <h2 id="mic-title">Mic settings</h2>
+        <button class="icon-button dialog-close" id="mic-close" type="button">
+          <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg>
+        </button>
+      </div>
+      <p class="shortcuts-lead muted" id="mic-lead"></p>
+
+      <div class="mic-meter-row">
+        <span>Input level</span>
+        <span class="mic-meter"><span class="mic-meter-fill" id="mic-meter-fill"></span></span>
+        <span class="mic-gate-state" id="mic-gate-state"></span>
+      </div>
+
+      <label class="field mic-field">
+        <span>Preset</span>
+        <select id="mic-preset">
+          <option value="off">Off (raw mic)</option>
+          <option value="voice">Voice</option>
+          <option value="podcast">Podcast</option>
+          <option value="gaming">Gaming / voice chat</option>
+          <option value="quiet">Quiet room</option>
+        </select>
+      </label>
+
+      <label class="field mic-field">
+        <span>Microphone</span>
+        <select id="mic-device"><option value="">Default microphone</option></select>
+      </label>
+
+      <div class="mic-slider-row">
+        <label for="mic-amp">Amplification</label>
+        <input type="range" id="mic-amp" min="0" max="24" step="1" value="6" />
+        <output id="mic-amp-value"></output>
+      </div>
+
+      <div class="mic-slider-row">
+        <label for="mic-gate-threshold">Gate threshold</label>
+        <input type="range" id="mic-gate-threshold" min="-60" max="-20" step="1" value="-42" />
+        <output id="mic-gate-threshold-value"></output>
+      </div>
+
+      <div class="mic-slider-row">
+        <label for="mic-de-distort">De-distortion (soft clip)</label>
+        <input type="range" id="mic-de-distort" min="0" max="100" step="5" value="25" />
+        <output id="mic-de-distort-value"></output>
+      </div>
+
+      <div class="join-media mic-toggles">
+        <label class="check-row">
+          <input type="checkbox" id="mic-enabled" checked />
+          <span class="check-box" aria-hidden="true"><svg class="icon"><use href="#i-check"></use></svg></span>
+          <span class="check-copy"><strong>Voice effects</strong><small id="mic-enabled-note"></small></span>
+        </label>
+        <label class="check-row">
+          <input type="checkbox" id="mic-gate" checked />
+          <span class="check-box" aria-hidden="true"><svg class="icon"><use href="#i-check"></use></svg></span>
+          <span class="check-copy"><strong>Noise gate</strong></span>
+        </label>
+        <label class="check-row">
+          <input type="checkbox" id="mic-noise" checked />
+          <span class="check-box" aria-hidden="true"><svg class="icon"><use href="#i-check"></use></svg></span>
+          <span class="check-copy"><strong>Noise suppression (browser / hardware)</strong></span>
+        </label>
+        <label class="check-row">
+          <input type="checkbox" id="mic-echo" checked />
+          <span class="check-box" aria-hidden="true"><svg class="icon"><use href="#i-check"></use></svg></span>
+          <span class="check-copy"><strong>Echo cancellation</strong></span>
+        </label>
+        <label class="check-row">
+          <input type="checkbox" id="mic-agc" checked />
+          <span class="check-box" aria-hidden="true"><svg class="icon"><use href="#i-check"></use></svg></span>
+          <span class="check-copy"><strong>Auto gain</strong></span>
+        </label>
+        <label class="check-row">
+          <input type="checkbox" id="mic-monitor" />
+          <span class="check-box" aria-hidden="true"><svg class="icon"><use href="#i-check"></use></svg></span>
+          <span class="check-copy"><strong>Monitor my voice (speakers)</strong><small id="mic-monitor-warn"></small></span>
+        </label>
+      </div>
+
+      <label class="field mic-field">
+        <span>Processing quality</span>
+        <select id="mic-quality">
+          <option value="auto">Auto (based on CPU)</option>
+          <option value="performance">Performance (light CPU)</option>
+          <option value="quality">Quality (full effects)</option>
+        </select>
+      </label>
+
+      <div class="mic-actions">
+        <button class="btn btn-quiet btn-sm" id="mic-reset" type="button">Reset</button>
+        <button class="btn btn-primary btn-sm" id="mic-done" type="button">Close</button>
+      </div>
+    </div>
+  </dialog>
+
+  <div class="join-gate" id="join-gate">
+    <div class="join-card">
+      <div class="join-card-head">
+        <a class="brand" href="/" aria-label="Hush home">
+          <svg viewBox="0 0 28 28" aria-hidden="true">
+            <path d="M4 6.5A3.5 3.5 0 0 1 7.5 3h13A3.5 3.5 0 0 1 24 6.5v9a3.5 3.5 0 0 1-3.5 3.5H13l-5.5 4v-4H7.5A3.5 3.5 0 0 1 4 15.5v-9Z" fill="currentColor"/>
+            <circle cx="9.5" cy="11.5" r="1.5" fill="#fff"/>
+            <circle cx="14" cy="11.5" r="1.5" fill="#fff"/>
+            <circle cx="18.5" cy="11.5" r="1.5" fill="#fff"/>
+          </svg>
+          <span>Hush</span>
+        </a>
+        <div class="gate-head-meta">
+          <span class="gate-code">Room <code id="gate-code">—</code></span>
+          <button class="theme-toggle theme-toggle-sm" type="button" data-theme-toggle title="Switch to dark theme" aria-label="Switch to dark theme" aria-pressed="false">
+            <svg class="icon icon-moon" aria-hidden="true"><use href="#i-moon"></use></svg>
+            <svg class="icon icon-sun" aria-hidden="true"><use href="#i-sun"></use></svg>
+            <span data-theme-label>Dark</span>
+          </button>
+          <button class="lang-toggle lang-toggle-sm" type="button" data-lang-toggle title="Switch language" aria-label="Switch language">
+            <svg class="icon" aria-hidden="true"><use href="#i-globe"></use></svg>
+            <span data-lang-label>العربية</span>
+          </button>
+        </div>
+      </div>
+
+      <h1 class="gate-title">Join the room.</h1>
+      <p class="gate-sub">Choose how you want to show up. You can change it any time.</p>
+
+      <form id="join-form" class="join-form">
+        <label class="field">
+          <span>Display name</span>
+          <input id="name-input" name="name" maxlength="32" autocomplete="nickname" placeholder="Your name" required />
+        </label>
+
+        <div class="join-media">
+          <label class="check-row">
+            <input type="checkbox" id="join-mic" checked />
+            <span class="check-box" aria-hidden="true">
+              <svg class="icon"><use href="#i-check"></use></svg>
+            </span>
+            <span class="check-copy"><strong>Microphone</strong><small>Join with your mic on</small></span>
+          </label>
+          <label class="check-row">
+            <input type="checkbox" id="join-cam" />
+            <span class="check-box" aria-hidden="true">
+              <svg class="icon"><use href="#i-check"></use></svg>
+            </span>
+            <span class="check-copy"><strong>Camera</strong><small>Start with video on</small></span>
+          </label>
+        </div>
+
+        <p class="form-error" id="join-error" role="alert" hidden></p>
+
+        <button class="btn btn-primary btn-block join-submit" type="submit" id="join-btn">Join room</button>
+      </form>
+
+      <p class="gate-note">Media is peer-to-peer. Chat history is stored on this server. Anyone with the link can join.</p>
+
+      <div class="gate-credit">
+        <span>Built by</span>
+        <a href="https://github.com/mouadkennedy2001" target="_blank" rel="noopener noreferrer" data-no-translate>Zerouki Ahmed Mouad</a>
+        <span class="gate-credit-ar" dir="rtl">زروقي احمد معاذ</span>
+        <span class="gate-credit-links">
+          <a href="https://github.com/mouadkennedy2001" target="_blank" rel="noopener noreferrer">GitHub</a>
+          <span aria-hidden="true">·</span>
+          <a href="https://www.instagram.com/mouad_kennedy/" target="_blank" rel="noopener noreferrer">Instagram</a>
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast-region" id="toasts" aria-live="polite"></div>
+  <div class="remote-audio" id="remote-audio" aria-hidden="true"></div>
+
+  <noscript>
+    <div style="position:fixed;inset:auto 16px 16px 16px;z-index:200;padding:14px 18px;border-radius:12px;background:#fff;color:#1b1b1b;box-shadow:0 8px 30px rgba(0,0,0,.25)">
+      JavaScript is required to join this room. / يلزم تفعيل JavaScript للانضمام إلى هذه الغرفة.
+    </div>
+  </noscript>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script type="module" src="/js/room.js"></script>
+</body>
+</html>
