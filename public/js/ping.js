@@ -1,25 +1,25 @@
 import { t, onLanguageChange } from './i18n.js';
 
-// Live latency ("ping") meter — v2 algorithms:
-// - monotonic clock (performance.now) so wall-clock changes don't fake ping
-// - median filter (kills single-sample spikes)
-// - EWMA smoothing (alpha 0.3) for a steady displayed value
-// - outlier rejection: samples > 3x median are dropped
-// - adaptive interval: poor/offline polls faster, good polls slower
+// Live latency ("ping") meter — v3:
+// - 3 parallel probes per round, take the MIN (best) RTT — kills polling/queue jitter
+// - displayed value = min of last 5 rounds (games-style best ping, drops spikes fast)
+// - monotonic clock (performance.now), warmup samples discarded
+// - median/average/jitter still reported in the Connection card
 // Prefers Socket.IO round-trip; falls back to GET /api/ping.
 
-const BASE_INTERVAL_MS = 4000;
-const TIMEOUT_MS = 3000;
+const TIMEOUT_MS = 2500;
 const MAX_SAMPLES = 20;
-const EWMA_ALPHA = 0.3;
+const PROBES = 3;
 
 let started = false;
 let getSocket = () => null;
 let timer = null;
 let lastSample = null;
-let ewma = null;
+let displayed = null;
 let samples = [];
+let rounds = []; // min per round
 let seq = 0;
+let warmup = 0;
 
 function nowMono() { return performance.now(); }
 
@@ -58,34 +58,29 @@ function jitter() {
   return Math.round(deltas.reduce((sum, v) => sum + v, 0) / deltas.length);
 }
 
-function pushSample(raw) {
-  const med = median(samples.slice(-8));
-  // Outlier rejection: a spike 3x the recent median is almost certainly noise.
-  if (med != null && raw > med * 3 && samples.length >= 4) return false;
-  samples.push(raw);
-  if (samples.length > MAX_SAMPLES) samples.shift();
-  ewma = ewma == null ? raw : Math.round(EWMA_ALPHA * raw + (1 - EWMA_ALPHA) * ewma);
-  return true;
-}
-
-async function measureViaSocket(socket) {
-  const sentMono = nowMono();
-  const mySeq = ++seq;
-  const response = await new Promise((resolve, reject) => {
+function probeOnce(socket, mySeq) {
+  return new Promise((resolve, reject) => {
+    const sentMono = nowMono();
     const timerId = setTimeout(() => reject(new Error('timeout')), TIMEOUT_MS);
     try {
       socket.emit('ping:request', { t: Date.now(), seq: mySeq }, (ack) => {
         clearTimeout(timerId);
-        resolve(ack);
+        if (!ack?.ok || ack.seq !== mySeq) return reject(new Error('stale-pong'));
+        resolve(Math.max(0, Math.round(nowMono() - sentMono)));
       });
     } catch (error) {
       clearTimeout(timerId);
       reject(error);
     }
   });
-  if (!response?.ok || response.seq !== mySeq) throw new Error('stale-pong');
-  // RTT from monotonic clock; server also returns serverTime for offset display.
-  return Math.max(0, Math.round(nowMono() - sentMono));
+}
+
+async function measureViaSocket(socket) {
+  const probes = [];
+  for (let i = 0; i < PROBES; i += 1) probes.push(probeOnce(socket, ++seq).catch(() => null));
+  const results = (await Promise.all(probes)).filter((v) => v != null);
+  if (!results.length) throw new Error('all-probes-failed');
+  return Math.min(...results); // best of 3
 }
 
 async function measureViaHttp() {
@@ -95,6 +90,7 @@ async function measureViaHttp() {
   try {
     const response = await fetch(`/api/ping?t=${Date.now()}`, {
       cache: 'no-store',
+      keepalive: true,
       signal: controller?.signal
     });
     if (!response.ok) throw new Error('ping-failed');
@@ -113,17 +109,26 @@ async function measure() {
     else ms = await measureViaHttp();
   } catch { ms = null; }
   lastSample = ms;
-  if (ms != null) pushSample(ms);
+  if (ms != null) {
+    if (warmup < 2) { warmup += 1; /* discard first 2 warmup rounds */ }
+    else {
+      samples.push(ms);
+      if (samples.length > MAX_SAMPLES) samples.shift();
+      rounds.push(ms);
+      if (rounds.length > 5) rounds.shift();
+      displayed = Math.min(...rounds);
+    }
+  }
   render();
   scheduleNext();
 }
 
 function nextInterval() {
-  const q = qualityFor(lastSample);
+  const q = qualityFor(displayed);
   if (q === 'good') return 5000;
   if (q === 'fair') return 3500;
   if (q === 'poor') return 2000;
-  return 1500; // offline: retry soon
+  return 1200;
 }
 
 function scheduleNext() {
@@ -146,19 +151,16 @@ function drawChart() {
   if (!ctx) return;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, width, height);
-
   const dark = document.documentElement.dataset.theme === 'dark';
   const grid = dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
   const line = dark ? '#6f9bff' : '#2c6bed';
   const max = Math.max(200, ...samples);
-
   ctx.strokeStyle = grid;
   ctx.lineWidth = 1;
   for (let i = 1; i <= 3; i += 1) {
     const y = (height / 4) * i;
     ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke();
   }
-
   if (samples.length < 2) return;
   const stepX = width / (MAX_SAMPLES - 1);
   const startX = width - stepX * (samples.length - 1);
@@ -172,7 +174,6 @@ function drawChart() {
   ctx.lineWidth = 1.8;
   ctx.lineJoin = 'round';
   ctx.stroke();
-
   const lastIndex = samples.length - 1;
   const lx = startX + stepX * lastIndex;
   const ly = height - 4 - (samples[lastIndex] / max) * (height - 10);
@@ -183,12 +184,10 @@ function drawChart() {
 }
 
 function render() {
-  const displayed = ewma != null ? ewma : lastSample;
-  const quality = qualityFor(lastSample);
+  const quality = qualityFor(displayed);
   const avg = average();
   const med = median(samples);
   const jit = jitter();
-
   for (const badge of document.querySelectorAll('[data-ping-badge]')) {
     badge.dataset.quality = quality;
     badge.title = `${t('ping.label')}: ${qualityLabel(quality)}`;
@@ -212,11 +211,13 @@ function render() {
   drawChart();
 }
 
-export function refreshPing() { void measure(); }
+export function refreshPing() { warmup = 0; void measure(); }
 export function getPingSamples() { return [...samples]; }
-export function getPingModel() { return { last: lastSample, ewma, median: median(samples), avg: average(), jitter: jitter(), quality: qualityFor(lastSample) }; }
+export function getPingModel() {
+  return { last: lastSample, displayed, median: median(samples), avg: average(), jitter: jitter(), quality: qualityFor(displayed) };
+}
 
-export function startPing({ socketGetter = () => null, intervalMs } = {}) {
+export function startPing({ socketGetter = () => null } = {}) {
   getSocket = socketGetter;
   if (started) return;
   started = true;

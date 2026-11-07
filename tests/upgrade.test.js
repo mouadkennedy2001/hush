@@ -21,21 +21,31 @@ test('spam scoring blocks floods and duplicates', () => {
 test('sounds folder and changelog exist with log button', async () => {
   const changelog = JSON.parse(await readFile(path.join(PUBLIC, 'changelog.json'), 'utf8'));
   assert.ok(changelog.entries.length >= 1);
-  for (const name of ['message', 'mention', 'join', 'leave', 'error', 'kick', 'ban', 'success', 'click', 'blip']) {
+  assert.ok(changelog.entries[0].titleEn && changelog.entries[0].titleAr, 'bilingual changelog');
+  assert.ok(changelog.entries[0].pointsEn && changelog.entries[0].pointsAr, 'bilingual points');
+  for (const name of ['message', 'mention', 'join', 'leave', 'error', 'kick', 'ban', 'success', 'click', 'blip', 'hand', 'knock', 'camera', 'share', 'reaction', 'pop']) {
     const buf = await readFile(path.join(PUBLIC, 'sounds', `${name}.wav`));
     assert.ok(buf.length > 1000, `${name}.wav too small`);
     assert.equal(buf.subarray(0, 4).toString(), 'RIFF');
   }
   const index = await readFile(path.join(PUBLIC, 'index.html'), 'utf8');
   assert.match(index, /data-open-log/, 'landing log button');
+  assert.match(index, /data-log-label/, 'log label span');
   const room = await readFile(path.join(PUBLIC, 'room.html'), 'utf8');
   assert.match(room, /data-open-log/, 'room log button');
   assert.match(room, /ctx-menu/, 'admin context menu');
   const sounds = await readFile(path.join(PUBLIC, 'js', 'sounds.js'), 'utf8');
   assert.match(sounds, /\/sounds\//, 'sounds module plays files');
   const ping = await readFile(path.join(PUBLIC, 'js', 'ping.js'), 'utf8');
-  assert.match(ping, /median|EWMA|ewma/i, 'ping smoothing algorithm');
+  assert.match(ping, /PROBES|best of 3|Math\.min/, 'ping best-of probes');
   assert.match(ping, /performance\.now/, 'monotonic clock');
+  const base = await readFile(path.join(PUBLIC, 'css', 'base.css'), 'utf8');
+  assert.match(base, /\[hidden\].*display: none !important/, 'hidden wins');
+  const i18n = await readFile(path.join(PUBLIC, 'js', 'i18n.js'), 'utf8');
+  assert.doesNotMatch(i18n, /'textarea',\n\s*'\.messages'/, 'textarea placeholder must translate');
+  const cl = await readFile(path.join(PUBLIC, 'js', 'changelog.js'), 'utf8');
+  assert.match(cl, /getLanguage\(\)/, 'changelog localizes by language');
+  assert.match(cl, /onLanguageChange/, 'changelog re-renders on language change');
 });
 
 test('host can kick and ban; banned device cannot rejoin', async () => {

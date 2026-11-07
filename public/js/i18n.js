@@ -9,12 +9,12 @@ const attrOriginals = new WeakMap();
 const ATTRS = ['placeholder', 'title', 'aria-label', 'alt'];
 
 // Dynamic or user-authored areas are never auto-translated. Their text is
-// rendered through t() by the page modules instead.
+// rendered through t() by the page modules instead. NB: 'textarea' is NOT
+// here — its placeholder attribute must still be translated (composer).
 const SKIP_SELECTOR = [
   'script',
   'style',
   'noscript',
-  'textarea',
   '.messages',
   '.tile-grid',
   '#people-list',
@@ -136,7 +136,7 @@ function walkTextNodes(root, visit) {
 function translateText(root) {
   walkTextNodes(root, (node) => {
     const parent = node.parentElement;
-    if (!parent || parent.closest(SKIP_SELECTOR)) return;
+    if (!parent || parent.tagName === 'TEXTAREA' || parent.closest(SKIP_SELECTOR)) return;
 
     const raw = node.nodeValue ?? '';
     const key = raw.trim();

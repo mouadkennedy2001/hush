@@ -13,7 +13,7 @@ Built by **Zerouki Ahmed Mouad** (زروقي احمد معاذ).
 
 ## Features
 
-- **Log (سجل)** — a **Log** button on the landing page and in the room opens a changelog dialog (`/api/changelog` ← `public/changelog.json`) with the most important updates and fixes, newest first, plus a "new" dot until you open it.
+- **Log (سجل) — bilingual** — a **Log** button (`Log` in English / `السجل` in Arabic) on the landing page and in the room opens a changelog dialog (`/api/changelog` ← `public/changelog.json`) with bilingual entries (`titleEn/titleAr`, `pointsEn/pointsAr`), newest first, plus a "new" dot until you open it. The dialog re-renders live when you switch language.
 - **Admin / host, kick, ban, disconnect** — the first person in a room is the host (Admin). Right-click (mouse right button) any person in the People list or any video tile to open an admin menu: **Kick**, **Disconnect**, **Ban** (device + IP, default 60 min, persisted per room), **Make host**. Host transfer is automatic when the host leaves. Kicked/banned users see why and are disconnected immediately.
 - **Anti multi-account (same device)** — each browser has a device id (`hush:device`). One device = one account per room: opening a second tab from the same device replaces the old session instead of flooding the room with clones. Bans match on hashed device + IP.
 - **Anti-spam algorithms** — duplicate message detection (same text within 15s), burst limit (8 msgs / 10s), min interval (700ms), link flood (>3 links), emoji flood (>10), repeated-char flood, caps shouting — repeated spam gets a strike and a 30s mute penalty box. Bidi/zero-width tricks are stripped.

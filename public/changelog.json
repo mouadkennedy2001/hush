@@ -1,44 +1,71 @@
 {
-  "version": "2.0.0",
+  "version": "3.0.0",
   "entries": [
     {
       "date": "2026-11-07",
       "ts": 1762819200000,
+      "kind": "fix",
+      "kindEn": "Fix",
+      "kindAr": "إصلاح",
+      "titleEn": "Screenshot fixes: emoji menu, Arabic placeholder, ping bidi + ping v3 (best-of-3)",
+      "titleAr": "إصلاحات الصور: قائمة الإيموجي، عنصر الدردشة بالعربية، اتجاه البنغ + بنغ v3 (أفضل من 3)",
+      "pointsEn": [
+        "FIX: Emoji picker was clipped to one column in Arabic (RTL) — menu now opens inside the panel with logical positioning.",
+        "FIX: Composer placeholder stayed in English in Arabic — textarea placeholders are now translated (راسل الغرفة…).",
+        "FIX: Ping showed as 'ms 222' in Arabic — numbers/codes are now isolated LTR (222 ms).",
+        "FIX: Unread badge showed 0 — [hidden] now wins over component display.",
+        "Ping v3: 3 parallel probes, take the best (min) — spikes drop fast; warmup discarded; median/avg/jitter still in Connection card.",
+        "NEW: 6 more sounds (hand, knock, camera, share, reaction, pop) — now 16 total.",
+        "NEW: Admin mute (chat mute 1 min) from the right-click menu; reaction + hand sounds for everyone."
+      ],
+      "pointsAr": [
+        "إصلاح: كانت قائمة الإيموجي تظهر في عمود واحد بالعربية — الآن تفتح داخل اللوحة بموضع منطقي.",
+        "إصلاح: كان عنصر الدردشة يبقى بالإنجليزية بالعربية — الآن تُترجم (راسل الغرفة…).",
+        "إصلاح: كان البنغ يظهر «ms 222» بالعربية — الآن الأرقام والرموز LTR معزولة (222 ms).",
+        "إصلاح: كانت شارة غير المقروء تظهر 0 — الآن [hidden] يتغلب على العرض.",
+        "بنغ v3: ثلاث مجسات متوازية وأخذ الأفضل (الأدنى) — تختفي الارتفاعات بسرعة؛ تجاهل الإحماء؛ المتوسط والوسيط والاهتزاز ما تزال في بطاقة الاتصال.",
+        "جديد: 6 أصوات إضافية (hand, knock, camera, share, reaction, pop) — المجموع 16.",
+        "جديد: كتم إداري (كتم الدردشة دقيقة) من قائمة الزر الأيمن؛ أصوات للتفاعل ورفع اليد للجميع."
+      ]
+    },
+    {
+      "date": "2026-11-07",
+      "ts": 1762700000000,
       "kind": "update",
-      "kindLabel": "Update",
-      "title": "Admin, ban & kick + anti-spam + better ping (v2)",
-      "points": [
+      "kindEn": "Update",
+      "kindAr": "تحديث",
+      "titleEn": "Admin, ban & kick + anti-spam + better ping (v2)",
+      "titleAr": "إدارة وحظر وطرد + منع سبام + بنغ أفضل (v2)",
+      "pointsEn": [
         "NEW: Room host/admin — first person in a room is the admin. Right-click any person (or tile) for Kick, Ban, Disconnect, Transfer host.",
-        "NEW: Ban system blocks the device + IP for the room (default 60 min). Kicked/banned users see a reason and cannot rejoin while banned.",
-        "NEW: Anti multi-account — one device = one account per room. A second tab from the same device replaces the old one instead of flooding the room.",
+        "NEW: Ban system blocks the device + IP for the room (default 60 min).",
+        "NEW: Anti multi-account — one device = one account per room.",
         "Anti-spam: duplicate messages, link/emoji floods, burst sending and slow-mode mute after repeated spam.",
-        "Ping: median + smoothing algorithm, adaptive refresh (fast when network is poor), monotonic clock — numbers are steadier and truer.",
-        "Sounds: 10 new sounds (message, mention, join, leave, error, kick, ban, success, click, blip) in public/sounds/ with volume control.",
-        "Protection: per-IP connection caps, stricter upload checks (double-extension blocked), same-origin guard, stronger security headers.",
-        "FIX: faster dead-peer detection (8s ping / 12s timeout) and WebSocket-first transport for lower latency."
+        "Sounds: 10 sounds in public/sounds/ with volume control."
+      ],
+      "pointsAr": [
+        "جديد: مضيف الغرفة/الإدارة — أول شخص في الغرفة هو الإدارة. انقر بزر الفأرة الأيمن على أي شخص (أو بلاطة) للطرد أو الحظر أو قطع الاتصال أو نقل المضيف.",
+        "جديد: نظام حظر يحظر الجهاز + IP للغرفة (افتراضي 60 دقيقة).",
+        "جديد: منع تعدد الحسابات — جهاز واحد = حساب واحد في الغرفة.",
+        "منع السبام: الرسائل المكررة، فيض الروابط/الإيموجي، الإرسال المتتالي وكتم بطيء بعد السبام المتكرر.",
+        "أصوات: 10 أصوات في public/sounds/ مع التحكم بمستوى الصوت."
       ]
     },
     {
       "date": "2026-11-06",
-      "ts": 1762732800000,
-      "kind": "fix",
-      "kindLabel": "Fix",
-      "title": "Stability + ping card",
-      "points": [
-        "Live ping counter with average, jitter and sparkline chart in the Connection card.",
-        "Join gate no longer hangs; draft messages are kept per room.",
-        "Edit/delete your messages, pin messages, search chat."
-      ]
-    },
-    {
-      "date": "2026-11-05",
       "ts": 1762646400000,
-      "kind": "update",
-      "kindLabel": "Update",
-      "title": "Voice FX + themes",
-      "points": [
-        "Mic presets (Voice / Podcast / Gaming / Quiet), noise gate, amplification and device picker.",
-        "Light / dark / auto themes, text size, density and focus mode."
+      "kind": "fix",
+      "kindEn": "Fix",
+      "kindAr": "إصلاح",
+      "titleEn": "Stability + ping card",
+      "titleAr": "الاستقرار + بطاقة البنغ",
+      "pointsEn": [
+        "Live ping counter with average, jitter and sparkline chart in the Connection card.",
+        "Join gate no longer hangs; draft messages are kept per room."
+      ],
+      "pointsAr": [
+        "عدّاد بنغ مباشر مع المتوسط والاهتزاز ورسم بياني في بطاقة الاتصال.",
+        "بوابة الانضمام لم تعد تعلّق؛ المسودات محفوظة لكل غرفة."
       ]
     }
   ]

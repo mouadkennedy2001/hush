@@ -1,8 +1,9 @@
-import { t } from './i18n.js';
+import { t, getLanguage, onLanguageChange } from './i18n.js';
 import { playSound } from './sounds.js';
 
 // Renders the Log (changelog) dialog. Data comes from /api/changelog
-// (public/changelog.json). Works on landing + room pages.
+// (public/changelog.json). Bilingual: entries carry En/Ar fields and the
+// dialog re-renders when the language changes. Works on landing + room.
 const SEEN_KEY = 'hush:changelog-seen';
 
 function el(tag, cls, text) {
@@ -10,6 +11,11 @@ function el(tag, cls, text) {
   if (cls) n.className = cls;
   if (text != null) n.textContent = text;
   return n;
+}
+
+function pick(entry, base, fallback) {
+  const lang = getLanguage();
+  return entry[`${base}${lang === 'ar' ? 'Ar' : 'En'}`] ?? entry[base] ?? fallback ?? '';
 }
 
 function ensureDialog() {
@@ -42,6 +48,13 @@ function renderTitle(dialog) {
   if (lead) lead.textContent = t('log.lead');
   const close = dialog.querySelector('[data-close-changelog]');
   if (close) close.setAttribute('aria-label', t('log.close'));
+  // Log buttons: Log (EN) / السجل (AR)
+  for (const button of document.querySelectorAll('[data-open-log]')) {
+    button.setAttribute('title', t('log.open'));
+    button.setAttribute('aria-label', t('log.open'));
+    const label = button.querySelector('[data-log-label]');
+    if (label) label.textContent = t('log.open');
+  }
 }
 
 async function loadEntries() {
@@ -53,32 +66,38 @@ async function loadEntries() {
   } catch { return []; }
 }
 
+async function renderEntries(dialog) {
+  const list = dialog.querySelector('.changelog-list');
+  const entries = await loadEntries();
+  list.replaceChildren();
+  if (!entries.length) {
+    list.append(el('p', 'muted', t('log.empty')));
+    return;
+  }
+  for (const entry of entries) {
+    const card = el('article', 'changelog-card');
+    const head = el('div', 'changelog-head');
+    head.append(
+      el('span', 'changelog-date', entry.date || ''),
+      el('span', `changelog-tag is-${entry.kind || 'update'}`, pick(entry, 'kind', entry.kindLabel || entry.kind || ''))
+    );
+    card.append(head);
+    card.append(el('h3', '', pick(entry, 'title', entry.title || '')));
+    const ul = el('ul', 'changelog-points');
+    const points = entry[`points${getLanguage() === 'ar' ? 'Ar' : 'En'}`] || entry.points || [];
+    for (const point of points) ul.append(el('li', '', point));
+    card.append(ul);
+    list.append(card);
+  }
+}
+
 export async function openChangelog() {
   const dialog = ensureDialog();
   renderTitle(dialog);
   const list = dialog.querySelector('.changelog-list');
   list.replaceChildren(el('p', 'muted', t('log.loading')));
   playSound('click', { force: true });
-  const entries = await loadEntries();
-  list.replaceChildren();
-  if (!entries.length) {
-    list.append(el('p', 'muted', t('log.empty')));
-  } else {
-    for (const entry of entries) {
-      const card = el('article', 'changelog-card');
-      const head = el('div', 'changelog-head');
-      head.append(
-        el('span', 'changelog-date', entry.date || ''),
-        el('span', `changelog-tag is-${entry.kind || 'update'}`, entry.kindLabel || entry.kind || '')
-      );
-      card.append(head);
-      card.append(el('h3', '', entry.title || ''));
-      const ul = el('ul', 'changelog-points');
-      for (const point of entry.points || []) ul.append(el('li', '', point));
-      card.append(ul);
-      list.append(card);
-    }
-  }
+  await renderEntries(dialog);
   try { localStorage.setItem(SEEN_KEY, String(Date.now())); } catch {}
   document.querySelectorAll('[data-log-badge]').forEach((b) => { b.hidden = true; });
   if (typeof dialog.showModal === 'function') { if (!dialog.open) dialog.showModal(); }
@@ -93,21 +112,24 @@ export function closeChangelog() {
 }
 
 export function initChangelog() {
+  renderTitle(ensureDialog());
   document.addEventListener('click', (event) => {
     const button = event.target?.closest?.('[data-open-log]');
     if (!button) return;
     event.preventDefault();
     openChangelog();
   });
-  // Show "new" dot if user hasn't seen latest changelog version.
+  onLanguageChange(() => {
+    renderTitle(ensureDialog());
+    const dialog = document.querySelector('#changelog-dialog');
+    if (dialog?.open) void renderEntries(dialog);
+  });
   (async () => {
     try {
       const seen = Number(localStorage.getItem(SEEN_KEY) || 0);
       const entries = await loadEntries();
       const latest = entries[0]?.ts || 0;
-      const badges = document.querySelectorAll('[data-log-badge]');
-      // Dot visible when there is an entry newer than last seen (or never seen with entries).
-      badges.forEach((b) => { b.hidden = !(entries.length && latest > seen); });
+      document.querySelectorAll('[data-log-badge]').forEach((b) => { b.hidden = !(entries.length && latest > seen); });
     } catch {}
   })();
 }

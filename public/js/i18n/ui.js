@@ -363,6 +363,9 @@ export const ui = {
   'admin.kickConfirm': ['Kick {name} out of the room?', 'طرد {name} من الغرفة؟'],
   'admin.isHost': ['Host', 'مضيف'],
   'admin.menuFor': ['Actions for {name}', 'إجراءات لـ {name}'],
+  'admin.mute': ['Mute chat (1 min)', 'كتم الدردشة (دقيقة)'],
+  'admin.muted': ['{name} was muted by {by} for 1 minute.', 'تم كتم {name} بواسطة {by} لمدة دقيقة.'],
+  'admin.youMuted': ['You were muted by the host for 1 minute.', 'تم كتمك بواسطة المضيف لمدة دقيقة.'],
 
   'error.banned': ['You are banned from this room. Try again later.', 'أنت محظور من هذه الغرفة. حاول لاحقًا.'],
   'error.spam': ['You are sending too fast. Slow down a moment.', 'أنت ترسل بسرعة كبيرة. خفّف قليلًا.'],

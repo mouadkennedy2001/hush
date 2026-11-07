@@ -859,6 +859,7 @@ function bindRoomEvents(socket) {
     if (!participant.screenOn && state.activeScreenId === participant.id) {
       state.activeScreenId = null;
     }
+    if (participant.handRaised && participant.id !== state.selfId) playSound('hand');
     renderTiles();
     renderPeople();
     updateStageHeader();
@@ -910,8 +911,9 @@ function bindRoomEvents(socket) {
     setTypingUser(id, name, typing);
   });
 
-  socket.on('reaction:receive', ({ name, emoji } = {}) => {
+  socket.on('reaction:receive', ({ name, emoji, id } = {}) => {
     if (emoji) floatReaction(name || t('screen.someone'), emoji);
+    if (id !== state.selfId && state.soundsOn) playSound('reaction');
   });
 
   socket.on('admin:host', ({ hostId, hostName } = {}) => {
@@ -927,6 +929,12 @@ function bindRoomEvents(socket) {
     if (type === 'kick') { toast(t('admin.kicked', { name: targetName || '', by: by || '' }), 'error', 3600); playSound('kick'); }
     if (type === 'ban') { toast(t('admin.banned', { name: targetName || '', by: by || '' }), 'error', 4000); playSound('ban'); }
     if (type === 'disconnect') { toast(t('admin.disconnected', { name: targetName || '', by: by || '' }), 'error', 3600); playSound('kick'); }
+    if (type === 'mute') { toast(t('admin.muted', { name: targetName || '', by: by || '' }), 'error', 3600); playSound('knock'); }
+  });
+
+  socket.on('admin:muted', ({ by } = {}) => {
+    toast(t('admin.youMuted'), 'error', 5000);
+    playSound('knock');
   });
 
   socket.on('admin:removed', ({ reason } = {}) => {
@@ -2457,6 +2465,7 @@ async function toggleCamera() {
   } else {
     const enabled = await state.mesh.enableCamera();
     if (!enabled) return;
+    playSound('camera');
   }
 
   syncLocalMediaState();
@@ -2472,6 +2481,7 @@ async function toggleScreen() {
   } else {
     const started = await state.mesh.startScreen();
     if (!started) return;
+    playSound('share');
   }
 
   syncLocalMediaState();
@@ -2481,6 +2491,7 @@ async function toggleScreen() {
 
 function toggleHand() {
   state.handRaised = !state.handRaised;
+  if (state.handRaised) playSound('hand');
   updatePresence();
 }
 
@@ -2742,6 +2753,7 @@ function openAdminMenu(targetId, x, y) {
   };
   mk(t('admin.kick'), true, () => adminAction('admin:kick', targetId, t('admin.kickConfirm', { name: target.name })));
   mk(t('admin.disconnect'), true, () => adminAction('admin:disconnect', targetId, t('admin.kickConfirm', { name: target.name })));
+  mk(t('admin.mute'), false, () => adminAction('admin:mute', targetId, null));
   mk(t('admin.ban'), true, () => adminAction('admin:ban', targetId, t('admin.banConfirm', { name: target.name, minutes: 60 })));
   mk(t('admin.transfer'), false, () => adminAction('admin:transfer', targetId, null));
   els.ctxMenu.hidden = false;

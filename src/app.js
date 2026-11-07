@@ -155,7 +155,7 @@ export async function createHushServer({
   app.get('/api/sounds', (req, res) => {
     res.setHeader('Cache-Control', 'public, max-age=3600');
     res.json({
-      sounds: ['message', 'mention', 'join', 'leave', 'error', 'kick', 'ban', 'success', 'click', 'blip']
+      sounds: ['message', 'mention', 'join', 'leave', 'error', 'kick', 'ban', 'success', 'click', 'blip', 'hand', 'knock', 'camera', 'share', 'reaction', 'pop']
     });
   });
 

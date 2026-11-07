@@ -1424,7 +1424,7 @@ html[data-theme="dark"] .control[aria-pressed="true"] {
 
 .emoji-menu {
   position: absolute;
-  left: 0;
+  inset-inline-start: 0;
   bottom: calc(100% + 8px);
   z-index: 30;
   display: grid;
@@ -1435,7 +1435,8 @@ html[data-theme="dark"] .control[aria-pressed="true"] {
   border-radius: 12px;
   background: var(--color-surface);
   box-shadow: var(--shadow-lg);
-  width: 228px;
+  width: min(228px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
 }
 
 .emoji-menu[hidden] { display: none; }

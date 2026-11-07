@@ -352,6 +352,17 @@ export function attachRealtime(io, { rooms, maxParticipants = MAX_PARTICIPANTS }
       safeAck(ack, { ok: true });
     });
 
+    socket.on('admin:mute', (payload = {}, ack) => {
+      if (!allowRateFor(socket, 'adminRate', 10)) return safeAck(ack, { ok: false, error: 'rate-limited' });
+      const target = requireHost(String(payload.targetId || ''), ack);
+      if (!target) return;
+      const targetSocket = io.sockets.sockets.get(target.id);
+      if (targetSocket) targetSocket.data.mutedUntil = Date.now() + 60_000;
+      io.to(channelFor(membership.room.code)).emit('admin:action', { type: 'mute', targetId: target.id, targetName: target.name, by: membership.participant.name });
+      if (targetSocket) targetSocket.emit('admin:muted', { by: membership.participant.name });
+      safeAck(ack, { ok: true });
+    });
+
     socket.on('chat:delete-any', async (payload = {}, ack) => {
       if (!membership) return safeAck(ack, { ok: false, error: 'not-in-room' });
       if (!isHost()) return safeAck(ack, { ok: false, error: 'not-admin' });

@@ -4,7 +4,9 @@ const ICE_SERVERS = [
   {
     urls: [
       'stun:stun.l.google.com:19302',
-      'stun:stun1.l.google.com:19302'
+      'stun:stun1.l.google.com:19302',
+      'stun:stun2.l.google.com:19302',
+      'stun:stun3.l.google.com:19302'
     ]
   }
 ];
@@ -519,7 +521,7 @@ export class MediaMesh {
   }
 
   #createChannel(peer, name, { withTransceivers }) {
-    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS, bundlePolicy: 'max-bundle', rtcpMuxPolicy: 'require' });
     const channel = {
       name,
       pc,

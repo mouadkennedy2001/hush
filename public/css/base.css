@@ -4,6 +4,18 @@
   box-sizing: border-box;
 }
 
+/* [hidden] must win over component display (badges, menus, gates). */
+[hidden] { display: none !important; }
+
+/* Numbers/codes always read LTR even inside RTL layout (fixes "ms 222" flip). */
+[data-ping-value], [data-ping-avg], [data-ping-median], [data-ping-jitter],
+.ping-badge, .session-timer, .room-code code, .invite-row code, .gate-code code,
+#room-code, #invite-code, #gate-code, .tile-name, .person-name {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+html[dir="rtl"] .ping-badge, html[dir="rtl"] .session-timer { flex-direction: row; }
+
 html {
   scroll-behavior: smooth;
 }
