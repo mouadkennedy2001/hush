@@ -10,8 +10,16 @@ import {
   MAX_MESSAGE_LENGTH,
   MAX_NAME_LENGTH,
   MAX_PARTICIPANTS,
-  MAX_UPLOAD_BYTES
+  MAX_UPLOAD_BYTES,
+  MAX_MESSAGES_PER_10S,
+  MIN_MESSAGE_INTERVAL_MS,
+  SPAM_MUTE_MS,
+  MAX_SOCKETS_PER_IP,
+  MAX_PARTICIPANTS_PER_IP_PER_ROOM,
+  MAX_JOINS_PER_IP_PER_MIN,
+  BAN_DEFAULT_MINUTES
 } from './constants.js';
+import { hashValue, cleanDeviceId, stripInvisible, spamScore, activeBans } from './security.js';
 
 const RATE_WINDOW_MS = 5000;
 const RATE_MAX = 12;
@@ -30,7 +38,8 @@ function asBoolean(value) {
 }
 
 function publicParticipant(participant) {
-  return { ...participant };
+  const { ipHash, deviceHash, ...rest } = participant;
+  return { ...rest };
 }
 
 function uniqueName(room, requested) {
@@ -85,11 +94,49 @@ function allowRate(socket) {
   return allowRateFor(socket, 'chatRate', RATE_MAX);
 }
 
+// Global (per-server) connection tracking for IP limits
+const ipSockets = new Map(); // ipHash -> Set<socketId>
+const ipJoins = new Map(); // ipHash -> number[] timestamps
+
+function trackIpSocket(ipHash, socketId) {
+  if (!ipSockets.has(ipHash)) ipSockets.set(ipHash, new Set());
+  ipSockets.get(ipHash).add(socketId);
+}
+function untrackIpSocket(ipHash, socketId) {
+  const set = ipSockets.get(ipHash);
+  if (!set) return;
+  set.delete(socketId);
+  if (!set.size) ipSockets.delete(ipHash);
+}
+function ipSocketCount(ipHash) {
+  return ipSockets.get(ipHash)?.size ?? 0;
+}
+function allowIpJoin(ipHash) {
+  const now = Date.now();
+  const hits = (ipJoins.get(ipHash) ?? []).filter((t) => now - t < 60_000);
+  if (hits.length >= MAX_JOINS_PER_IP_PER_MIN) { ipJoins.set(ipHash, hits); return false; }
+  hits.push(now); ipJoins.set(ipHash, hits); return true;
+}
+
 export function attachRealtime(io, { rooms, maxParticipants = MAX_PARTICIPANTS } = {}) {
   if (!rooms) throw new Error('attachRealtime requires a RoomManager');
 
   io.on('connection', (socket) => {
+    const ipHash = hashValue(socket.handshake.address || 'unknown', 'ip');
+    socket.data.ipHash = ipHash;
+
+    if (ipSocketCount(ipHash) >= MAX_SOCKETS_PER_IP) {
+      socket.emit('room:error', { error: 'too-many-connections' });
+      socket.disconnect(true);
+      return;
+    }
+    trackIpSocket(ipHash, socket.id);
+
     let membership = null;
+
+    function isHost() {
+      return membership && membership.room.hostId === socket.id;
+    }
 
     function leave() {
       if (!membership) return;
@@ -98,6 +145,15 @@ export function attachRealtime(io, { rooms, maxParticipants = MAX_PARTICIPANTS }
       socket.data.roomCode = null;
       room.participants.delete(participant.id);
       rooms.touch(room);
+      // Host transfer: oldest remaining participant becomes host
+      if (room.hostId === participant.id) {
+        const next = [...room.participants.values()].sort((a, b) => (a.joinedAt ?? 0) - (b.joinedAt ?? 0))[0];
+        room.hostId = next ? next.id : null;
+        if (next) {
+          io.to(channelFor(room.code)).emit('admin:host', { hostId: next.id, hostName: next.name });
+          // Host is in-memory only (no disk write on leave) to avoid save races on shutdown.
+        }
+      }
       socket.to(channelFor(room.code)).emit('peer:left', {
         id: participant.id,
         name: participant.name
@@ -110,6 +166,9 @@ export function attachRealtime(io, { rooms, maxParticipants = MAX_PARTICIPANTS }
         if (!allowRateFor(socket, 'joinRate', 10)) {
           return safeAck(ack, { ok: false, error: 'rate-limited' });
         }
+        if (!allowIpJoin(ipHash)) {
+          return safeAck(ack, { ok: false, error: 'rate-limited' });
+        }
         leave();
 
         const code = normalizeCode(payload.code);
@@ -118,11 +177,41 @@ export function attachRealtime(io, { rooms, maxParticipants = MAX_PARTICIPANTS }
         }
 
         const room = await rooms.getOrCreate(code);
+
+        // Ban check (device + ip)
+        const rawDevice = cleanDeviceId(payload.deviceId);
+        const deviceHash = rawDevice ? hashValue(rawDevice, 'device') : hashValue(payload.deviceId || socket.id, 'device');
+        socket.data.deviceHash = deviceHash;
+        const bans = activeBans(room.banned);
+        const banned = bans.find((b) => b.deviceHash === deviceHash || b.ipHash === ipHash);
+        if (banned) {
+          return safeAck(ack, { ok: false, error: 'banned', until: banned.until ?? null, reason: banned.reason || '' });
+        }
+
         if (room.participants.size >= maxParticipants) {
           return safeAck(ack, { ok: false, error: 'room-full' });
         }
 
-        const requestedName = cleanName(payload.name);
+        // Anti multi-account from same device: one slot per device per room.
+        // If same device already in room on another socket, disconnect the old one.
+        for (const p of room.participants.values()) {
+          if (p.deviceHash === deviceHash && p.id !== socket.id) {
+            const oldSocket = io.sockets.sockets.get(p.id);
+            if (oldSocket) {
+              oldSocket.emit('room:error', { error: 'duplicate-device' });
+              oldSocket.disconnect(true);
+            }
+            room.participants.delete(p.id);
+          }
+        }
+
+        // Per-IP per-room cap
+        const sameIp = [...room.participants.values()].filter((p) => p.ipHash === ipHash).length;
+        if (sameIp >= MAX_PARTICIPANTS_PER_IP_PER_ROOM) {
+          return safeAck(ack, { ok: false, error: 'too-many-from-device' });
+        }
+
+        const requestedName = cleanName(stripInvisible(payload.name));
         const participant = {
           id: socket.id,
           name: uniqueName(room, requestedName),
@@ -130,13 +219,23 @@ export function attachRealtime(io, { rooms, maxParticipants = MAX_PARTICIPANTS }
           cameraOn: false,
           screenOn: false,
           handRaised: false,
-          joinedAt: Date.now()
+          joinedAt: Date.now(),
+          deviceHash,
+          ipHash
         };
 
+        const isFirst = room.participants.size === 0;
         room.participants.set(socket.id, participant);
+        if (isFirst || !room.hostId || !room.participants.has(room.hostId)) {
+          room.hostId = socket.id;
+        }
         rooms.touch(room);
         membership = { room, participant };
         socket.data.roomCode = code;
+        socket.data.chatHistory = [];
+        socket.data.lastChatAt = 0;
+        socket.data.spamStrikes = 0;
+        socket.data.mutedUntil = 0;
 
         socket.join(channelFor(code));
         socket.to(channelFor(code)).emit('peer:joined', {
@@ -145,7 +244,9 @@ export function attachRealtime(io, { rooms, maxParticipants = MAX_PARTICIPANTS }
 
         safeAck(ack, {
           ok: true,
-          self: { id: participant.id, name: participant.name },
+          self: { id: participant.id, name: participant.name, isHost: room.hostId === socket.id },
+          hostId: room.hostId,
+          isHost: room.hostId === socket.id,
           room: {
             code,
             participants: [...room.participants.values()].map(publicParticipant),
@@ -164,26 +265,148 @@ export function attachRealtime(io, { rooms, maxParticipants = MAX_PARTICIPANTS }
         return safeAck(ack, { ok: false, error: 'rate-limited' });
       }
       const clientTime = Number(payload?.t);
+      // Echo client clock + server clock so client can compute RTT + offset.
+      // Use seq to match responses and drop stale ones.
       safeAck(ack, {
         ok: true,
         t: Number.isFinite(clientTime) ? clientTime : Date.now(),
+        seq: Number(payload?.seq) || 0,
         serverTime: Date.now()
       });
     });
 
     socket.on('room:leave', () => leave());
-    socket.on('disconnect', () => leave());
+    socket.on('disconnect', () => { leave(); untrackIpSocket(ipHash, socket.id); });
+
+    /* -------- Admin: kick / ban / unban / disconnect / transfer / deleteAny -------- */
+    function requireHost(targetId, ack) {
+      if (!membership) { safeAck(ack, { ok: false, error: 'not-in-room' }); return null; }
+      if (!isHost()) { safeAck(ack, { ok: false, error: 'not-admin' }); return null; }
+      const target = membership.room.participants.get(targetId);
+      if (!target) { safeAck(ack, { ok: false, error: 'user-not-found' }); return null; }
+      if (targetId === socket.id) { safeAck(ack, { ok: false, error: 'cannot-target-self' }); return null; }
+      return target;
+    }
+
+    socket.on('admin:kick', (payload = {}, ack) => {
+      if (!allowRateFor(socket, 'adminRate', 10)) return safeAck(ack, { ok: false, error: 'rate-limited' });
+      const target = requireHost(String(payload.targetId || ''), ack);
+      if (!target) return;
+      const { room } = membership;
+      const targetSocket = io.sockets.sockets.get(target.id);
+      io.to(channelFor(room.code)).emit('admin:action', { type: 'kick', targetId: target.id, targetName: target.name, by: membership.participant.name });
+      if (targetSocket) { targetSocket.emit('admin:removed', { reason: 'kicked', by: membership.participant.name }); targetSocket.disconnect(true); }
+      safeAck(ack, { ok: true });
+    });
+
+    socket.on('admin:disconnect', (payload = {}, ack) => {
+      if (!allowRateFor(socket, 'adminRate', 10)) return safeAck(ack, { ok: false, error: 'rate-limited' });
+      const target = requireHost(String(payload.targetId || ''), ack);
+      if (!target) return;
+      const { room } = membership;
+      const targetSocket = io.sockets.sockets.get(target.id);
+      io.to(channelFor(room.code)).emit('admin:action', { type: 'disconnect', targetId: target.id, targetName: target.name, by: membership.participant.name });
+      if (targetSocket) { targetSocket.emit('admin:removed', { reason: 'disconnected', by: membership.participant.name }); targetSocket.disconnect(true); }
+      safeAck(ack, { ok: true });
+    });
+
+    socket.on('admin:ban', async (payload = {}, ack) => {
+      if (!allowRateFor(socket, 'adminRate', 10)) return safeAck(ack, { ok: false, error: 'rate-limited' });
+      const target = requireHost(String(payload.targetId || ''), ack);
+      if (!target) return;
+      const { room } = membership;
+      const minutes = Math.min(10080, Math.max(1, Number(payload.minutes) || BAN_DEFAULT_MINUTES));
+      const ban = {
+        deviceHash: target.deviceHash,
+        ipHash: target.ipHash,
+        name: target.name,
+        until: Date.now() + minutes * 60_000,
+        reason: String(payload.reason || '').slice(0, 120)
+      };
+      await rooms.addBan(room, ban);
+      const targetSocket = io.sockets.sockets.get(target.id);
+      io.to(channelFor(room.code)).emit('admin:action', { type: 'ban', targetId: target.id, targetName: target.name, by: membership.participant.name, minutes });
+      if (targetSocket) { targetSocket.emit('admin:removed', { reason: 'banned', by: membership.participant.name, minutes }); targetSocket.disconnect(true); }
+      safeAck(ack, { ok: true, ban });
+    });
+
+    socket.on('admin:unban', async (payload = {}, ack) => {
+      if (!membership) return safeAck(ack, { ok: false, error: 'not-in-room' });
+      if (!isHost()) return safeAck(ack, { ok: false, error: 'not-admin' });
+      if (!allowRateFor(socket, 'adminRate', 10)) return safeAck(ack, { ok: false, error: 'rate-limited' });
+      const removed = await rooms.removeBan(membership.room, {
+        deviceHash: String(payload.deviceHash || ''),
+        ipHash: String(payload.ipHash || '')
+      });
+      io.to(channelFor(membership.room.code)).emit('admin:action', { type: 'unban', by: membership.participant.name });
+      safeAck(ack, { ok: true, removed });
+    });
+
+    socket.on('admin:transfer', (payload = {}, ack) => {
+      if (!allowRateFor(socket, 'adminRate', 10)) return safeAck(ack, { ok: false, error: 'rate-limited' });
+      const target = requireHost(String(payload.targetId || ''), ack);
+      if (!target) return;
+      membership.room.hostId = target.id;
+      rooms.setHost(membership.room, target.id).catch(() => {});
+      io.to(channelFor(membership.room.code)).emit('admin:host', { hostId: target.id, hostName: target.name });
+      safeAck(ack, { ok: true });
+    });
+
+    socket.on('chat:delete-any', async (payload = {}, ack) => {
+      if (!membership) return safeAck(ack, { ok: false, error: 'not-in-room' });
+      if (!isHost()) return safeAck(ack, { ok: false, error: 'not-admin' });
+      if (!allowRateFor(socket, 'deleteRate', RATE_MAX)) return safeAck(ack, { ok: false, error: 'rate-limited' });
+      const messageId = String(payload?.messageId ?? '');
+      if (!messageId) return safeAck(ack, { ok: false, error: 'message-not-found' });
+      const removed = await rooms.deleteMessageAsAdmin(membership.room, messageId);
+      if (!removed) return safeAck(ack, { ok: false, error: 'message-not-found' });
+      io.to(channelFor(membership.room.code)).emit('chat:deleted', { messageId });
+      safeAck(ack, { ok: true });
+    });
 
     socket.on('chat:send', async (payload = {}, ack) => {
       if (!membership) return safeAck(ack, { ok: false, error: 'not-in-room' });
+      // Mute penalty box
+      if (socket.data.mutedUntil && Date.now() < socket.data.mutedUntil) {
+        return safeAck(ack, { ok: false, error: 'muted', until: socket.data.mutedUntil });
+      }
       if (!allowRate(socket)) return safeAck(ack, { ok: false, error: 'rate-limited' });
 
       const { room, participant } = membership;
-      const text = cleanMessageText(payload.text);
+      const text = cleanMessageText(stripInvisible(payload.text));
       const attachment = cleanAttachment(payload.attachment, room.code);
       if (!text && !attachment) return safeAck(ack, { ok: false, error: 'empty-message' });
       if (text.length > MAX_MESSAGE_LENGTH) {
         return safeAck(ack, { ok: false, error: 'message-too-long' });
+      }
+
+      // Burst + interval anti-spam
+      const now = Date.now();
+      const history = socket.data.chatHistory ?? [];
+      const recent = history.filter((t) => now - t < 10_000);
+      if (recent.length >= MAX_MESSAGES_PER_10S) {
+        socket.data.spamStrikes = (socket.data.spamStrikes || 0) + 1;
+        if (socket.data.spamStrikes >= 2) socket.data.mutedUntil = now + SPAM_MUTE_MS;
+        return safeAck(ack, { ok: false, error: 'spam' });
+      }
+      if (now - (socket.data.lastChatAt || 0) < MIN_MESSAGE_INTERVAL_MS) {
+        return safeAck(ack, { ok: false, error: 'spam' });
+      }
+
+      // Content spam scoring
+      if (text) {
+        const scored = spamScore(text, (socket.data.textHistory || []).slice(-5));
+        if (!scored.ok) {
+          socket.data.spamStrikes = (socket.data.spamStrikes || 0) + 1;
+          if (socket.data.spamStrikes >= 2) socket.data.mutedUntil = now + SPAM_MUTE_MS;
+          return safeAck(ack, { ok: false, error: 'spam' });
+        }
+      }
+
+      socket.data.lastChatAt = now;
+      socket.data.chatHistory = [...recent, now];
+      if (text) {
+        socket.data.textHistory = [...(socket.data.textHistory || []).slice(-9), { text: text.toLowerCase().replace(/\s+/g, ' '), at: now }];
       }
 
       const message = {
@@ -214,7 +437,7 @@ export function attachRealtime(io, { rooms, maxParticipants = MAX_PARTICIPANTS }
           return safeAck(ack, { ok: false, error: 'rate-limited' });
         }
         const messageId = String(payload?.messageId ?? '');
-        const text = cleanMessageText(payload?.text);
+        const text = cleanMessageText(stripInvisible(payload?.text));
         if (!messageId || !text) return safeAck(ack, { ok: false, error: 'empty-message' });
         if (text.length > MAX_MESSAGE_LENGTH) {
           return safeAck(ack, { ok: false, error: 'message-too-long' });

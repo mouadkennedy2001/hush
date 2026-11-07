@@ -199,6 +199,9 @@
           <svg class="icon" aria-hidden="true"><use href="#i-copy"></use></svg>
           <span class="bar-action-label">Invite</span>
         </button>
+        <button class="btn btn-quiet btn-sm" type="button" data-open-log title="Log" aria-label="Log">
+          <span>Log</span><span class="log-dot" data-log-badge hidden aria-hidden="true"></span>
+        </button>
         <button class="btn btn-ink btn-sm" id="leave-btn-top" type="button">
           <svg class="icon" aria-hidden="true"><use href="#i-phone-off"></use></svg>
           <span class="bar-action-label">Leave</span>
@@ -373,6 +376,7 @@
             <canvas class="ping-chart" data-ping-chart width="300" height="56" aria-hidden="true"></canvas>
             <div class="ping-card-stats">
               <span>Average <strong data-ping-avg>--</strong></span>
+              <span>Median <strong data-ping-median>--</strong></span>
               <span>Jitter <strong data-ping-jitter>--</strong></span>
             </div>
           </div>
@@ -429,6 +433,11 @@
                 <svg class="icon" aria-hidden="true"><use href="#i-bell"></use></svg>
                 <span id="sound-label">Sounds on</span>
               </button>
+              <div class="display-row sound-volume-row">
+                <span>Sound volume</span>
+                <input type="range" min="0" max="100" value="70" id="sound-volume" aria-label="Sound volume" />
+                <button class="btn btn-quiet btn-sm" id="sound-test" type="button">Test</button>
+              </div>
               <button class="tool-button" id="shortcuts-btn" type="button">
                 <svg class="icon" aria-hidden="true"><use href="#i-keyboard"></use></svg>
                 <span>Shortcuts</span>
@@ -658,6 +667,7 @@
 
   <div class="toast-region" id="toasts" aria-live="polite"></div>
   <div class="remote-audio" id="remote-audio" aria-hidden="true"></div>
+  <div class="ctx-menu" id="ctx-menu" hidden role="menu" aria-label="Admin actions"></div>
 
   <noscript>
     <div style="position:fixed;inset:auto 16px 16px 16px;z-index:200;padding:14px 18px;border-radius:12px;background:#fff;color:#1b1b1b;box-shadow:0 8px 30px rgba(0,0,0,.25)">

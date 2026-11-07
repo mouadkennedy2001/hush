@@ -123,6 +123,8 @@ export class RoomManager {
         participants: new Map(),
         messages: [],
         pinnedMessageId: null,
+        hostId: null,
+        banned: [],
         loaded: false,
         saveChain: Promise.resolve()
       };
@@ -209,6 +211,37 @@ export class RoomManager {
     return true;
   }
 
+  async deleteMessageAsAdmin(room, messageId) {
+    const index = room.messages.findIndex((item) => item.id === messageId);
+    if (index === -1) return false;
+    room.messages.splice(index, 1);
+    if (room.pinnedMessageId === messageId) room.pinnedMessageId = null;
+    room.lastActivity = this.now();
+    await this.#queueSave(room);
+    return true;
+  }
+
+  async addBan(room, ban) {
+    room.banned = [...(room.banned || []), ban].slice(-200);
+    room.lastActivity = this.now();
+    await this.#queueSave(room);
+    return ban;
+  }
+
+  async removeBan(room, { deviceHash, ipHash } = {}) {
+    const before = (room.banned || []).length;
+    room.banned = (room.banned || []).filter(
+      (b) => !((deviceHash && b.deviceHash === deviceHash) || (ipHash && b.ipHash === ipHash))
+    );
+    if (room.banned.length !== before) await this.#queueSave(room);
+    return before - room.banned.length;
+  }
+
+  async setHost(room, hostId) {
+    room.hostId = hostId;
+    await this.#queueSave(room);
+  }
+
   async toggleReaction(room, messageId, emoji, participantId) {
     const message = room.messages.find((item) => item.id === messageId);
     if (!message) return null;
@@ -255,6 +288,10 @@ export class RoomManager {
       const data = JSON.parse(raw);
       if (Number.isFinite(data.createdAt)) room.createdAt = data.createdAt;
       if (typeof data.pinnedMessageId === 'string') room.pinnedMessageId = data.pinnedMessageId;
+      if (typeof data.hostId === 'string') room.hostId = data.hostId;
+      if (Array.isArray(data.banned)) {
+        room.banned = data.banned.filter((b) => b && (b.deviceHash || b.ipHash)).slice(0, 200);
+      }
       if (Array.isArray(data.messages)) {
         room.messages = data.messages
           .map(normalizeStoredMessage)
@@ -281,6 +318,8 @@ export class RoomManager {
       createdAt: room.createdAt,
       updatedAt: this.now(),
       pinnedMessageId: room.pinnedMessageId ?? null,
+      hostId: room.hostId ?? null,
+      banned: room.banned ?? [],
       messages: room.messages
     });
     const file = this.#file(room.code);

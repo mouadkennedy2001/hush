@@ -342,5 +342,44 @@ export const ui = {
   'landing.codeFormat': [
     'Room codes are 4–12 letters or numbers.',
     'رموز الغرفة من 4 إلى 12 حرفًا أو رقمًا.'
-  ]
+  ],
+
+  'admin.host': ['Host', 'المضيف'],
+  'admin.youHost': ['You are the host — right-click people for admin actions.', 'أنت المضيف — انقر بزر الفأرة الأيمن على الأشخاص لإجراءات الإدارة.'],
+  'admin.kick': ['Kick', 'طرد'],
+  'admin.ban': ['Ban', 'حظر'],
+  'admin.disconnect': ['Disconnect', 'قطع الاتصال'],
+  'admin.transfer': ['Make host', 'جعله المضيف'],
+  'admin.deleteAny': ['Delete for everyone', 'حذف للجميع'],
+  'admin.unban': ['Unban', 'إلغاء الحظر'],
+  'admin.kicked': ['{name} was kicked by {by}.', 'تم طرد {name} بواسطة {by}.'],
+  'admin.banned': ['{name} was banned by {by}.', 'تم حظر {name} بواسطة {by}.'],
+  'admin.disconnected': ['{name} was disconnected by {by}.', 'تم قطع اتصال {name} بواسطة {by}.'],
+  'admin.removedKicked': ['You were kicked from this room.', 'تم طردك من هذه الغرفة.'],
+  'admin.removedBanned': ['You were banned from this room.', 'تم حظرك من هذه الغرفة.'],
+  'admin.removedDisconnected': ['You were disconnected by the host.', 'تم قطع اتصالك بواسطة المضيف.'],
+  'admin.notAdmin': ['Only the host can do that.', 'المضيف وحده يمكنه فعل ذلك.'],
+  'admin.banConfirm': ['Ban {name} for {minutes} minutes?', 'حظر {name} لمدة {minutes} دقيقة؟'],
+  'admin.kickConfirm': ['Kick {name} out of the room?', 'طرد {name} من الغرفة؟'],
+  'admin.isHost': ['Host', 'مضيف'],
+  'admin.menuFor': ['Actions for {name}', 'إجراءات لـ {name}'],
+
+  'error.banned': ['You are banned from this room. Try again later.', 'أنت محظور من هذه الغرفة. حاول لاحقًا.'],
+  'error.spam': ['You are sending too fast. Slow down a moment.', 'أنت ترسل بسرعة كبيرة. خفّف قليلًا.'],
+  'error.muted': ['You are muted for spamming. Wait a moment.', 'أنت مكتوم بسبب السبام. انتظر لحظة.'],
+  'error.duplicateDevice': ['This device is already in the room — the old session was closed.', 'هذا الجهاز موجود مسبقًا في الغرفة — تم إغلاق الجلسة القديمة.'],
+  'error.tooManyFromDevice': ['Too many accounts from this device/connection.', 'عدد كبير من الحسابات من هذا الجهاز/الاتصال.'],
+  'error.notAdmin': ['Only the host can do that.', 'المضيف وحده يمكنه فعل ذلك.'],
+  'error.userNotFound': ['That person is no longer in the room.', 'ذلك الشخص لم يعد في الغرفة.'],
+  'error.cannotTargetSelf': ['You cannot target yourself.', 'لا يمكنك استهداف نفسك.'],
+
+  'log.title': ['Log — updates & fixes', 'السجل — التحديثات والإصلاحات'],
+  'log.lead': ['The most important updates and fixes, newest first.', 'أهم التحديثات والإصلاحات، الأحدث أولًا.'],
+  'log.open': ['Log', 'السجل'],
+  'log.close': ['Close', 'إغلاق'],
+  'log.loading': ['Loading…', 'جارٍ التحميل…'],
+  'log.empty': ['No updates yet.', 'لا توجد تحديثات بعد.'],
+
+  'sound.volume': ['Sound volume', 'مستوى الصوت'],
+  'sound.test': ['Test', 'تجربة']
 };

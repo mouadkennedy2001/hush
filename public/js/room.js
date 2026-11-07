@@ -4,6 +4,8 @@ import { initI18n, onLanguageChange, t, locale } from './i18n.js';
 import { initTheme, toggleTheme } from './theme.js';
 import { startPing, refreshPing } from './ping.js';
 import { initSettings, getSettings } from './settings.js';
+import { playSound, getSoundsEnabled, setSoundsEnabled, getSoundVolume, setSoundVolume } from './sounds.js';
+import { initChangelog } from './changelog.js';
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -21,6 +23,20 @@ const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 const CODE_RE = /^[A-Z0-9]{4,12}$/;
 const NAME_KEY = 'hush:name';
 const SOUND_KEY = 'hush:sounds';
+const DEVICE_KEY = 'hush:device';
+
+function getOrCreateDeviceId() {
+  try {
+    let id = localStorage.getItem(DEVICE_KEY);
+    if (!id || !/^[a-zA-Z0-9-]{8,64}$/.test(id)) {
+      id = (window.crypto?.randomUUID?.() || `dev-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+      localStorage.setItem(DEVICE_KEY, id);
+    }
+    return id;
+  } catch {
+    return `dev-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }
+}
 
 const els = {
   gate: $('#join-gate'),
@@ -122,7 +138,10 @@ const els = {
   focusToggle: $('#focus-toggle'),
   focusModeBtn: $('#focus-mode-btn'),
   notificationsToggle: $('#notifications-toggle'),
-  shell: $('#room-shell')
+  shell: $('#room-shell'),
+  ctxMenu: $('#ctx-menu'),
+  soundVolume: $('#sound-volume'),
+  soundTest: $('#sound-test')
 };
 
 const state = {
@@ -160,12 +179,16 @@ const state = {
   joinedAt: null,
   sessionTimerId: null,
   focusMode: false,
-  pinnedMessageId: null
+  pinnedMessageId: null,
+  hostId: null,
+  isHost: false,
+  deviceId: getOrCreateDeviceId()
 };
 
 initI18n();
 initTheme();
 initSettings();
+initChangelog();
 startPing({ socketGetter: () => state.socket });
 onLanguageChange(handleLanguageChange);
 try {
@@ -180,7 +203,8 @@ try {
 /* ---------------- Boot & join ---------------- */
 
 function init() {
-  state.soundsOn = loadSoundsOn();
+  state.soundsOn = getSoundsEnabled();
+  if (els.soundVolume) els.soundVolume.value = String(Math.round(getSoundVolume() * 100));
   const formatted = formatCode(state.code);
   els.gateCode.textContent = formatted || '—';
   els.roomCode.textContent = formatted || '—';
@@ -339,6 +363,20 @@ function bindEvents() {
   els.focusSearch?.addEventListener('click', focusSearch);
   els.saveChat?.addEventListener('click', saveTranscript);
   els.soundToggle?.addEventListener('click', toggleSounds);
+  els.soundVolume?.addEventListener('input', () => setSoundVolume(Number(els.soundVolume.value) / 100));
+  els.soundTest?.addEventListener('click', () => playSound('success', { force: true }));
+  // Right-click admin menu (people + tiles)
+  document.addEventListener('contextmenu', (event) => {
+    const node = event.target?.closest?.('.person, .tile');
+    if (!node?.dataset?.participant) return;
+    if (!state.isHost) return;
+    if (node.dataset.participant === state.selfId) return;
+    event.preventDefault();
+    openAdminMenu(node.dataset.participant, event.clientX, event.clientY);
+  });
+  document.addEventListener('click', (event) => {
+    if (els.ctxMenu && !els.ctxMenu.hidden && !els.ctxMenu.contains(event.target)) closeAdminMenu();
+  });
   els.micSettingsBtn?.addEventListener('click', openMicSettings);
   els.micClose?.addEventListener('click', closeMicSettings);
   els.micDone?.addEventListener('click', closeMicSettings);
@@ -473,7 +511,7 @@ async function joinRoom(event) {
   try {
     const socket = ensureSocket();
     await waitForConnection(socket);
-    const response = await emitAck('room:join', { code: state.code, name });
+    const response = await emitAck('room:join', { code: state.code, name, deviceId: state.deviceId });
     if (!response?.ok) {
       showJoinError(joinErrorKey(response?.error));
       setStatus('offline', 'status.notConnected');
@@ -509,9 +547,11 @@ function ensureSocket() {
 
   const socket = window.io({
     reconnection: true,
-    reconnectionDelay: 700,
-    reconnectionDelayMax: 5000,
-    timeout: 10000
+    reconnectionDelay: 500,
+    reconnectionDelayMax: 4000,
+    timeout: 8000,
+    transports: ['websocket', 'polling'],
+    upgrade: true
   });
   state.socket = socket;
 
@@ -581,6 +621,10 @@ function waitForConnection(socket) {
 function applyJoinState(response) {
   state.selfId = response.self.id;
   state.selfName = response.self.name;
+  state.hostId = response.hostId || response.self.id;
+  state.isHost = Boolean(response.isHost || response.self?.isHost || state.hostId === state.selfId);
+  playSound(state.isHost ? 'success' : 'join');
+  if (state.isHost) setTimeout(() => toast(t('admin.youHost'), 'info', 4200), 600);
   state.participants = new Map(
     response.room.participants.map((participant) => [participant.id, participant])
   );
@@ -679,7 +723,8 @@ async function rejoin() {
     state.mesh?.closeAll();
     const response = await emitAck('room:join', {
       code: state.code,
-      name: state.selfName
+      name: state.selfName,
+      deviceId: state.deviceId
     });
     if (!response?.ok) throw new Error(joinErrorKey(response?.error));
 
@@ -748,6 +793,22 @@ function joinErrorKey(code) {
       return 'error.messageNotFound';
     case 'reaction-failed':
       return 'error.reactionFailed';
+    case 'banned':
+      return 'error.banned';
+    case 'spam':
+      return 'error.spam';
+    case 'muted':
+      return 'error.muted';
+    case 'duplicate-device':
+      return 'error.duplicateDevice';
+    case 'too-many-from-device':
+      return 'error.tooManyFromDevice';
+    case 'not-admin':
+      return 'error.notAdmin';
+    case 'user-not-found':
+      return 'error.userNotFound';
+    case 'cannot-target-self':
+      return 'error.cannotTargetSelf';
     default:
       return 'error.generic';
   }
@@ -766,6 +827,7 @@ function bindRoomEvents(socket) {
   socket.on('peer:joined', ({ participant } = {}) => {
     if (!participant?.id) return;
     state.participants.set(participant.id, participant);
+    if (state.soundsOn) playSound('join');
     renderTiles();
     renderPeople();
     updateStageHeader();
@@ -774,6 +836,7 @@ function bindRoomEvents(socket) {
   socket.on('peer:left', ({ id } = {}) => {
     if (!id) return;
     state.participants.delete(id);
+    if (state.soundsOn) playSound('leave');
     state.speaking.delete(id);
     state.mesh?.closePeer(id);
     removeTyping(id);
@@ -849,6 +912,30 @@ function bindRoomEvents(socket) {
 
   socket.on('reaction:receive', ({ name, emoji } = {}) => {
     if (emoji) floatReaction(name || t('screen.someone'), emoji);
+  });
+
+  socket.on('admin:host', ({ hostId, hostName } = {}) => {
+    if (!hostId) return;
+    state.hostId = hostId;
+    state.isHost = hostId === state.selfId;
+    renderPeople();
+    renderTiles();
+    if (state.isHost) toast(t('admin.youHost'), 'info', 3600);
+  });
+
+  socket.on('admin:action', ({ type, targetName, by } = {}) => {
+    if (type === 'kick') { toast(t('admin.kicked', { name: targetName || '', by: by || '' }), 'error', 3600); playSound('kick'); }
+    if (type === 'ban') { toast(t('admin.banned', { name: targetName || '', by: by || '' }), 'error', 4000); playSound('ban'); }
+    if (type === 'disconnect') { toast(t('admin.disconnected', { name: targetName || '', by: by || '' }), 'error', 3600); playSound('kick'); }
+  });
+
+  socket.on('admin:removed', ({ reason } = {}) => {
+    playSound(reason === 'banned' ? 'ban' : 'kick');
+    const msg = reason === 'banned' ? t('admin.removedBanned') : reason === 'disconnected' ? t('admin.removedDisconnected') : t('admin.removedKicked');
+    toast(msg, 'error', 6000);
+    state.mesh?.dispose();
+    try { state.socket?.disconnect(); } catch {}
+    setTimeout(() => { window.location.href = '/'; }, 1200);
   });
 }
 
@@ -1072,6 +1159,12 @@ function renderPeople() {
       you.className = 'person-you';
       you.textContent = t('chat.you');
       nameRow.append(you);
+    }
+    if (state.hostId === participant.id) {
+      const host = document.createElement('span');
+      host.className = 'host-badge';
+      host.textContent = t('admin.isHost');
+      nameRow.append(host);
     }
 
     const statusText = document.createElement('span');
@@ -1730,7 +1823,10 @@ function notifyNewMessage(message) {
   maybeNotifyMention(message);
 
   const away = document.hidden || state.activeTab !== 'chat' || !isNearBottom();
-  if (state.soundsOn && away) playChime();
+  if (state.soundsOn && away) {
+    const isMention = String(message?.text || '').toLowerCase().includes(`@${String(state.selfName || '').toLowerCase()}`);
+    playSound(isMention ? 'mention' : 'message');
+  }
 
   if (document.hidden || state.activeTab !== 'chat') {
     setUnread(state.unread + 1);
@@ -2123,20 +2219,12 @@ function hideComposerHint() {
 /* ---------------- Room tools ---------------- */
 
 function loadSoundsOn() {
-  try {
-    return localStorage.getItem(SOUND_KEY) !== 'off';
-  } catch {
-    return true;
-  }
+  return getSoundsEnabled();
 }
 
 function toggleSounds() {
   state.soundsOn = !state.soundsOn;
-  try {
-    localStorage.setItem(SOUND_KEY, state.soundsOn ? 'on' : 'off');
-  } catch {
-    // The toggle still works for this session.
-  }
+  setSoundsEnabled(state.soundsOn);
   updateSoundUi();
   if (state.soundsOn) playChime();
   toast(t(state.soundsOn ? 'tools.soundsEnabled' : 'tools.soundsDisabled'), 'info', 2400);
@@ -2160,27 +2248,7 @@ function updateDropLabel() {
 
 function playChime() {
   if (!state.soundsOn) return;
-  try {
-    const Ctx = window.AudioContext || window.webkitAudioContext;
-    if (!Ctx) return;
-    state.audioCtx ??= new Ctx();
-    const ctx = state.audioCtx;
-    ctx.resume?.().catch(() => {});
-    const now = ctx.currentTime;
-    const oscillator = ctx.createOscillator();
-    const gain = ctx.createGain();
-    oscillator.type = 'sine';
-    oscillator.frequency.setValueAtTime(660, now);
-    oscillator.frequency.exponentialRampToValueAtTime(880, now + 0.12);
-    gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(0.05, now + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.24);
-    oscillator.connect(gain).connect(ctx.destination);
-    oscillator.start(now);
-    oscillator.stop(now + 0.26);
-  } catch {
-    // Audio is a nicety; never let it break the room.
-  }
+  playSound('message');
 }
 
 function saveTranscript() {
@@ -2654,6 +2722,48 @@ function dayLabel(timestamp) {
   if (date.toDateString() === yesterday.toDateString()) return t('date.yesterday');
 
   return intlDateTime(date, { weekday: 'long', month: 'short', day: 'numeric' }) || date.toDateString();
+}
+
+/* ---------------- Admin context menu (right-click) ---------------- */
+
+function openAdminMenu(targetId, x, y) {
+  if (!els.ctxMenu) return;
+  const target = state.participants.get(targetId);
+  if (!target) return;
+  els.ctxMenu.replaceChildren();
+  const title = el('div', 'ctx-title', t('admin.menuFor', { name: target.name }));
+  els.ctxMenu.append(title);
+  const mk = (label, danger, handler) => {
+    const btn = el('button', `ctx-item${danger ? ' is-danger' : ''}`, label);
+    btn.type = 'button';
+    btn.setAttribute('role', 'menuitem');
+    btn.addEventListener('click', () => { closeAdminMenu(); handler(); });
+    els.ctxMenu.append(btn);
+  };
+  mk(t('admin.kick'), true, () => adminAction('admin:kick', targetId, t('admin.kickConfirm', { name: target.name })));
+  mk(t('admin.disconnect'), true, () => adminAction('admin:disconnect', targetId, t('admin.kickConfirm', { name: target.name })));
+  mk(t('admin.ban'), true, () => adminAction('admin:ban', targetId, t('admin.banConfirm', { name: target.name, minutes: 60 })));
+  mk(t('admin.transfer'), false, () => adminAction('admin:transfer', targetId, null));
+  els.ctxMenu.hidden = false;
+  const w = 220, h = els.ctxMenu.offsetHeight || 160;
+  els.ctxMenu.style.left = `${Math.min(x, window.innerWidth - w - 8)}px`;
+  els.ctxMenu.style.top = `${Math.min(y, window.innerHeight - h - 8)}px`;
+  playSound('click');
+}
+
+function closeAdminMenu() {
+  if (els.ctxMenu) els.ctxMenu.hidden = true;
+}
+
+async function adminAction(event, targetId, confirmText) {
+  if (confirmText && !window.confirm(confirmText)) return;
+  try {
+    const response = await emitAck(event, { targetId, minutes: 60 });
+    if (!response?.ok) throw new Error(joinErrorKey(response?.error));
+    playSound('success');
+  } catch (error) {
+    toast(errorText(error, 'error.generic'), 'error', 3600);
+  }
 }
 
 /* ---------------- Global listeners ---------------- */

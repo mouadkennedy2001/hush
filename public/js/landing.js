@@ -1,6 +1,7 @@
 import { initI18n, onLanguageChange, t } from './i18n.js';
 import { initTheme } from './theme.js';
 import { startPing } from './ping.js';
+import { initChangelog } from './changelog.js';
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -16,6 +17,7 @@ const description = $('meta[name="description"]');
 initI18n();
 initTheme();
 startPing();
+initChangelog();
 applyPageMeta();
 onLanguageChange(applyPageMeta);
 

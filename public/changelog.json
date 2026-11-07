@@ -1,0 +1,45 @@
+{
+  "version": "2.0.0",
+  "entries": [
+    {
+      "date": "2026-11-07",
+      "ts": 1762819200000,
+      "kind": "update",
+      "kindLabel": "Update",
+      "title": "Admin, ban & kick + anti-spam + better ping (v2)",
+      "points": [
+        "NEW: Room host/admin — first person in a room is the admin. Right-click any person (or tile) for Kick, Ban, Disconnect, Transfer host.",
+        "NEW: Ban system blocks the device + IP for the room (default 60 min). Kicked/banned users see a reason and cannot rejoin while banned.",
+        "NEW: Anti multi-account — one device = one account per room. A second tab from the same device replaces the old one instead of flooding the room.",
+        "Anti-spam: duplicate messages, link/emoji floods, burst sending and slow-mode mute after repeated spam.",
+        "Ping: median + smoothing algorithm, adaptive refresh (fast when network is poor), monotonic clock — numbers are steadier and truer.",
+        "Sounds: 10 new sounds (message, mention, join, leave, error, kick, ban, success, click, blip) in public/sounds/ with volume control.",
+        "Protection: per-IP connection caps, stricter upload checks (double-extension blocked), same-origin guard, stronger security headers.",
+        "FIX: faster dead-peer detection (8s ping / 12s timeout) and WebSocket-first transport for lower latency."
+      ]
+    },
+    {
+      "date": "2026-11-06",
+      "ts": 1762732800000,
+      "kind": "fix",
+      "kindLabel": "Fix",
+      "title": "Stability + ping card",
+      "points": [
+        "Live ping counter with average, jitter and sparkline chart in the Connection card.",
+        "Join gate no longer hangs; draft messages are kept per room.",
+        "Edit/delete your messages, pin messages, search chat."
+      ]
+    },
+    {
+      "date": "2026-11-05",
+      "ts": 1762646400000,
+      "kind": "update",
+      "kindLabel": "Update",
+      "title": "Voice FX + themes",
+      "points": [
+        "Mic presets (Voice / Podcast / Gaming / Quiet), noise gate, amplification and device picker.",
+        "Light / dark / auto themes, text size, density and focus mode."
+      ]
+    }
+  ]
+}

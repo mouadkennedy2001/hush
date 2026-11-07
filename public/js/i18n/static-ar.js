@@ -309,5 +309,20 @@ export const staticAr = {
   'Processing quality': 'جودة المعالجة',
   Microphone: 'الميكروفون',
   Reset: 'إعادة تعيين',
-  Close: 'إغلاق'
+  Close: 'إغلاق',
+
+  // Log / admin (static)
+  Log: 'السجل',
+  'Changelog': 'سجل التغييرات',
+  Host: 'المضيف',
+  'Admin actions': 'إجراءات الإدارة',
+  Kick: 'طرد',
+  Ban: 'حظر',
+  Disconnect: 'قطع الاتصال',
+  'Make host': 'جعله المضيف',
+  'Delete for everyone': 'حذف للجميع',
+  Unban: 'إلغاء الحظر',
+  'Right-click a person for admin actions': 'انقر بزر الفأرة الأيمن على شخص لإجراءات الإدارة',
+  'Sound volume': 'مستوى الصوت',
+  Test: 'تجربة'
 };

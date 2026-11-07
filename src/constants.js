@@ -4,6 +4,16 @@ export const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 export const MAX_ROOM_MESSAGES = 200;
 export const MAX_PARTICIPANTS = 12;
 
+// Anti-spam / anti-abuse
+export const MAX_MESSAGES_PER_10S = 8;
+export const MIN_MESSAGE_INTERVAL_MS = 700;
+export const SPAM_MUTE_MS = 30_000;
+export const MAX_SOCKETS_PER_IP = 20;
+export const MAX_PARTICIPANTS_PER_IP_PER_ROOM = 12;
+export const MAX_JOINS_PER_IP_PER_MIN = 60;
+export const MAX_DEVICE_ID_LENGTH = 64;
+export const BAN_DEFAULT_MINUTES = 60;
+
 // Keep the reaction set small so the UI stays quiet and the server can
 // validate anything a client sends without a huge allow-list.
 export const REACTION_EMOJIS = ['👍', '❤️', '😂', '🎉', '👀', '🙌', '🔥', '✅'];

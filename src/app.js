@@ -73,8 +73,11 @@ export async function createHushServer({
   const app = express();
   const server = http.createServer(app);
   const io = new SocketServer(server, {
-    maxHttpBufferSize: 1_000_000,
-    pingTimeout: 25_000,
+    maxHttpBufferSize: 256_000,
+    // Faster dead-peer detection = lower perceived ping + quicker reconnect.
+    pingInterval: 8000,
+    pingTimeout: 12000,
+    transports: ['websocket', 'polling'],
     cors: { origin: false }
   });
 
@@ -87,9 +90,12 @@ export async function createHushServer({
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
     res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+    res.setHeader('Origin-Agent-Cluster', '?1');
+    res.setHeader('X-DNS-Prefetch-Control', 'off');
     res.setHeader(
       'Permissions-Policy',
-      'camera=(self), microphone=(self), display-capture=(self), geolocation=()'
+      'camera=(self), microphone=(self), display-capture=(self), geolocation=(), payment=(), usb=()'
     );
     res.setHeader(
       'Content-Security-Policy',
@@ -101,6 +107,7 @@ export async function createHushServer({
         "img-src 'self' data: blob:",
         "media-src 'self' blob:",
         "connect-src 'self' ws: wss:",
+        "object-src 'none'",
         "frame-ancestors 'none'",
         "base-uri 'self'",
         "form-action 'self'"
@@ -109,11 +116,47 @@ export async function createHushServer({
     next();
   });
 
+  // Global IP rate limit (light) to blunt HTTP floods.
+  app.use(rateLimiter({ windowMs: 60_000, max: 300 }));
+
   app.use(express.json({ limit: '64kb' }));
+
+  // Same-origin guard for API writes (Origin header when present must match Host).
+  app.use((req, res, next) => {
+    if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return next();
+    const origin = req.headers.origin;
+    if (origin) {
+      try {
+        const url = new URL(origin);
+        if (url.host !== req.headers.host) return res.status(403).json({ error: 'forbidden-origin' });
+      } catch {
+        return res.status(403).json({ error: 'forbidden-origin' });
+      }
+    }
+    next();
+  });
 
   app.get('/api/ping', (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Pragma', 'no-cache');
     res.json({ ok: true, time: Date.now() });
+  });
+
+  app.get('/api/changelog', async (req, res, next) => {
+    try {
+      res.setHeader('Cache-Control', 'public, max-age=300');
+      const raw = await fs.readFile(path.join(publicDir, 'changelog.json'), 'utf8');
+      res.type('application/json').send(raw);
+    } catch {
+      res.json({ version: '1.0.0', entries: [] });
+    }
+  });
+
+  app.get('/api/sounds', (req, res) => {
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.json({
+      sounds: ['message', 'mention', 'join', 'leave', 'error', 'kick', 'ban', 'success', 'click', 'blip']
+    });
   });
 
   app.get('/api/health', async (req, res, next) => {
@@ -174,6 +217,14 @@ export async function createHushServer({
     limits: { fileSize: MAX_UPLOAD_BYTES, files: 1 },
     fileFilter(req, file, callback) {
       const extension = path.extname(file.originalname).toLowerCase();
+      // Block double extensions like photo.jpg.exe and script-y names.
+      const lowerName = String(file.originalname || '').toLowerCase();
+      const dangerous = /\.(exe|sh|bat|js|html?|svg|php|jsp|py)$/.test(lowerName);
+      if (dangerous || lowerName.includes('.exe') || lowerName.includes('.sh')) {
+        const error = new Error('unsupported-file-type');
+        error.status = 415;
+        return callback(error);
+      }
       if (!UPLOAD_EXTENSIONS.has(extension) || !UPLOAD_MIME_TYPES.has(file.mimetype)) {
         const error = new Error('unsupported-file-type');
         error.status = 415;

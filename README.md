@@ -13,6 +13,13 @@ Built by **Zerouki Ahmed Mouad** (زروقي احمد معاذ).
 
 ## Features
 
+- **Log (سجل)** — a **Log** button on the landing page and in the room opens a changelog dialog (`/api/changelog` ← `public/changelog.json`) with the most important updates and fixes, newest first, plus a "new" dot until you open it.
+- **Admin / host, kick, ban, disconnect** — the first person in a room is the host (Admin). Right-click (mouse right button) any person in the People list or any video tile to open an admin menu: **Kick**, **Disconnect**, **Ban** (device + IP, default 60 min, persisted per room), **Make host**. Host transfer is automatic when the host leaves. Kicked/banned users see why and are disconnected immediately.
+- **Anti multi-account (same device)** — each browser has a device id (`hush:device`). One device = one account per room: opening a second tab from the same device replaces the old session instead of flooding the room with clones. Bans match on hashed device + IP.
+- **Anti-spam algorithms** — duplicate message detection (same text within 15s), burst limit (8 msgs / 10s), min interval (700ms), link flood (>3 links), emoji flood (>10), repeated-char flood, caps shouting — repeated spam gets a strike and a 30s mute penalty box. Bidi/zero-width tricks are stripped.
+- **Better ping (v2)** — monotonic clock (`performance.now`), median filter, EWMA smoothing (α=0.3), outlier rejection (>3× median), adaptive polling (5s when good → 1.5s when offline), plus median display in the Connection card. Server: Socket.IO `pingInterval 8s / pingTimeout 12s`, WebSocket-first, smaller buffer.
+- **Sounds (10)** — `public/sounds/` ships `message, mention, join, leave, error, kick, ban, success, click, blip` (WAV). Played via `public/js/sounds.js` with WebAudio fallback, volume slider + test button, saved in `hush:sounds` / `hush:sound-volume`. Joins/leaves/kicks/bans/mentions all have sounds.
+- **Stronger protection** — per-IP socket cap (20) and join cap (60/min), global HTTP rate limit, same-origin guard for API writes, double-extension upload block (`photo.jpg.exe`), CSP `object-src 'none'`, `Cross-Origin-Opener-Policy`, stricter `Permissions-Policy`.
 - **Arabic and English** — full RTL/LTR support, Arabic typography, a language toggle on every page, and a saved language preference (`?lang=ar` / `?lang=en` also work).
 - **Light, dark, and automatic themes** — the theme toggles between light → dark → auto (follows the OS and reacts to OS changes live), saved per browser (`hush:theme`). `?theme=dark` / `?theme=light` / `?theme=auto` also work. Press `T` in a room.
 - **Pinned messages** — pin any message to the top of chat (pin icon on hover), jump to it from the pinned bar, unpin it, and it persists across reloads and syncs to everyone.
