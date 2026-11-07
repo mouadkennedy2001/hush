@@ -21,7 +21,11 @@ export const SOUNDBOARD_SOUNDS = [
   { id: 'cat', emojiId: 'cat' },
   { id: 'wow', emojiId: 'wow' },
   { id: 'crickets', emojiId: 'crickets' },
-  { id: 'tada', emojiId: 'tada' }
+  { id: 'tada', emojiId: 'tada' },
+  { id: 'laser', emojiId: 'laser' },
+  { id: 'siren', emojiId: 'siren' },
+  { id: 'drumroll', emojiId: 'drumroll' },
+  { id: 'yay', emojiId: 'yay' }
 ];
 
 const VOLUME_KEY = 'hush:soundboard-volume';
@@ -151,6 +155,32 @@ const SYNTH = {
     notes.forEach((f, i) => tone({ freq: f, dur: 0.24, type: 'triangle', vol: 0.26, when: i * 0.09 }));
     tone({ freq: 1318, dur: 0.5, type: 'triangle', vol: 0.22, when: 0.36 });
     noise({ dur: 0.25, vol: 0.08, freq: 4000, type: 'highpass', when: 0.36 });
+  },
+  laser() {
+    tone({ freq: 1400, end: 180, dur: 0.16, type: 'square', vol: 0.22 });
+    tone({ freq: 1400, end: 180, dur: 0.16, type: 'square', vol: 0.22, when: 0.2 });
+    tone({ freq: 1800, end: 240, dur: 0.3, type: 'sawtooth', vol: 0.16, when: 0.42 });
+  },
+  siren() {
+    for (let i = 0; i < 4; i += 1) {
+      tone({ freq: 700, end: 1100, dur: 0.16, type: 'triangle', vol: 0.28, when: i * 0.32 });
+      tone({ freq: 1100, end: 700, dur: 0.16, type: 'triangle', vol: 0.28, when: i * 0.32 + 0.16 });
+    }
+  },
+  drumroll() {
+    for (let i = 0; i < 16; i += 1) {
+      noise({ dur: 0.04, when: i * 0.05, vol: 0.12 + i * 0.012, freq: 800 + Math.random() * 500, q: 1 });
+    }
+    tone({ freq: 220, end: 110, dur: 0.3, type: 'triangle', vol: 0.35, when: 0.82 });
+    noise({ dur: 0.3, vol: 0.2, freq: 1200, when: 0.82 });
+  },
+  yay() {
+    const notes = [523, 659, 784, 659, 784, 1046];
+    notes.forEach((f, i) => tone({ freq: f, dur: 0.16, type: 'triangle', vol: 0.26, when: i * 0.09 }));
+    tone({ freq: 1318, dur: 0.4, type: 'triangle', vol: 0.24, when: 0.56 });
+    for (let i = 0; i < 6; i += 1) {
+      noise({ dur: 0.05, when: 0.56 + i * 0.06, vol: 0.08, freq: 3000 + Math.random() * 2000, type: 'highpass' });
+    }
   }
 };
 

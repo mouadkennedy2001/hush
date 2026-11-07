@@ -31,6 +31,8 @@
 
       <nav class="nav-links" aria-label="Main navigation">
         <a href="#features">Features</a>
+        <a href="#rooms">Rooms</a>
+        <a href="#servers">Servers</a>
         <a href="#how">How it works</a>
         <a href="#faq">FAQ</a>
         <a href="#privacy">Privacy</a>
@@ -353,6 +355,44 @@
       </div>
     </section>
 
+    <section class="section band-paper" id="rooms">
+      <div class="container">
+        <div class="section-head">
+          <p class="eyebrow">Rooms — separate system</p>
+          <h2>Quick rooms, just for now.</h2>
+          <p class="section-lead">A standalone room with a short code and a link — for a quick call or chat. Rooms are their own system, separate from servers below.</p>
+        </div>
+        <div class="servers-bar" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px">
+          <button class="btn btn-primary" type="button" data-create-room>Open a room</button>
+          <button class="btn btn-quiet" type="button" data-open-join>Join with a code</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="section band-sky" id="servers">
+      <div class="container">
+        <div class="section-head">
+          <p class="eyebrow">Servers — separate system</p>
+          <h2>Permanent servers with channels.</h2>
+          <p class="section-lead">Create a server once — it stays forever with its text and voice channels, saved chat, members, and an invite link anyone can use to join. Servers are their own system, separate from quick rooms above.</p>
+        </div>
+        <div class="servers-bar" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px">
+          <button class="btn btn-primary" type="button" data-open-server id="open-server-btn">Create a server</button>
+        </div>
+        <form class="join-inline" id="invite-form">
+          <label class="field" style="margin:0;flex:1;min-width:220px">
+            <span>Join with an invite code</span>
+            <input id="invite-input" name="invite" maxlength="12" placeholder="ABC-123" autocomplete="off" spellcheck="false" />
+          </label>
+          <button class="btn btn-quiet" type="submit">Join server</button>
+        </form>
+        <p class="dialog-error" id="invite-error" role="alert" hidden></p>
+        <div class="server-grid" id="server-grid">
+          <p class="muted" id="server-empty">No servers yet. Create the first one.</p>
+        </div>
+      </div>
+    </section>
+
     <section class="section band-white" id="faq">
       <div class="container">
         <div class="section-head">
@@ -498,6 +538,29 @@
       <span>Designed with the Signal style reference.</span>
     </div>
   </footer>
+
+  <dialog class="join-dialog" id="server-dialog" aria-labelledby="server-dialog-title">
+    <form method="dialog" class="join-dialog-inner" id="server-form">
+      <div class="dialog-head">
+        <h2 id="server-dialog-title">Create a server</h2>
+        <button class="icon-button dialog-close" type="button" data-close-server aria-label="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <p class="muted">Your server is permanent and includes a text and a voice channel with saved chat.</p>
+      <label class="field">
+        <span>Server name</span>
+        <input id="server-name-input" name="server-name" maxlength="40" placeholder="My server" required />
+      </label>
+      <label class="field">
+        <span>Choose an icon</span>
+      </label>
+      <div class="server-icon-picker" id="server-icon-picker"></div>
+      <p class="dialog-error" id="server-dialog-error" role="alert" hidden></p>
+      <button class="btn btn-primary btn-block" type="submit">Create server</button>
+      <p class="dialog-foot">You'll land in the general channel right away.</p>
+    </form>
+  </dialog>
 
   <dialog class="join-dialog" id="join-dialog" aria-labelledby="join-dialog-title">
     <form method="dialog" class="join-dialog-inner" id="join-code-form">

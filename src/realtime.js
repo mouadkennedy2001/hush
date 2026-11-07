@@ -105,8 +105,10 @@ function clientIp(socket) {
   return forwarded || socket.handshake.address || 'unknown';
 }
 
-export function attachRealtime(io, { rooms, maxParticipants = MAX_PARTICIPANTS } = {}) {
+export function attachRealtime(io, { rooms, servers, maxParticipants = MAX_PARTICIPANTS } = {}) {
   if (!rooms) throw new Error('attachRealtime requires a RoomManager');
+  // servers is OPTIONAL: standalone rooms work without it. When provided,
+  // the server system is fully separate (its own chat + voice channels).
 
   // Per-server connection tracking for IP limits. Kept inside this closure
   // (not module globals) so multiple servers in one process — e.g. tests —
@@ -154,9 +156,26 @@ export function attachRealtime(io, { rooms, maxParticipants = MAX_PARTICIPANTS }
     trackIpSocket(ipHash, socket.id);
 
     let membership = null;
+    let serverMembership = null; // { server, participant, voiceChannelId }
+    const serverChannelFor = (id) => `server:${id}`;
+    const voiceChannelFor = (id, channelId) => `server:${id}:voice:${channelId}`;
 
     function isHost() {
       return membership && membership.room.hostId === socket.id;
+    }
+
+    function leaveServer() {
+      if (!serverMembership) return;
+      const { server, participant, voiceChannelId } = serverMembership;
+      serverMembership = null;
+      socket.data.serverId = null;
+      socket.data.serverVoiceChannelId = null;
+      if (voiceChannelId) {
+        socket.to(voiceChannelFor(server.id, voiceChannelId)).emit('server:peer:left', { id: participant.id, name: participant.name });
+        socket.leave(voiceChannelFor(server.id, voiceChannelId));
+      }
+      socket.to(serverChannelFor(server.id)).emit('server:peer:left', { id: participant.id, name: participant.name });
+      socket.leave(serverChannelFor(server.id));
     }
 
     function leave() {
@@ -303,7 +322,8 @@ export function attachRealtime(io, { rooms, maxParticipants = MAX_PARTICIPANTS }
     });
 
     socket.on('room:leave', () => leave());
-    socket.on('disconnect', () => { leave(); untrackIpSocket(ipHash, socket.id); });
+    socket.on('server:leave', () => leaveServer());
+    socket.on('disconnect', () => { leave(); leaveServer(); untrackIpSocket(ipHash, socket.id); });
 
     /* -------- Admin: kick / ban / unban / disconnect / transfer / deleteAny -------- */
     function requireHost(targetId, ack) {
@@ -653,15 +673,197 @@ export function attachRealtime(io, { rooms, maxParticipants = MAX_PARTICIPANTS }
       io.to(channelFor(membership.room.code)).emit('peer:updated', publicParticipant(participant));
     });
 
+    /* -------- Servers: independent from rooms (own chat + voice) -------- */
+    function cleanServerAttachment(raw, serverId, channelId) {
+      if (!raw || typeof raw !== 'object') return null;
+      const url = String(raw.url ?? '');
+      const prefix = `/uploads/server-${serverId}/${channelId}/`;
+      if (!url.startsWith(prefix) || url.includes('..') || url.includes('\\')) return null;
+      const name = String(raw.name ?? 'File').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 120) || 'File';
+      const size = Number(raw.size);
+      if (!Number.isFinite(size) || size < 0 || size > MAX_UPLOAD_BYTES) return null;
+      return { url, name, size, mime: String(raw.mime ?? 'application/octet-stream').slice(0, 100) };
+    }
+
+    socket.on('server:join', async (payload = {}, ack) => {
+      if (!servers) return safeAck(ack, { ok: false, error: 'server-unavailable' });
+      if (!allowRateFor(socket, 'serverJoinRate', 10)) return safeAck(ack, { ok: false, error: 'rate-limited' });
+      leaveServer();
+      const serverId = String(payload.serverId || '');
+      const server = servers.get(serverId);
+      if (!server) return safeAck(ack, { ok: false, error: 'server-not-found' });
+      const joined = await servers.join(serverId, {
+        deviceId: payload.deviceId, name: payload.name, inviteCode: payload.inviteCode
+      });
+      if (!joined) return safeAck(ack, { ok: false, error: 'invite-required' });
+      const participant = {
+        id: socket.id,
+        name: cleanName(stripInvisible(payload.name)),
+        micOn: false,
+        cameraOn: false,
+        joinedAt: Date.now()
+      };
+      serverMembership = { server, participant, voiceChannelId: null };
+      socket.data.serverId = serverId;
+      socket.join(serverChannelFor(serverId));
+      socket.to(serverChannelFor(serverId)).emit('server:peer:joined', { participant: { id: participant.id, name: participant.name } });
+      const firstText = server.channels.find((c) => c.type === 'text') || server.channels[0];
+      const messages = firstText ? await servers.loadMessages(serverId, firstText.id) : [];
+      safeAck(ack, {
+        ok: true,
+        self: { id: socket.id, name: participant.name },
+        server: servers.publicSummary(server),
+        membersOnline: [],
+        messages,
+        channelId: firstText?.id ?? null
+      });
+    });
+
+    socket.on('server:history', async (payload = {}, ack) => {
+      if (!servers || !serverMembership) return safeAck(ack, { ok: false, error: 'not-in-server' });
+      const channelId = String(payload.channelId || '');
+      const channel = serverMembership.server.channels.find((c) => c.id === channelId);
+      if (!channel) return safeAck(ack, { ok: false, error: 'channel-not-found' });
+      const messages = await servers.loadMessages(serverMembership.server.id, channelId);
+      safeAck(ack, { ok: true, messages });
+    });
+
+    socket.on('server:chat:send', async (payload = {}, ack) => {
+      if (!servers || !serverMembership) return safeAck(ack, { ok: false, error: 'not-in-server' });
+      if (socket.data.mutedUntil && Date.now() < socket.data.mutedUntil) return safeAck(ack, { ok: false, error: 'muted' });
+      if (!allowRate(socket)) return safeAck(ack, { ok: false, error: 'rate-limited' });
+      const { server, participant } = serverMembership;
+      const channelId = String(payload.channelId || '');
+      const channel = server.channels.find((c) => c.id === channelId && c.type === 'text');
+      if (!channel) return safeAck(ack, { ok: false, error: 'channel-not-found' });
+      const text = cleanMessageText(stripInvisible(payload.text));
+      const attachment = cleanServerAttachment(payload.attachment, server.id, channelId);
+      if (!text && !attachment) return safeAck(ack, { ok: false, error: 'empty-message' });
+      const now = Date.now();
+      const recent = (socket.data.chatHistory ?? []).filter((t) => now - t < 10_000);
+      if (recent.length >= MAX_MESSAGES_PER_10S) return safeAck(ack, { ok: false, error: 'spam' });
+      if (now - (socket.data.lastChatAt || 0) < MIN_MESSAGE_INTERVAL_MS) return safeAck(ack, { ok: false, error: 'spam' });
+      socket.data.lastChatAt = now;
+      socket.data.chatHistory = [...recent, now];
+      const message = {
+        id: randomUUID(), type: 'text', text, attachment,
+        authorId: participant.id, authorName: participant.name,
+        createdAt: Date.now(), reactions: {}, channelId
+      };
+      try {
+        await servers.addMessage(server.id, channelId, message);
+        io.to(serverChannelFor(server.id)).emit('server:chat:message', message);
+        safeAck(ack, { ok: true, id: message.id });
+      } catch (error) {
+        console.error('server:chat:send failed', error);
+        safeAck(ack, { ok: false, error: 'send-failed' });
+      }
+    });
+
+    socket.on('server:chat:edit', async (payload = {}, ack) => {
+      if (!servers || !serverMembership) return safeAck(ack, { ok: false, error: 'not-in-server' });
+      const channelId = String(payload.channelId || '');
+      const messageId = String(payload.messageId || '');
+      const text = cleanMessageText(stripInvisible(payload.text));
+      if (!messageId || !text || !channelId) return safeAck(ack, { ok: false, error: 'empty-message' });
+      const updated = await servers.editMessage(serverMembership.server.id, channelId, messageId, socket.id, text);
+      if (!updated) return safeAck(ack, { ok: false, error: 'message-not-found' });
+      io.to(serverChannelFor(serverMembership.server.id)).emit('server:chat:edited', { channelId, messageId, text: updated.text, editedAt: updated.editedAt });
+      safeAck(ack, { ok: true });
+    });
+
+    socket.on('server:chat:delete', async (payload = {}, ack) => {
+      if (!servers || !serverMembership) return safeAck(ack, { ok: false, error: 'not-in-server' });
+      const channelId = String(payload.channelId || '');
+      const messageId = String(payload.messageId || '');
+      const removed = await servers.deleteMessage(serverMembership.server.id, channelId, messageId, socket.id);
+      if (!removed) return safeAck(ack, { ok: false, error: 'message-not-found' });
+      io.to(serverChannelFor(serverMembership.server.id)).emit('server:chat:deleted', { channelId, messageId });
+      safeAck(ack, { ok: true });
+    });
+
+    socket.on('server:channel:added', async (payload = {}, ack) => {
+      // Re-broadcast a channel create that came from the REST API as well.
+      if (!servers || !serverMembership) return safeAck(ack, { ok: false, error: 'not-in-server' });
+      safeAck(ack, { ok: true });
+    });
+
+    socket.on('server:voice:join', async (payload = {}, ack) => {
+      if (!servers || !serverMembership) return safeAck(ack, { ok: false, error: 'not-in-server' });
+      const channelId = String(payload.channelId || '');
+      const channel = serverMembership.server.channels.find((c) => c.id === channelId && c.type === 'voice');
+      if (!channel) return safeAck(ack, { ok: false, error: 'channel-not-found' });
+      if (serverMembership.voiceChannelId) {
+        socket.leave(voiceChannelFor(serverMembership.server.id, serverMembership.voiceChannelId));
+      }
+      serverMembership.voiceChannelId = channelId;
+      socket.data.serverVoiceChannelId = channelId;
+      socket.join(voiceChannelFor(serverMembership.server.id, channelId));
+      socket.to(voiceChannelFor(serverMembership.server.id, channelId)).emit('server:peer:joined', {
+        participant: { id: socket.id, name: serverMembership.participant.name }
+      });
+      // Tell existing voice members to connect to the newcomer.
+      socket.to(voiceChannelFor(serverMembership.server.id, channelId)).emit('server:voice:connect', { id: socket.id, name: serverMembership.participant.name });
+      safeAck(ack, { ok: true, channelId });
+    });
+
+    socket.on('server:presence', (payload = {}) => {
+      if (!serverMembership) return;
+      if (!allowRateFor(socket, 'presenceRate', PRESENCE_RATE_MAX)) return;
+      const participant = serverMembership.participant;
+      participant.micOn = asBoolean(payload.micOn);
+      participant.cameraOn = asBoolean(payload.cameraOn);
+      const room = serverMembership.voiceChannelId
+        ? voiceChannelFor(serverMembership.server.id, serverMembership.voiceChannelId)
+        : serverChannelFor(serverMembership.server.id);
+      io.to(room).emit('server:peer:updated', { id: participant.id, name: participant.name, micOn: participant.micOn, cameraOn: participant.cameraOn });
+    });
+
+    socket.on('server:soundboard:play', (payload = {}, ack) => {
+      if (!servers || !serverMembership) return safeAck(ack, { ok: false, error: 'not-in-server' });
+      if (!allowRateFor(socket, 'boardRate', SOUNDBOARD_MAX_PER_5S)) return safeAck(ack, { ok: false, error: 'rate-limited' });
+      const id = String(payload?.id ?? '');
+      if (!SOUNDBOARD_SET.has(id)) return safeAck(ack, { ok: false, error: 'invalid-sound' });
+      io.to(serverChannelFor(serverMembership.server.id)).emit('server:soundboard:play', {
+        id, from: socket.id, name: serverMembership.participant.name
+      });
+      safeAck(ack, { ok: true });
+    });
+
+    socket.on('server:reaction:send', (payload = {}) => {
+      if (!serverMembership) return;
+      if (!allowRateFor(socket, 'floatRate', REACTION_RATE_MAX)) return;
+      const raw = String(payload.emoji ?? '');
+      if (!isAllowedFloatingReaction(raw)) return;
+      io.to(serverChannelFor(serverMembership.server.id)).emit('server:reaction:receive', {
+        id: socket.id, name: serverMembership.participant.name, emoji: normalizeFloatingReaction(raw)
+      });
+    });
+
+    socket.on('server:typing', (payload = {}) => {
+      if (!serverMembership) return;
+      if (!allowRateFor(socket, 'typingRate', TYPING_RATE_MAX)) return;
+      socket.to(serverChannelFor(serverMembership.server.id)).emit('server:typing', {
+        id: socket.id, name: serverMembership.participant.name, typing: asBoolean(payload.typing)
+      });
+    });
+
     // WebRTC signaling is relayed peer-to-peer. Each pair of participants uses
     // two "channels": media (mic + camera) and screen (screen share).
+    // Works for standalone rooms AND server voice channels (separate systems,
+    // one relay rule each).
     for (const eventName of ['webrtc:offer', 'webrtc:answer', 'webrtc:ice']) {
       socket.on(eventName, (payload = {}) => {
-        if (!membership) return;
+        const inRoom = membership && membership.room.participants.has(String(payload.to ?? ''));
+        const inServerVoice = serverMembership && serverMembership.voiceChannelId && (() => {
+          const target = io.sockets.sockets.get(String(payload.to ?? ''));
+          return Boolean(target && target.data.serverId === serverMembership.server.id && target.data.serverVoiceChannelId === serverMembership.voiceChannelId);
+        })();
+        if (!inRoom && !inServerVoice) return;
         const bucket = eventName === 'webrtc:ice' ? 'iceRate' : 'signalRate';
         if (!allowRateFor(socket, bucket, eventName === 'webrtc:ice' ? 200 : 40)) return;
         const to = String(payload.to ?? '');
-        if (!to || !membership.room.participants.has(to)) return;
+        if (!to) return;
 
         const channel = payload.channel;
         if (channel !== 'media' && channel !== 'screen') return;

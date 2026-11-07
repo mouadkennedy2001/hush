@@ -1,0 +1,60 @@
+/* Server page — a system separate from standalone rooms. Icons never overlap:
+   every icon is flex:none with fixed size, grids use minmax tracks. */
+.server-identity { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.server-identity-icon { display: inline-flex; width: 30px; height: 30px; flex: none; align-items: center; justify-content: center; border-radius: 9px; background: var(--wash-sky); overflow: hidden; }
+.server-identity-icon .custom-emoji { width: 22px; height: 22px; }
+.server-identity strong { font-size: .875rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.server-identity-count { color: var(--color-slate); font-size: .6875rem; flex: none; }
+
+.server-main { flex: 1; min-height: 0; display: grid; grid-template-columns: 232px minmax(0,1fr) 190px; gap: 14px; padding: 14px; }
+.server-channels, .server-members, .server-stage { display: flex; flex-direction: column; min-height: 0; overflow: hidden; border: 1px solid var(--color-fog); border-radius: var(--radius-panels); background: var(--color-white); }
+.server-channels { padding: 12px; overflow-y: auto; scrollbar-width: thin; }
+.server-members { padding: 12px; overflow-y: auto; scrollbar-width: thin; }
+.server-stage { padding: 0; }
+.server-stage .messages { flex: 1; min-height: 0; }
+
+.server-invite-card { padding: 11px; border: 1px solid var(--color-fog); border-radius: 10px; background: var(--color-paper); margin-bottom: 12px; flex: none; }
+.server-group-kicker { margin: 10px 0 4px; font-size: .625rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--color-text-2); flex: none; }
+.server-channel-list { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; flex: none; }
+.server-channel { display: flex; align-items: center; gap: 7px; padding: 6px 8px; border-radius: 7px; color: var(--color-text-2); font-size: .75rem; font-weight: 600; text-decoration: none; min-width: 0; }
+.server-channel:hover { background: var(--wash-sky); color: var(--color-accent-2); }
+.server-channel.is-current { background: var(--wash-sky-strong); color: var(--color-accent-2); }
+.server-channel-glyph { display: inline-flex; flex: none; width: 15px; height: 15px; align-items: center; justify-content: center; }
+.server-channel-glyph .icon { width: 14px; height: 14px; }
+.server-channel-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.server-channel-del { margin-inline-start: auto; flex: none; display: inline-flex; padding: 2px; border: 0; border-radius: 5px; background: transparent; color: var(--color-text-2); opacity: 0; }
+.server-channel:hover .server-channel-del, .server-channel-del:focus-visible { opacity: 1; }
+.server-channel-del:hover { background: color-mix(in srgb, #b42318 12%, transparent); color: #b42318; }
+.server-channel-del .icon { width: 12px; height: 12px; }
+.server-add-channel { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--color-border); flex: none; }
+.server-add-channel input, .server-add-channel select { padding: 7px 9px; border: 1.5px solid var(--color-border); border-radius: 8px; background: var(--color-surface-2); color: var(--color-text); font: inherit; font-size: .75rem; min-width: 0; }
+.server-danger-zone { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--color-border); flex: none; }
+
+.server-channel-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--color-fog); flex: none; min-width: 0; }
+.server-channel-title { font-size: .875rem; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.server-channel-topic { font-size: .75rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.server-head-actions { margin-inline-start: auto; display: inline-flex; gap: 6px; flex: none; }
+.server-stage .soundboard-panel { margin: 10px 14px 0; }
+.server-stage .typing { padding: 0 14px; }
+.server-stage .composer { border-top: 1px solid var(--color-fog); }
+
+.voice-stage { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 12px; }
+.voice-stage[hidden] { display: none; }
+.voice-stage .tile-grid { flex: 1; }
+.voice-stage .control-bar { padding-top: 10px; }
+.server-stage.is-voice .messages, .server-stage.is-voice .composer, .server-stage.is-voice .typing { display: none; }
+
+/* Icon fixes: nothing overlaps — fixed hit areas, no negative margins. */
+.icon-button { flex: none; width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center; }
+.icon-button .icon { width: 18px; height: 18px; flex: none; }
+.control-icon { flex: none; }
+.control { flex: none; }
+.tile-badges { flex: none; }
+.person-status { flex: none; }
+.soundboard-grid { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); }
+.emoji-menu { grid-template-columns: repeat(auto-fill, minmax(36px, 1fr)); width: min(252px, calc(100vw - 24px)); }
+.reaction-menu { grid-template-columns: repeat(auto-fill, minmax(36px, 1fr)); width: min(252px, calc(100vw - 24px)); }
+.server-icon-picker { grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); }
+
+@media (max-width: 1100px) { .server-main { grid-template-columns: 210px minmax(0,1fr); } .server-members { display: none; } }
+@media (max-width: 820px) { .server-main { grid-template-columns: 1fr; } .server-channels { max-height: 240px; } }

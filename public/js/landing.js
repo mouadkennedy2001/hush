@@ -2,6 +2,8 @@ import { initI18n, onLanguageChange, t } from './i18n.js';
 import { initTheme } from './theme.js';
 import { startPing } from './ping.js';
 import { initChangelog } from './changelog.js';
+import { CUSTOM_EMOJIS, customEmojiImage } from './emoji.js';
+import { fetchServers, createServer, serverIconUrl, serverUrl, inviteUrl, lookupInvite } from './servers.js';
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -47,6 +49,149 @@ async function refreshStats() {
 
 refreshStats();
 setInterval(refreshStats, 10000);
+
+/* ---------------- Servers ---------------- */
+
+const serverGrid = $('#server-grid');
+const serverEmpty = $('#server-empty');
+const serverDialog = $('#server-dialog');
+const serverForm = $('#server-form');
+const serverNameInput = $('#server-name-input');
+const serverIconPicker = $('#server-icon-picker');
+const serverDialogError = $('#server-dialog-error');
+let selectedIcon = 'star';
+
+function renderServers(servers) {
+  if (!serverGrid) return;
+  serverGrid.replaceChildren();
+  if (!servers.length) {
+    const p = document.createElement('p');
+    p.className = 'muted';
+    p.id = 'server-empty';
+    p.textContent = t('server.empty');
+    serverGrid.append(p);
+    return;
+  }
+  for (const server of servers) {
+    const card = document.createElement('article');
+    card.className = 'server-card';
+    const icon = document.createElement('img');
+    icon.src = serverIconUrl(server);
+    icon.alt = server.iconEmojiId ? `:${server.iconEmojiId}:` : '';
+    icon.className = 'custom-emoji server-card-icon';
+    icon.width = 44; icon.height = 44;
+    const body = document.createElement('div');
+    body.className = 'server-card-body';
+    const title = document.createElement('h3');
+    title.textContent = server.name;
+    const meta = document.createElement('p');
+    meta.className = 'muted';
+    meta.textContent = t('server.members', { count: server.memberCount ?? 1 }) + ' · ' + (server.channels?.length ?? 0) + ' ' + t('server.channels');
+    body.append(title, meta);
+    card.append(icon, body);
+    const open = document.createElement('a');
+    open.className = 'btn btn-primary btn-sm';
+    open.href = serverUrl(server);
+    open.textContent = t('server.open');
+    card.append(open);
+    const copy = document.createElement('button');
+    copy.className = 'btn btn-quiet btn-sm';
+    copy.type = 'button';
+    copy.textContent = t('server.copyInvite');
+    copy.title = t('server.copyInvite');
+    copy.addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(inviteUrl(server)); toast(t('toast.inviteCopied')); }
+      catch { toast(t('toast.copyFailed'), 4200); }
+    });
+    card.append(copy);
+    serverGrid.append(card);
+  }
+}
+
+async function refreshServers() {
+  try {
+    renderServers(await fetchServers());
+  } catch {
+    if (serverEmpty) serverEmpty.textContent = t('server.empty');
+  }
+}
+
+refreshServers();
+setInterval(refreshServers, 15000);
+
+if (serverIconPicker) {
+  for (const emoji of CUSTOM_EMOJIS) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'server-icon-choice';
+    btn.dataset.icon = emoji.id;
+    btn.title = `:${emoji.id}:`;
+    btn.setAttribute('aria-label', `:${emoji.id}:`);
+    btn.append(customEmojiImage(emoji.id, 'custom-emoji custom-emoji-sm'));
+    if (emoji.id === selectedIcon) btn.classList.add('is-selected');
+    btn.addEventListener('click', () => {
+      selectedIcon = emoji.id;
+      serverIconPicker.querySelectorAll('.server-icon-choice').forEach((b) => b.classList.toggle('is-selected', b === btn));
+    });
+    serverIconPicker.append(btn);
+  }
+}
+
+function openServerDialog() {
+  if (!serverDialog) return;
+  if (serverDialogError) serverDialogError.hidden = true;
+  if (typeof serverDialog.showModal === 'function') serverDialog.showModal();
+  else serverDialog.setAttribute('open', '');
+  setTimeout(() => serverNameInput?.focus(), 40);
+}
+
+function closeServerDialog() {
+  if (!serverDialog) return;
+  if (typeof serverDialog.close === 'function') serverDialog.close();
+  else serverDialog.removeAttribute('open');
+}
+
+document.querySelectorAll('[data-open-server]').forEach((b) => b.addEventListener('click', openServerDialog));
+document.querySelectorAll('[data-close-server]').forEach((b) => b.addEventListener('click', closeServerDialog));
+if (serverDialog) serverDialog.addEventListener('click', (e) => { if (e.target === serverDialog) closeServerDialog(); });
+
+if (serverForm) {
+  serverForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = serverNameInput?.value.trim();
+    if (!name) { serverNameInput?.focus(); return; }
+    if (serverDialogError) serverDialogError.hidden = true;
+    try {
+      let ownerName = '';
+      try { ownerName = localStorage.getItem('hush:name') || ''; } catch {}
+      const server = await createServer({ name, iconEmojiId: selectedIcon, ownerName });
+      toast(t('server.created'));
+      closeServerDialog();
+      window.location.href = serverUrl(server);
+    } catch {
+      if (serverDialogError) { serverDialogError.textContent = t('server.createFailed'); serverDialogError.hidden = false; }
+    }
+  });
+}
+
+// Join a server with an invite code (from the send-invite link / code).
+const inviteForm = $('#invite-form');
+const inviteInput = $('#invite-input');
+const inviteError = $('#invite-error');
+if (inviteForm) {
+  inviteForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const code = inviteInput?.value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (!code) { inviteInput?.focus(); return; }
+    if (inviteError) inviteError.hidden = true;
+    const server = await lookupInvite(code);
+    if (!server) {
+      if (inviteError) { inviteError.textContent = t('server.inviteNotFound'); inviteError.hidden = false; }
+      return;
+    }
+    window.location.href = `/s/${server.id}?invite=${encodeURIComponent(code)}`;
+  });
+}
 
 function toast(message, timeout = 3200) {
   if (!toastRegion) return;

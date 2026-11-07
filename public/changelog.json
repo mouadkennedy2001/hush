@@ -1,6 +1,50 @@
 {
-  "version": "6.0.0",
+  "version": "8.0.0",
   "entries": [
+    {
+      "date": "2026-11-07",
+      "ts": 1763300000000,
+      "kind": "update",
+      "kindEn": "Update",
+      "kindAr": "تحديث",
+      "titleEn": "Rooms and servers are now TWO separate systems + invite links + cleaner icons",
+      "titleAr": "الغرف والخوادم أصبحا نظامين منفصلين + روابط دعوة + أيقونات أنظف",
+      "pointsEn": [
+        "SEPARATE SYSTEMS: quick Rooms (/r/<code>) and Servers (/s/<id>) no longer share anything. The room page has no server panel; a server has its own page, its own chat storage (data/server-chats/), its own voice relay, and its own uploads (uploads/server-<id>/). Landing shows two distinct sections: Rooms and Servers.",
+        "Servers now have: invite link with a 6-char code (Copy invite / Join with an invite code), members list with owner badge, text + voice channels in groups, add/delete channels, delete/leave server, regenerate invite, edit/delete your messages, soundboard, emoji picker, paste (Ctrl+V), and the in-page image lightbox — all inside the server.",
+        "Invite flow: open the invite link to join (a name is all you need). Without the invite code, non-members are rejected (403). The owner can regenerate the code anytime.",
+        "FIX: icons no longer overlap — fixed-size flex:none icons, soundboard/emoji/reaction grids use minmax tracks, and the most crowded emoji SVGs (starstruck, flower, robot, alien) were redrawn cleaner."
+      ],
+      "pointsAr": [
+        "نظامان منفصلان: الغرف السريعة (/r/<code>) والخوادم (/s/<id>) لا يتشاركان شيئًا. صفحة الغرفة بلا لوحة خوادم؛ والخادم له صفحته ودردشته الخاصة (data/server-chats/) وصوته الخاص ورفوعاته الخاصة (uploads/server-<id>/). الصفحة الرئيسية تعرض قسمين منفصلين: الغرف والخوادم.",
+        "الخوادم الآن فيها: رابط دعوة برمز من 6 أحرف (نسخ الدعوة / الانضمام برمز)، قائمة أعضاء بشارة مالك، قنوات نصية + صوتية في مجموعات، إضافة/حذف قنوات، حذف/مغادرة الخادم، إعادة توليد الدعوة، تعديل/حذف رسائلك، لوحة صوت، منتقي إيموجي، لصق (Ctrl+V)، وعارض الصور داخل الصفحة — كل ذلك داخل الخادم.",
+        "تدفق الدعوة: افتح رابط الدعوة للانضمام (الاسم فقط يكفي). بدون رمز الدعوة يُرفض من ليس عضوًا (403). المالك يمكنه إعادة توليد الرمز في أي وقت.",
+        "إصلاح: الأيقونات لم تعد تتداخل — أيقونات ثابتة الحجم flex:none، وشبكات لوحة الصوت/الإيموجي/التفاعلات بمسارات minmax، وأُعيد رسم أكثر ملفات SVG ازدحامًا (starstruck، flower، robot، alien) بشكل أنظف."
+      ]
+    },
+    {
+      "date": "2026-11-07",
+      "ts": 1763200000000,
+      "kind": "update",
+      "kindEn": "Update",
+      "kindAr": "تحديث",
+      "titleEn": "Permanent servers + 60 emojis + in-page image viewer + paste images (Ctrl+V)",
+      "titleAr": "خوادم دائمة + 60 إيموجي + عرض الصور داخل الموقع + لصق الصور (Ctrl+V)",
+      "pointsEn": [
+        "NEW: Permanent servers — create a server once (name + custom emoji icon) and it stays in the app forever with its channels. Each channel is a real room with saved chat, so history survives restarts. Owners can add text/voice channels; everyone in the server sees them in the server panel and switches channels in one click.",
+        "NEW: Images open in an in-page lightbox with a close (exit) button, Esc and backdrop close — no new tab, and the voice/video call keeps running. Non-image files download directly.",
+        "NEW: Paste (Ctrl+V) an image from the clipboard and it uploads straight into the chat — screenshots work too.",
+        "NEW: 15 more hand-made emojis (wink, surprised, cry, kiss, dizzy, starstruck, robot, ghost, alien, music, flower, laser, siren, drumroll, yay) — 60 total, with a richer look (soft shadow, pop-in and hover motion).",
+        "NEW: Soundboard grew to 16 synthesized sounds — laser, siren, drumroll and yay — each with its own emoji, relayed to the whole room."
+      ],
+      "pointsAr": [
+        "جديد: خوادم دائمة — أنشئ خادمًا مرة واحدة (اسم + أيقونة إيموجي مخصصة) ويبقى في التطبيق للأبد مع قنواته. كل قناة غرفة حقيقية بدردشة محفوظة، فالسجل يبقى بعد إعادة التشغيل. المالك يمكنه إضافة قنوات نصية/صوتية؛ والجميع يراها في لوحة الخادم ويبدّل بينها بنقرة.",
+        "جديد: الصور تُفتح في عارض داخل الموقع مع زر إغلاق (خروج) وEsc وإغلاق بالنقر على الخلفية — بدون تبويب جديد، والمكالمة الصوتية/المرئية تستمر. الملفات غير المصورة تُنزَّل مباشرة.",
+        "جديد: الصق (Ctrl+V) صورة من الحافظة فتُرفع مباشرة إلى الدردشة — لقطات الشاشة تعمل أيضًا.",
+        "جديد: 15 إيموجي يدويًا إضافيًا (غمزة، دهشة، بكاء، قبلة، دوخة، نجوم، روبوت، شبح، فضائي، موسيقى، زهرة، ليزر، صافرة، قرع، ياااه) — المجموع 60، بمظهر أغنى (ظل ناعم وحركة ظهور وتحليق).",
+        "جديد: لوحة الصوت أصبحت 16 صوتًا مركّبًا — ليزر، صافرة، قرع طبول، ياااه — كلٌّ بإيموجيه الخاص، ويُبثّ للغرفة كلها."
+      ]
+    },
     {
       "date": "2026-11-07",
       "ts": 1763100000000,

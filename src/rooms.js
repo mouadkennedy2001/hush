@@ -118,6 +118,7 @@ function normalizeStoredMessage(raw) {
 export class RoomManager {
   #rooms = new Map();
   #saveTimer = null;
+  #protectedCodes = new Set();
 
   constructor({
     dataDir,
@@ -144,6 +145,21 @@ export class RoomManager {
 
   async currentRoomCount() {
     return this.#rooms.size;
+  }
+
+  // Server channels are permanent: their history must never be purged
+  // by the 7-day idle-history cleanup.
+  protectCode(code) {
+    const c = normalizeCode(code);
+    if (isValidCode(c)) this.#protectedCodes.add(c);
+  }
+
+  unprotectCodes(codes = []) {
+    for (const code of codes) this.#protectedCodes.delete(normalizeCode(code));
+  }
+
+  isProtected(code) {
+    return this.#protectedCodes.has(normalizeCode(code));
   }
 
   async getOrCreate(rawCode) {
@@ -440,7 +456,11 @@ export class RoomManager {
       if (!entry.isFile()) continue;
       const isHistory = entry.name.endsWith('.json');
       const isTemp = entry.name.includes('.tmp');
+      // servers.json holds permanent server metadata — never purge it.
+      if (entry.name === 'servers.json') continue;
       if (!isHistory && !isTemp) continue;
+      // Server channel rooms are permanent and keep their history.
+      if (isHistory && this.#protectedCodes.has(entry.name.replace(/\.json$/, ''))) continue;
       const file = path.join(this.dataDir, entry.name);
       try {
         const stat = await fs.stat(file);

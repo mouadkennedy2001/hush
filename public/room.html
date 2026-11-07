@@ -165,6 +165,16 @@
       <path d="M11 5 6 9H2v6h4l5 4V5Z"/>
       <path d="m22 9  -6 6M16 9l6 6"/>
     </symbol>
+    <symbol id="i-server" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="2" y="3" width="20" height="7" rx="2"/><rect x="2" y="14" width="20" height="7" rx="2"/>
+      <path d="M6 6.5h.01M6 17.5h.01"/>
+    </symbol>
+    <symbol id="i-hash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9 3 7 21M17 3l-2 18M4 8h17M3 16h17"/>
+    </symbol>
+    <symbol id="i-volume2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M11 5 6 9H2v6h4l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/>
+    </symbol>
   </svg>
 
   <div class="room-shell" id="room-shell">
@@ -708,6 +718,21 @@
           <a href="https://www.instagram.com/mouad_kennedy/" target="_blank" rel="noopener noreferrer">Instagram</a>
         </span>
       </div>
+    </div>
+  </div>
+
+  <div class="image-lightbox" id="image-lightbox" hidden role="dialog" aria-modal="true" aria-label="View image">
+    <div class="image-lightbox-backdrop" id="image-lightbox-backdrop"></div>
+    <figure class="image-lightbox-frame">
+      <img class="image-lightbox-img" id="image-lightbox-img" alt="" />
+      <figcaption class="image-lightbox-caption" id="image-lightbox-caption"></figcaption>
+    </figure>
+    <div class="image-lightbox-actions">
+      <a class="btn btn-quiet btn-sm" id="image-lightbox-download" href="#" download>Download</a>
+      <button class="btn btn-primary btn-sm" id="image-lightbox-close" type="button" title="Close image" aria-label="Close image">
+        <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg>
+        <span>Close</span>
+      </button>
     </div>
   </div>
 

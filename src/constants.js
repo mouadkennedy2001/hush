@@ -22,7 +22,8 @@ export const REACTION_EMOJIS = ['thumbsup', 'heart', 'laugh', 'tada', 'eyes', 'a
 // the room hears it. The server is the authority on which ids are valid.
 export const SOUNDBOARD_IDS = [
   'airhorn', 'rimshot', 'applause', 'trombone', 'boing', 'ding',
-  'pop', 'fart', 'cat', 'wow', 'crickets', 'tada'
+  'pop', 'fart', 'cat', 'wow', 'crickets', 'tada',
+  'laser', 'siren', 'drumroll', 'yay'
 ];
 export const SOUNDBOARD_SET = new Set(SOUNDBOARD_IDS);
 export const SOUNDBOARD_MAX_PER_5S = 8;
@@ -32,12 +33,15 @@ export const SOUNDBOARD_MAX_PER_5S = 8;
 export const CUSTOM_EMOJI_IDS = [
   'airhorn', 'rimshot', 'applause', 'trombone', 'boing', 'ding',
   'pop', 'fart', 'cat', 'wow', 'crickets', 'tada',
+  'laser', 'siren', 'drumroll', 'yay',
   'hush', 'heart', 'fire', 'star',
   'smile', 'laugh', 'love', 'cool', 'think', 'sad', 'angry', 'party',
   'sleep', 'mindblown', 'pray', 'strong', 'hundred', 'sparkles',
   'glowstar', 'idea', 'book', 'coffee', 'pizza', 'ball', 'game',
   'rocket', 'check', 'cross', 'eyes', 'wave', 'ok',
-  'thumbsup', 'thumbsdown'
+  'thumbsup', 'thumbsdown',
+  'wink', 'surprised', 'cry', 'kiss', 'dizzy', 'starstruck',
+  'robot', 'ghost', 'alien', 'music', 'flower'
 ];
 export const CUSTOM_EMOJI_SET = new Set(CUSTOM_EMOJI_IDS);
 

@@ -205,7 +205,13 @@ const els = {
   boardEmoji: $('#board-emoji'),
   boardAddBtn: $('#board-add-btn'),
   boardClearBtn: $('#board-clear-btn'),
-  boardAddNote: $('#board-add-note')
+  boardAddNote: $('#board-add-note'),
+  imageLightbox: $('#image-lightbox'),
+  imageLightboxBackdrop: $('#image-lightbox-backdrop'),
+  imageLightboxImg: $('#image-lightbox-img'),
+  imageLightboxCaption: $('#image-lightbox-caption'),
+  imageLightboxDownload: $('#image-lightbox-download'),
+  imageLightboxClose: $('#image-lightbox-close'),
 };
 
 const state = {
@@ -251,7 +257,7 @@ const state = {
   deafened: false,
   soundboardOpen: false,
   boardCooldownUntil: 0,
-  customSounds: [] // this room's uploaded sounds (deleted when room empties)
+  customSounds: [], // this room's uploaded sounds (deleted when room empties)
 };
 
 initI18n();
@@ -414,6 +420,17 @@ function bindEvents() {
     const file = els.fileInput.files?.[0];
     els.fileInput.value = '';
     if (file) uploadFile(file);
+  });
+
+  // Paste (Ctrl+V): an image in the clipboard uploads straight into chat.
+  document.addEventListener('paste', handlePasteImage);
+  els.messageInput?.addEventListener('paste', handlePasteImage);
+
+  // In-page image lightbox — never a new tab, so the call never drops/reconnects.
+  els.imageLightboxClose?.addEventListener('click', closeImageLightbox);
+  els.imageLightboxBackdrop?.addEventListener('click', closeImageLightbox);
+  els.imageLightbox?.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') closeImageLightbox();
   });
 
   els.jumpLatest.addEventListener('click', () => {
@@ -1820,27 +1837,29 @@ function renderAttachment(attachment) {
   const mime = String(attachment.mime || '');
 
   if (mime.startsWith('image/')) {
-    const link = el('a', 'message-attachment');
-    link.href = url;
-    link.target = '_blank';
-    link.rel = 'noopener noreferrer';
-    link.title = name;
-
+    // In-page viewer (lightbox) — NOT a new tab, so the voice/video call
+    // is never interrupted. The close button, Esc and the backdrop all exit.
+    const wrap = el('span', 'message-attachment');
+    const button = el('button', 'message-image');
+    button.type = 'button';
+    button.dataset.imageUrl = url;
+    button.dataset.imageName = name;
+    button.title = t('chat.imageViewerClose');
+    button.setAttribute('aria-label', t('chat.imageViewerClose'));
     const img = document.createElement('img');
     img.src = url;
     img.alt = name;
     img.loading = 'lazy';
     img.decoding = 'async';
-    link.append(img);
-    return link;
+    button.append(img);
+    wrap.append(button);
+    return wrap;
   }
 
   const wrap = el('div', 'message-attachment');
   const card = el('a', 'file-card');
   card.href = url;
   card.download = name;
-  card.target = '_blank';
-  card.rel = 'noopener noreferrer';
   card.append(icon('i-file'));
 
   const text = el('span', 'file-card-text');
@@ -2086,6 +2105,14 @@ function handleMessagesScroll() {
 /* ---------------- Message reactions ---------------- */
 
 function handleMessagesClick(event) {
+  const imageButton = event.target.closest('.message-image');
+  if (imageButton?.dataset.imageUrl) {
+    event.preventDefault();
+    event.stopPropagation();
+    openImageLightbox(imageButton.dataset.imageUrl, imageButton.dataset.imageName || '');
+    return;
+  }
+
   const reactButton = event.target.closest('.message-react');
   if (reactButton) {
     event.stopPropagation();
@@ -2381,6 +2408,54 @@ async function sendChat({ text = '', attachment = null } = {}) {
     toast(errorText(error, 'error.sendFailed'), 'error', 4200);
     return false;
   }
+}
+
+/* ---------------- Paste image (Ctrl+V) ---------------- */
+
+function handlePasteImage(event) {
+  const items = event.clipboardData?.items ? [...event.clipboardData.items] : [];
+  const files = event.clipboardData?.files ? [...event.clipboardData.files] : [];
+  let file = files.find((f) => f.type.startsWith('image/')) || null;
+  if (!file) {
+    const item = items.find((i) => i.type.startsWith('image/'));
+    file = item?.getAsFile?.() || null;
+  }
+  if (!file) return; // let normal text paste through untouched
+  event.preventDefault();
+  event.stopPropagation();
+  if (!state.online || !state.socket?.connected) {
+    // Still allow the join gate: queue nothing, just inform.
+    toast(t('chat.offlineUpload'), 'error', 3800);
+    return;
+  }
+  showComposerHint(t('chat.pasteImage'));
+  // uploadFile shows its own hints; keep paste-specific name for screenshots.
+  const named = file.name && /\.(png|jpe?g|gif|webp|avif)$/i.test(file.name)
+    ? file
+    : new File([file], `pasted-${Date.now()}.png`, { type: file.type || 'image/png' });
+  uploadFile(named);
+}
+
+/* ---------------- In-page image lightbox ---------------- */
+
+function openImageLightbox(url, name) {
+  const safe = safeAttachmentUrl(url);
+  if (!safe || !els.imageLightbox || !els.imageLightboxImg) return;
+  els.imageLightboxImg.src = safe;
+  els.imageLightboxImg.alt = name || '';
+  if (els.imageLightboxCaption) els.imageLightboxCaption.textContent = name || '';
+  if (els.imageLightboxDownload) {
+    els.imageLightboxDownload.href = safe;
+    els.imageLightboxDownload.download = name || '';
+  }
+  els.imageLightbox.hidden = false;
+  els.imageLightboxClose?.focus();
+}
+
+function closeImageLightbox() {
+  if (!els.imageLightbox || els.imageLightbox.hidden) return;
+  els.imageLightbox.hidden = true;
+  if (els.imageLightboxImg) els.imageLightboxImg.src = '';
 }
 
 /* ---------------- Uploads ---------------- */
@@ -2869,6 +2944,7 @@ function handleLanguageChange() {
   }
   closeReactionPopover();
   if (els.micDialog?.open) renderMicSettings();
+  renderServerPanel();
 }
 
 /* ---------------- Keyboard shortcuts ---------------- */
@@ -2880,6 +2956,7 @@ function handleShortcut(event) {
     closeReactionMenu();
     closeReactionPopover();
     closeAdminMenu();
+    closeImageLightbox();
     toggleSoundboard(false);
     return;
   }

@@ -2484,7 +2484,10 @@ html[dir="rtl"] .gate-code code {
 .soundboard-sound { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 9px 4px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-surface-2); color: var(--color-text); cursor: pointer; transition: transform 90ms ease, background 120ms ease; }
 .soundboard-sound:hover { background: var(--wash-sky); transform: translateY(-1px); }
 .soundboard-sound:active { transform: scale(.96); }
-.custom-emoji { width: 30px; height: 30px; object-fit: contain; }
+.custom-emoji { width: 30px; height: 30px; object-fit: contain; filter: drop-shadow(0 1px 2px rgba(27,27,27,.18)); transition: transform 140ms ease; }
+.soundboard-sound:hover .custom-emoji, .emoji-choice:hover .custom-emoji, .reaction-choice:hover .custom-emoji { transform: scale(1.18) rotate(-3deg); }
+.emoji-choice:hover .custom-emoji { transform: scale(1.22); }
+.message-emoji { filter: drop-shadow(0 1px 1px rgba(27,27,27,.22)); }
 .soundboard-emoji { font-size: 1.35rem; line-height: 1; display:inline-flex; }
 .soundboard-sound { position: relative; }
 .soundboard-sound .custom-btn-delete { position: absolute; top: 2px; inset-inline-end: 2px; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 50%; background: color-mix(in srgb, #b42318 14%, transparent); color: #b42318; font-size: .625rem; line-height: 1; opacity: 0; }
@@ -2496,16 +2499,33 @@ html[dir="rtl"] .gate-code code {
 .board-add-row input[type="file"] { max-width: 170px; font-size: .6875rem; color: var(--color-text-2); }
 .board-add-row select { padding: 7px; border: 1.5px solid var(--color-border); border-radius: 8px; background: var(--color-surface-2); color: var(--color-text); font: inherit; font-size: .75rem; }
 .board-add-note { margin-top: 5px; font-size: .625rem; color: var(--color-text-2); }
-.floating-reaction .custom-emoji { width: 34px; height: 34px; }
-.custom-emoji-sm { width: 22px; height: 22px; }
-.custom-emoji-xs { width: 15px; height: 15px; }
-.message-emoji { width: 20px; height: 20px; vertical-align: -4px; }
-.reaction-choice .custom-emoji { width: 22px; height: 22px; }
-.emoji-choice .custom-emoji { width: 24px; height: 24px; }
-.reaction-chip .custom-emoji { width: 15px; height: 15px; }
+.floating-reaction .custom-emoji { width: 38px; height: 38px; animation: emoji-pop 400ms cubic-bezier(.34,1.56,.64,1); }
+@keyframes emoji-pop { from { transform: scale(.4) rotate(-14deg); } to { transform: scale(1) rotate(0); } }
+.custom-emoji-sm { width: 24px; height: 24px; }
+.custom-emoji-xs { width: 16px; height: 16px; }
+.message-emoji { width: 22px; height: 22px; vertical-align: -4px; }
+.reaction-choice .custom-emoji { width: 24px; height: 24px; }
+.emoji-choice .custom-emoji { width: 26px; height: 26px; }
+.reaction-chip .custom-emoji { width: 16px; height: 16px; }
 .mock-bubble .custom-emoji, .demo-bubble .custom-emoji { vertical-align: -3px; }
 .soundboard-name { font-size: .5625rem; font-weight: 600; color: var(--color-text-2); text-align: center; line-height: 1.15; }
 @media (max-width: 700px) { .soundboard-grid { grid-template-columns: repeat(4, minmax(0,1fr)); } }
+
+/* ---------- In-page image lightbox (no new tab, call keeps running) ---------- */
+.image-lightbox { position: fixed; inset: 0; z-index: 300; display: flex; align-items: center; justify-content: center; padding: 18px; }
+.image-lightbox[hidden] { display: none; }
+.image-lightbox-backdrop { position: absolute; inset: 0; background: rgba(12,12,20,.78); backdrop-filter: blur(4px); cursor: pointer; }
+.image-lightbox-frame { position: relative; z-index: 1; max-width: min(92vw, 900px); max-height: 82dvh; margin: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.image-lightbox-img { max-width: 100%; max-height: 74dvh; object-fit: contain; border-radius: 12px; border: 1px solid rgba(255,255,255,.25); background: var(--color-white); box-shadow: 0 24px 60px rgba(0,0,0,.45); animation: emoji-pop 260ms ease; }
+.image-lightbox-caption { color: #e9e9f2; font-size: .75rem; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.image-lightbox-actions { position: absolute; top: 14px; inset-inline-end: 14px; z-index: 2; display: flex; gap: 8px; }
+.image-lightbox-actions .btn { display: inline-flex; align-items: center; gap: 6px; }
+.message-image { display: block; padding: 0; border: 1px solid var(--color-fog); border-radius: 8px; background: var(--color-white); overflow: hidden; cursor: zoom-in; max-width: 100%; }
+.message-image:hover { border-color: var(--color-signal-blue); }
+.message-image img { display: block; }
+.panel-chat.is-pasting { outline: 2px dashed var(--color-signal-blue); outline-offset: -7px; }
+
+/* ---------- Server panel (permanent servers + channels) ---------- */
 
 /* ---------- Per-peer volume (right-click menu) ---------- */
 .ctx-volume { padding: 8px 10px 10px; border-bottom: 1px solid var(--color-border); margin-bottom: 6px; }

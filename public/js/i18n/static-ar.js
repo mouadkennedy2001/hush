@@ -342,5 +342,40 @@ export const staticAr = {
   Add: 'إضافة',
   'Clear all': 'مسح الكل',
   'Audio only, 2 MB max. Custom sounds are deleted completely when the last person leaves this room.':
-    'صوت فقط، بحد أقصى 2 ميغابايت. تُحذف الأصوات المخصصة كليًا عند مغادرة آخر شخص لهذه الغرفة.'
+    'صوت فقط، بحد أقصى 2 ميغابايت. تُحذف الأصوات المخصصة كليًا عند مغادرة آخر شخص لهذه الغرفة.',
+
+  // Servers (static)
+  Servers: 'الخوادم',
+  Rooms: 'الغرف',
+  'Rooms — separate system': 'الغرف — نظام منفصل',
+  'Servers — separate system': 'الخوادم — نظام منفصل',
+  'Quick rooms, just for now.': 'غرف سريعة، للآن فقط.',
+  'A standalone room with a short code and a link — for a quick call or chat. Rooms are their own system, separate from servers below.':
+    'غرفة مستقلة برمز قصير ورابط — لمكالمة أو دردشة سريعة. الغرف نظامها الخاص، منفصل عن الخوادم أدناه.',
+  'Permanent servers with channels.': 'خوادم دائمة مع قنوات.',
+  'Create a server once — it stays forever with its text and voice channels, saved chat, members, and an invite link anyone can use to join. Servers are their own system, separate from quick rooms above.':
+    'أنشئ خادمًا مرة واحدة — يبقى للأبد مع قنواته النصية والصوتية ودردشته المحفوظة وأعضائه ورابط دعوة يمكن لأي أحد استخدامه للانضمام. الخوادم نظامها الخاص، منفصل عن الغرف السريعة أعلاه.',
+  'Join with an invite code': 'انضم برمز دعوة',
+  'Join server': 'انضم إلى الخادم',
+  'Open server': 'فتح الخادم',
+  'Copy invite link': 'نسخ رابط الدعوة',
+  'Create a server': 'إنشاء خادم',
+  'Create server': 'إنشاء الخادم',
+  'My server': 'خادمي',
+  'My servers': 'خوادمي',
+  'No servers yet. Create the first one.': 'لا خوادم بعد. أنشئ الأول.',
+  'Server name': 'اسم الخادم',
+  'Channel name': 'اسم القناة',
+  'Channel type': 'نوع القناة',
+  'Channel type': 'نوع القناة',
+  Server: 'الخادم',
+  'Back to home': 'العودة للرئيسية',
+  'Choose an icon': 'اختر أيقونة',
+  'Text channel': 'قناة نصية',
+  'Voice channel': 'قناة صوتية',
+  'Add channel': 'إضافة قناة',
+  'Channels': 'القنوات',
+  'Close image': 'إغلاق الصورة',
+  'View image': 'عرض الصورة',
+  'Paste an image (Ctrl+V) to share it in chat': 'الصق صورة (Ctrl+V) لمشاركتها في الدردشة'
 };

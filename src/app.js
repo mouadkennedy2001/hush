@@ -9,6 +9,7 @@ import multer from 'multer';
 import { Server as SocketServer } from 'socket.io';
 
 import { RoomManager, formatCode, isValidCode, normalizeCode } from './rooms.js';
+import { ServerManager, cleanServerName, cleanChannelName, cleanChannelType, cleanEmojiId, cleanDeviceId, cleanInviteCode } from './servers.js';
 import { attachRealtime } from './realtime.js';
 import {
   MAX_UPLOAD_BYTES,
@@ -77,6 +78,10 @@ export async function createHushServer({
 
   const rooms = new RoomManager({ dataDir, uploadsDir, idleTtlMs, historyTtlMs, log });
   await rooms.init();
+  // Servers are a SEPARATE system from rooms: own manager, own storage,
+  // own chat files. No room codes involved.
+  const servers = new ServerManager({ dataDir, uploadsDir, log });
+  await servers.init();
 
   const app = express();
   const server = http.createServer(app);
@@ -96,7 +101,7 @@ export async function createHushServer({
     cors: { origin: false }
   });
 
-  attachRealtime(io, { rooms });
+  attachRealtime(io, { rooms, servers });
 
   app.disable('x-powered-by');
   app.set('trust proxy', 1);
@@ -215,6 +220,157 @@ export async function createHushServer({
     } catch (error) {
       next(error);
     }
+  });
+
+  /* -------- Servers: SEPARATE system from rooms (own chat + voice) -------- */
+  const serverLimit = rateLimiter({ windowMs: 60_000, max: 20 });
+
+  app.get('/api/servers', (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ servers: servers.list().map((s) => servers.publicSummary(s)) });
+  });
+
+  app.post('/api/servers', serverLimit, async (req, res, next) => {
+    try {
+      const name = cleanServerName(req.body?.name);
+      const ownerDeviceId = cleanDeviceId(req.body?.ownerDeviceId);
+      if (!name || !ownerDeviceId) return res.status(400).json({ error: 'invalid-server' });
+      const server = await servers.create({
+        name,
+        ownerName: String(req.body?.ownerName || 'Guest').slice(0, 32),
+        ownerDeviceId,
+        iconEmojiId: cleanEmojiId(req.body?.iconEmojiId),
+        description: String(req.body?.description || '').slice(0, 140)
+      });
+      if (!server) return res.status(409).json({ error: 'server-limit' });
+      res.status(201).json({ server: servers.publicSummary(server) });
+    } catch (error) { next(error); }
+  });
+
+  app.get('/api/servers/:id', (req, res) => {
+    const server = servers.get(req.params.id);
+    if (!server) return res.status(404).json({ error: 'server-not-found' });
+    res.json({ server: servers.publicSummary(server) });
+  });
+
+  app.post('/api/servers/:id/join', serverLimit, async (req, res) => {
+    const server = await servers.join(req.params.id, {
+      deviceId: req.body?.deviceId, name: req.body?.name, inviteCode: req.body?.inviteCode
+    });
+    if (!server) {
+      const existing = servers.get(req.params.id);
+      if (!existing) return res.status(404).json({ error: 'server-not-found' });
+      return res.status(403).json({ error: 'invite-required' });
+    }
+    res.json({ server: servers.publicSummary(server) });
+  });
+
+  app.get('/api/servers/invite/:code', (req, res) => {
+    const server = servers.findByInvite(req.params.code);
+    if (!server) return res.status(404).json({ error: 'invite-not-found' });
+    res.json({ server: servers.publicSummary(server) });
+  });
+
+  app.post('/api/servers/:id/leave', async (req, res) => {
+    const ok = await servers.leave(req.params.id, req.body?.deviceId);
+    if (!ok) return res.status(400).json({ error: 'leave-failed' });
+    res.json({ ok: true });
+  });
+
+  app.post('/api/servers/:id/regenerate-invite', serverLimit, async (req, res) => {
+    const server = await servers.regenerateInvite(req.params.id, req.body?.deviceId);
+    if (!server) return res.status(403).json({ error: 'not-admin' });
+    res.json({ server: servers.publicSummary(server) });
+  });
+
+  app.post('/api/servers/:id/channels', serverLimit, async (req, res) => {
+    const name = cleanChannelName(req.body?.name);
+    if (!name) return res.status(400).json({ error: 'invalid-channel' });
+    const channel = await servers.addChannel(
+      req.params.id,
+      { name, type: cleanChannelType(req.body?.type) },
+      req.body?.deviceId || req.body?.ownerDeviceId
+    );
+    if (!channel) {
+      const server = servers.get(req.params.id);
+      if (!server) return res.status(404).json({ error: 'server-not-found' });
+      if (!servers.isMember(server, req.body?.deviceId || req.body?.ownerDeviceId)) return res.status(403).json({ error: 'not-admin' });
+      return res.status(409).json({ error: 'channel-limit' });
+    }
+    io.to(`server:${req.params.id}`).emit('server:channels:updated', { server: servers.publicSummary(servers.get(req.params.id)) });
+    res.status(201).json({ channel, server: servers.publicSummary(servers.get(req.params.id)) });
+  });
+
+  app.delete('/api/servers/:id/channels/:channelId', async (req, res) => {
+    const removed = await servers.deleteChannel(req.params.id, req.params.channelId, req.body?.deviceId);
+    if (!removed) {
+      const server = servers.get(req.params.id);
+      if (!server) return res.status(404).json({ error: 'server-not-found' });
+      if (!servers.isOwner(server, req.body?.deviceId)) return res.status(403).json({ error: 'not-admin' });
+      return res.status(400).json({ error: 'channel-not-found' });
+    }
+    io.to(`server:${req.params.id}`).emit('server:channels:updated', { server: servers.publicSummary(servers.get(req.params.id)) });
+    res.json({ ok: true });
+  });
+
+  app.delete('/api/servers/:id', async (req, res) => {
+    const removed = await servers.deleteServer(req.params.id, req.body?.deviceId);
+    if (!removed) {
+      const server = servers.get(req.params.id);
+      if (!server) return res.status(404).json({ error: 'server-not-found' });
+      return res.status(403).json({ error: 'not-admin' });
+    }
+    io.to(`server:${req.params.id}`).emit('server:deleted', { id: req.params.id });
+    res.json({ ok: true });
+  });
+
+  // Server chat uploads: uploads/server-<id>/<channelId>/ (separate from rooms).
+  const serverUploadLimit = rateLimiter({ windowMs: 60_000, max: 30 });
+  const serverUpload = multer({
+    storage: multer.diskStorage({
+      destination(req, file, callback) {
+        try {
+          const directory = path.join(uploadsDir, `server-${req.serverId}`, req.channelId);
+          mkdirSync(directory, { recursive: true });
+          callback(null, directory);
+        } catch (error) { callback(error); }
+      },
+      filename(req, file, callback) {
+        callback(null, `${randomUUID()}${path.extname(file.originalname).toLowerCase()}`);
+      }
+    }),
+    limits: { fileSize: MAX_UPLOAD_BYTES, files: 1 },
+    fileFilter(req, file, callback) {
+      const extension = path.extname(file.originalname).toLowerCase();
+      const lowerName = String(file.originalname || '').toLowerCase();
+      const dangerous = /\.(exe|sh|bat|js|html?|svg|php|jsp|py)$/.test(lowerName);
+      if (dangerous || !UPLOAD_EXTENSIONS.has(extension) || !UPLOAD_MIME_TYPES.has(file.mimetype)) {
+        const error = new Error('unsupported-file-type');
+        error.status = 415;
+        return callback(error);
+      }
+      callback(null, true);
+    }
+  });
+
+  app.post('/api/servers/:id/upload', serverUploadLimit, async (req, res, next) => {
+    const server = servers.get(req.params.id);
+    if (!server) { req.resume(); return res.status(404).json({ error: 'server-not-found' }); }
+    const channelId = String(req.body?.channelId || req.query?.channelId || '');
+    const channel = server.channels.find((c) => c.id === channelId && c.type === 'text');
+    if (!channel) { req.resume(); return res.status(404).json({ error: 'channel-not-found' }); }
+    req.serverId = req.params.id;
+    req.channelId = channelId;
+    serverUpload.single('file')(req, res, (error) => {
+      if (error) return next(error);
+      if (!req.file) return res.status(400).json({ error: 'missing-file' });
+      res.status(201).json({
+        url: `/uploads/server-${req.params.id}/${channelId}/${req.file.filename}`,
+        name: cleanUploadName(req.file.originalname),
+        size: req.file.size,
+        mime: req.file.mimetype
+      });
+    });
   });
 
   const uploadLimit = rateLimiter({ windowMs: 60_000, max: 30 });
@@ -356,6 +512,11 @@ export async function createHushServer({
     res.sendFile(path.join(publicDir, 'room.html'));
   });
 
+  // Servers are a separate page/system from rooms.
+  app.get('/s/:id', (req, res) => {
+    res.sendFile(path.join(publicDir, 'server.html'));
+  });
+
   app.use(
     '/uploads',
     express.static(uploadsDir, {
@@ -420,6 +581,7 @@ export async function createHushServer({
     server,
     io,
     rooms,
+    servers,
     config: { publicDir, dataDir, uploadsDir },
     async start(listenPort = port, listenHost = host) {
       if (started) return server.address();

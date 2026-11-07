@@ -1,6 +1,6 @@
 # Hush custom emojis
 
-43 hand-made SVG emojis, only for Hush. The whole site uses these —
+60 hand-made SVG emojis, only for Hush. The whole site uses these —
 never Unicode/global emojis.
 
 - In chat: type a shortcode like `:laugh:` or pick from the smile button.
