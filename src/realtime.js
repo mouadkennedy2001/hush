@@ -3,6 +3,8 @@ import {
   cleanMessageText,
   cleanName,
   isAllowedReaction,
+  isAllowedFloatingReaction,
+  normalizeFloatingReaction,
   isValidCode,
   normalizeCode
 } from './rooms.js';
@@ -17,7 +19,9 @@ import {
   MAX_SOCKETS_PER_IP,
   MAX_PARTICIPANTS_PER_IP_PER_ROOM,
   MAX_JOINS_PER_IP_PER_MIN,
-  BAN_DEFAULT_MINUTES
+  BAN_DEFAULT_MINUTES,
+  SOUNDBOARD_SET,
+  SOUNDBOARD_MAX_PER_5S
 } from './constants.js';
 import { hashValue, cleanDeviceId, stripInvisible, spamScore, activeBans } from './security.js';
 
@@ -94,35 +98,52 @@ function allowRate(socket) {
   return allowRateFor(socket, 'chatRate', RATE_MAX);
 }
 
-// Global (per-server) connection tracking for IP limits
-const ipSockets = new Map(); // ipHash -> Set<socketId>
-const ipJoins = new Map(); // ipHash -> number[] timestamps
-
-function trackIpSocket(ipHash, socketId) {
-  if (!ipSockets.has(ipHash)) ipSockets.set(ipHash, new Set());
-  ipSockets.get(ipHash).add(socketId);
-}
-function untrackIpSocket(ipHash, socketId) {
-  const set = ipSockets.get(ipHash);
-  if (!set) return;
-  set.delete(socketId);
-  if (!set.size) ipSockets.delete(ipHash);
-}
-function ipSocketCount(ipHash) {
-  return ipSockets.get(ipHash)?.size ?? 0;
-}
-function allowIpJoin(ipHash) {
-  const now = Date.now();
-  const hits = (ipJoins.get(ipHash) ?? []).filter((t) => now - t < 60_000);
-  if (hits.length >= MAX_JOINS_PER_IP_PER_MIN) { ipJoins.set(ipHash, hits); return false; }
-  hits.push(now); ipJoins.set(ipHash, hits); return true;
+function clientIp(socket) {
+  // Behind a reverse proxy the real client IP is in X-Forwarded-For.
+  const forwarded = String(socket.handshake.headers?.['x-forwarded-for'] || '')
+    .split(',')[0].trim();
+  return forwarded || socket.handshake.address || 'unknown';
 }
 
 export function attachRealtime(io, { rooms, maxParticipants = MAX_PARTICIPANTS } = {}) {
   if (!rooms) throw new Error('attachRealtime requires a RoomManager');
 
+  // Per-server connection tracking for IP limits. Kept inside this closure
+  // (not module globals) so multiple servers in one process — e.g. tests —
+  // never share counters, and ipJoins is swept so it cannot grow forever.
+  const ipSockets = new Map(); // ipHash -> Set<socketId>
+  const ipJoins = new Map(); // ipHash -> number[] timestamps
+  let lastJoinSweep = Date.now();
+
+  function trackIpSocket(ipHash, socketId) {
+    if (!ipSockets.has(ipHash)) ipSockets.set(ipHash, new Set());
+    ipSockets.get(ipHash).add(socketId);
+  }
+  function untrackIpSocket(ipHash, socketId) {
+    const set = ipSockets.get(ipHash);
+    if (!set) return;
+    set.delete(socketId);
+    if (!set.size) ipSockets.delete(ipHash);
+  }
+  function ipSocketCount(ipHash) {
+    return ipSockets.get(ipHash)?.size ?? 0;
+  }
+  function allowIpJoin(ipHash) {
+    const now = Date.now();
+    if (now - lastJoinSweep > 60_000) {
+      lastJoinSweep = now;
+      for (const [key, hits] of ipJoins) {
+        const fresh = hits.filter((t) => now - t < 60_000);
+        if (fresh.length) ipJoins.set(key, fresh); else ipJoins.delete(key);
+      }
+    }
+    const hits = (ipJoins.get(ipHash) ?? []).filter((t) => now - t < 60_000);
+    if (hits.length >= MAX_JOINS_PER_IP_PER_MIN) { ipJoins.set(ipHash, hits); return false; }
+    hits.push(now); ipJoins.set(ipHash, hits); return true;
+  }
+
   io.on('connection', (socket) => {
-    const ipHash = hashValue(socket.handshake.address || 'unknown', 'ip');
+    const ipHash = hashValue(clientIp(socket), 'ip');
     socket.data.ipHash = ipHash;
 
     if (ipSocketCount(ipHash) >= MAX_SOCKETS_PER_IP) {
@@ -145,6 +166,11 @@ export function attachRealtime(io, { rooms, maxParticipants = MAX_PARTICIPANTS }
       socket.data.roomCode = null;
       room.participants.delete(participant.id);
       rooms.touch(room);
+      // Custom soundboard is per-session: the last person leaving
+      // deletes the room's custom sounds completely (files + metadata).
+      if (room.participants.size === 0 && (room.customSounds || []).length) {
+        rooms.purgeCustomSounds(room).catch(() => {});
+      }
       // Host transfer: oldest remaining participant becomes host
       if (room.hostId === participant.id) {
         const next = [...room.participants.values()].sort((a, b) => (a.joinedAt ?? 0) - (b.joinedAt ?? 0))[0];
@@ -251,7 +277,8 @@ export function attachRealtime(io, { rooms, maxParticipants = MAX_PARTICIPANTS }
             code,
             participants: [...room.participants.values()].map(publicParticipant),
             messages: room.messages,
-            pinnedMessageId: room.pinnedMessageId ?? null
+            pinnedMessageId: room.pinnedMessageId ?? null,
+            customSounds: room.customSounds ?? []
           }
         });
       } catch (error) {
@@ -552,15 +579,65 @@ export function attachRealtime(io, { rooms, maxParticipants = MAX_PARTICIPANTS }
       }
     });
 
+    socket.on('soundboard:play', (payload = {}, ack) => {
+      if (!membership) return safeAck(ack, { ok: false, error: 'not-in-room' });
+      if (!allowRateFor(socket, 'boardRate', SOUNDBOARD_MAX_PER_5S)) {
+        return safeAck(ack, { ok: false, error: 'rate-limited' });
+      }
+      const id = String(payload?.id ?? '');
+      // Built-in synth sound?
+      if (SOUNDBOARD_SET.has(id)) {
+        io.to(channelFor(membership.room.code)).emit('soundboard:play', {
+          id, custom: false,
+          from: socket.id,
+          name: membership.participant.name
+        });
+        return safeAck(ack, { ok: true });
+      }
+      // Or this room's custom sound (uuid in room.customSounds)?
+      const custom = (membership.room.customSounds || []).find((s) => s.id === id);
+      if (!custom) return safeAck(ack, { ok: false, error: 'invalid-sound' });
+      io.to(channelFor(membership.room.code)).emit('soundboard:play', {
+        id: custom.id, custom: true, url: custom.url, emojiId: custom.emojiId, soundName: custom.name,
+        from: socket.id,
+        name: membership.participant.name
+      });
+      safeAck(ack, { ok: true });
+    });
+
+    socket.on('soundboard:deleteCustom', async (payload = {}, ack) => {
+      if (!membership) return safeAck(ack, { ok: false, error: 'not-in-room' });
+      if (!allowRateFor(socket, 'boardRate', SOUNDBOARD_MAX_PER_5S)) return safeAck(ack, { ok: false, error: 'rate-limited' });
+      const id = String(payload?.id ?? '');
+      const room = membership.room;
+      const target = (room.customSounds || []).find((s) => s.id === id);
+      if (!target) return safeAck(ack, { ok: false, error: 'invalid-sound' });
+      // Only the person who added it, or the host, may delete it.
+      if (target.addedById !== socket.id && !isHost()) return safeAck(ack, { ok: false, error: 'not-admin' });
+      const removed = await rooms.removeCustomSound(room, id);
+      if (!removed) return safeAck(ack, { ok: false, error: 'invalid-sound' });
+      io.to(channelFor(room.code)).emit('soundboard:deleted', { id });
+      safeAck(ack, { ok: true });
+    });
+
+    socket.on('soundboard:clearCustom', async (payload = {}, ack) => {
+      if (!membership) return safeAck(ack, { ok: false, error: 'not-in-room' });
+      if (!isHost()) return safeAck(ack, { ok: false, error: 'not-admin' });
+      if (!allowRateFor(socket, 'boardRate', SOUNDBOARD_MAX_PER_5S)) return safeAck(ack, { ok: false, error: 'rate-limited' });
+      await rooms.clearCustomSounds(membership.room);
+      io.to(channelFor(membership.room.code)).emit('soundboard:cleared', {});
+      safeAck(ack, { ok: true });
+    });
+
     socket.on('reaction:send', (payload = {}) => {
       if (!membership) return;
       if (!allowRateFor(socket, 'floatRate', REACTION_RATE_MAX)) return;
-      const emoji = String(payload.emoji ?? '');
-      if (!isAllowedReaction(emoji)) return;
+      const raw = String(payload.emoji ?? '');
+      if (!isAllowedFloatingReaction(raw)) return;
       io.to(channelFor(membership.room.code)).emit('reaction:receive', {
         id: socket.id,
         name: membership.participant.name,
-        emoji
+        emoji: normalizeFloatingReaction(raw)
       });
     });
 

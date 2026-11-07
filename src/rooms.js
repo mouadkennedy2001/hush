@@ -5,7 +5,10 @@ import {
   MAX_MESSAGE_LENGTH,
   MAX_NAME_LENGTH,
   MAX_ROOM_MESSAGES,
-  REACTION_EMOJIS
+  REACTION_EMOJIS,
+  CUSTOM_EMOJI_SET,
+  MAX_CUSTOM_SOUNDS_PER_ROOM,
+  MAX_BOARD_AUDIO_BYTES
 } from './constants.js';
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -53,6 +56,37 @@ export function isAllowedReaction(emoji) {
   return REACTION_EMOJIS.includes(String(emoji));
 }
 
+// Floating reactions are custom site emoji ids too. The legacy
+// "custom:<id>" form is normalized; Unicode emojis are never allowed.
+export function normalizeFloatingReaction(emoji) {
+  const value = String(emoji ?? '');
+  return value.startsWith('custom:') ? value.slice(7) : value;
+}
+export function isAllowedFloatingReaction(emoji) {
+  return CUSTOM_EMOJI_SET.has(normalizeFloatingReaction(emoji));
+}
+
+export function normalizeCustomSound(raw, code) {
+  if (!raw || typeof raw !== 'object' || typeof raw.id !== 'string') return null;
+  const url = String(raw.url ?? '');
+  const prefix = `/uploads/${code}/board/`;
+  if (!url.startsWith(prefix) || url.includes('..') || url.includes('\\')) return null;
+  const emojiId = CUSTOM_EMOJI_SET.has(String(raw.emojiId)) ? String(raw.emojiId) : 'star';
+  const size = Number(raw.size);
+  if (!Number.isFinite(size) || size < 0 || size > MAX_BOARD_AUDIO_BYTES) return null;
+  return {
+    id: raw.id,
+    name: String(raw.name ?? 'Sound').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 40) || 'Sound',
+    emojiId,
+    url,
+    size,
+    mime: String(raw.mime ?? 'audio/mpeg').slice(0, 60),
+    addedById: typeof raw.addedById === 'string' ? raw.addedById : '',
+    addedBy: typeof raw.addedBy === 'string' ? raw.addedBy.slice(0, MAX_NAME_LENGTH) : '',
+    createdAt: Number.isFinite(raw.createdAt) ? raw.createdAt : Date.now()
+  };
+}
+
 function normalizeStoredMessage(raw) {
   if (!raw || typeof raw !== 'object' || typeof raw.id !== 'string') return null;
   const reactions = {};
@@ -87,6 +121,7 @@ export class RoomManager {
 
   constructor({
     dataDir,
+    uploadsDir = null,
     maxMessages = MAX_ROOM_MESSAGES,
     idleTtlMs = 30 * 60 * 1000,
     historyTtlMs = 7 * 24 * 60 * 60 * 1000,
@@ -95,6 +130,7 @@ export class RoomManager {
   } = {}) {
     if (!dataDir) throw new Error('RoomManager requires a dataDir');
     this.dataDir = dataDir;
+    this.uploadsDir = uploadsDir;
     this.maxMessages = maxMessages;
     this.idleTtlMs = idleTtlMs;
     this.historyTtlMs = historyTtlMs;
@@ -122,6 +158,7 @@ export class RoomManager {
         lastActivity: this.now(),
         participants: new Map(),
         messages: [],
+        customSounds: [],
         pinnedMessageId: null,
         hostId: null,
         banned: [],
@@ -259,10 +296,63 @@ export class RoomManager {
     return message.reactions;
   }
 
+  async addCustomSound(room, sound) {
+    room.customSounds ||= [];
+    if (room.customSounds.length >= MAX_CUSTOM_SOUNDS_PER_ROOM) return null;
+    room.customSounds.push(sound);
+    room.lastActivity = this.now();
+    await this.#queueSave(room);
+    return sound;
+  }
+
+  async removeCustomSound(room, soundId) {
+    room.customSounds ||= [];
+    const index = room.customSounds.findIndex((s) => s.id === soundId);
+    if (index === -1) return null;
+    const [removed] = room.customSounds.splice(index, 1);
+    room.lastActivity = this.now();
+    await this.#queueSave(room);
+    await this.#deleteSoundFile(room.code, removed);
+    return removed;
+  }
+
+  async clearCustomSounds(room) {
+    room.customSounds ||= [];
+    const removed = [...room.customSounds];
+    room.customSounds = [];
+    room.lastActivity = this.now();
+    await this.#queueSave(room);
+    for (const sound of removed) await this.#deleteSoundFile(room.code, sound);
+    return removed;
+  }
+
+  // Custom sounds are ephemeral per room session: when the last person
+  // leaves (or the idle room is cleaned up), delete files + metadata
+  // completely so nothing lingers on disk.
+  async purgeCustomSounds(room) {
+    if (!room) return;
+    const removed = [...(room.customSounds || [])];
+    room.customSounds = [];
+    for (const sound of removed) await this.#deleteSoundFile(room.code, sound);
+    // Remove the whole board folder even if metadata was already cleared.
+    if (this.uploadsDir) {
+      try { await fs.rm(path.join(this.uploadsDir, room.code, 'board'), { recursive: true, force: true }); } catch { /* ignore */ }
+    }
+    if (removed.length) await this.#queueSave(room);
+  }
+
+  async #deleteSoundFile(code, sound) {
+    if (!this.uploadsDir || !sound?.url) return;
+    const file = String(sound.url).split('/').pop();
+    if (!file || file.includes('..') || file.includes('\\') || file.includes('/')) return;
+    try { await fs.unlink(path.join(this.uploadsDir, code, 'board', file)); } catch { /* already gone */ }
+  }
+
   async cleanup() {
     const now = this.now();
     for (const [code, room] of this.#rooms) {
       if (room.participants.size === 0 && now - room.lastActivity > this.idleTtlMs) {
+        await this.purgeCustomSounds(room);
         this.#rooms.delete(code);
       }
     }
@@ -298,6 +388,12 @@ export class RoomManager {
           .filter(Boolean)
           .slice(-this.maxMessages);
       }
+      if (Array.isArray(data.customSounds)) {
+        room.customSounds = data.customSounds
+          .map((s) => normalizeCustomSound(s, room.code))
+          .filter(Boolean)
+          .slice(0, MAX_CUSTOM_SOUNDS_PER_ROOM);
+      }
     } catch (error) {
       if (error.code !== 'ENOENT') throw error;
     }
@@ -320,7 +416,8 @@ export class RoomManager {
       pinnedMessageId: room.pinnedMessageId ?? null,
       hostId: room.hostId ?? null,
       banned: room.banned ?? [],
-      messages: room.messages
+      messages: room.messages,
+      customSounds: room.customSounds ?? []
     });
     const file = this.#file(room.code);
     const temp = `${file}.${randomUUID()}.tmp`;
@@ -348,7 +445,14 @@ export class RoomManager {
       try {
         const stat = await fs.stat(file);
         const maxAge = isTemp ? 60 * 60 * 1000 : this.historyTtlMs;
-        if (now - stat.mtimeMs > maxAge) await fs.unlink(file);
+        if (now - stat.mtimeMs > maxAge) {
+          await fs.unlink(file);
+          // The room itself is gone — its custom board must go with it.
+          if (this.uploadsDir && isHistory && !isTemp) {
+            const code = entry.name.replace(/\.json$/, '');
+            try { await fs.rm(path.join(this.uploadsDir, code, 'board'), { recursive: true, force: true }); } catch { /* ignore */ }
+          }
+        }
       } catch {
         // A file can disappear between readdir and stat; ignore it.
       }

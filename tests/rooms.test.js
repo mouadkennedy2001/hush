@@ -72,17 +72,17 @@ test('RoomManager stores messages and toggles reactions', async (t) => {
 
   assert.deepEqual(room.messages.map((message) => message.id), ['m2', 'm3']);
 
-  await rooms.toggleReaction(room, 'm3', '👍', 'peer-1');
-  assert.deepEqual(room.messages[1].reactions['👍'], ['peer-1']);
+  await rooms.toggleReaction(room, 'm3', 'thumbsup', 'peer-1');
+  assert.deepEqual(room.messages[1].reactions['thumbsup'], ['peer-1']);
 
-  await rooms.toggleReaction(room, 'm3', '👍', 'peer-2');
-  assert.deepEqual(room.messages[1].reactions['👍'], ['peer-1', 'peer-2']);
+  await rooms.toggleReaction(room, 'm3', 'thumbsup', 'peer-2');
+  assert.deepEqual(room.messages[1].reactions['thumbsup'], ['peer-1', 'peer-2']);
 
-  await rooms.toggleReaction(room, 'm3', '👍', 'peer-1');
-  assert.deepEqual(room.messages[1].reactions['👍'], ['peer-2']);
+  await rooms.toggleReaction(room, 'm3', 'thumbsup', 'peer-1');
+  assert.deepEqual(room.messages[1].reactions['thumbsup'], ['peer-2']);
 
-  await rooms.toggleReaction(room, 'm3', '👍', 'peer-2');
-  assert.equal(room.messages[1].reactions['👍'], undefined);
+  await rooms.toggleReaction(room, 'm3', 'thumbsup', 'peer-2');
+  assert.equal(room.messages[1].reactions['thumbsup'], undefined);
 });
 
 test('RoomManager rejects invalid codes', async (t) => {
@@ -202,11 +202,11 @@ test('two clients join, chat, react, and update presence', async (t) => {
   const reactionAck = await new Promise((resolve, reject) => {
     clientB.emit(
       'chat:react',
-      { messageId: message.id, emoji: '🎉' },
+      { messageId: message.id, emoji: 'tada' },
       (response) => (response?.ok ? resolve(response) : reject(new Error(response?.error)))
     );
   });
-  assert.deepEqual(reactionAck.reactions['🎉'], [b.self.id]);
+  assert.deepEqual(reactionAck.reactions['tada'], [b.self.id]);
   const broadcast = await reaction;
   assert.equal(broadcast.messageId, message.id);
 

@@ -77,6 +77,19 @@ function playFallback(name) {
   }
 }
 
+// Cache one <audio> per sound so repeated plays reuse the decoded buffer
+// (new Audio() every time forced a network fetch + decode on each play).
+const audioCache = new Map();
+function cachedAudio(name) {
+  let audio = audioCache.get(name);
+  if (!audio) {
+    audio = new Audio(`/sounds/${encodeURIComponent(name)}.wav`);
+    audio.preload = 'auto';
+    audioCache.set(name, audio);
+  }
+  return audio;
+}
+
 export function playSound(name, { force = false } = {}) {
   if (!enabled && !force) return;
   // Throttle identical sounds (max 1 per 250ms) to avoid stacking.
@@ -84,8 +97,9 @@ export function playSound(name, { force = false } = {}) {
   if (now - (lastPlay[name] || 0) < 250) return;
   lastPlay[name] = now;
   try {
-    const audio = new Audio(`/sounds/${encodeURIComponent(name)}.wav`);
+    const audio = cachedAudio(name);
     audio.volume = volume;
+    try { audio.currentTime = 0; } catch { /* not seekable yet */ }
     audio.play().catch(() => playFallback(name));
   } catch {
     playFallback(name);

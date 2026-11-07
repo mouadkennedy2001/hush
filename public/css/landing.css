@@ -1,3 +1,8 @@
+/* Custom Hush emojis (public/emoji/) — the only emojis on the site. */
+.custom-emoji { object-fit: contain; vertical-align: middle; }
+.mock-bubble .custom-emoji, .demo-bubble .custom-emoji { vertical-align: -3px; }
+.panel-reactions .custom-emoji { width: 22px; height: 22px; }
+
 /* ---------- Navigation ---------- */
 .site-nav {
   position: sticky;

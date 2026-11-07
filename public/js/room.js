@@ -3,18 +3,18 @@ import { MIC_PRESETS, DEFAULT_MIC_SETTINGS } from './room/mic-fx.js';
 import { initI18n, onLanguageChange, t, locale } from './i18n.js';
 import { initTheme, toggleTheme } from './theme.js';
 import { startPing, refreshPing } from './ping.js';
-import { initSettings, getSettings } from './settings.js';
+import { initSettings, getSettings, updateSettings } from './settings.js';
+import { SOUNDBOARD_SOUNDS, playSoundboard, playCustomSound, getSoundboardVolume, setSoundboardVolume, isSoundboardId, soundboardEmojiId } from './soundboard.js';
+import { CUSTOM_EMOJIS, customEmojiImage, isCustomEmoji, emojiUrl, splitEmojiShortcodes, preloadCustomEmojis } from './emoji.js';
 import { playSound, getSoundsEnabled, setSoundsEnabled, getSoundVolume, setSoundVolume } from './sounds.js';
 import { initChangelog } from './changelog.js';
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
-const REACTIONS = ['👍', '❤️', '😂', '🎉', '👀', '🙌', '🔥', '✅'];
-const EMOJIS = [
-  '😀','😂','😍','😎','🤔','😢','😡','🥳','😴','🤯','👍','👎','👏','🙏','💪','🔥',
-  '❤️','💯','🎉','✨','⭐','🌟','💡','📚','☕','🍕','⚽','🎮','🚀','✅','❌','👀'
-];
+// Only custom Hush emojis (public/emoji/) — no Unicode/global emojis.
+const REACTIONS = ['thumbsup', 'heart', 'laugh', 'tada', 'eyes', 'applause', 'fire', 'check'];
+const EMOJIS = CUSTOM_EMOJIS.map((e) => e.id);
 const ALLOWED_EXTENSIONS = new Set([
   '.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif',
   '.pdf', '.txt', '.md', '.csv', '.zip'
@@ -35,6 +35,53 @@ function getOrCreateDeviceId() {
     return id;
   } catch {
     return `dev-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }
+}
+
+// Per-peer voice volumes survive reloads per room (keyed by socket id AND
+// by name, since socket ids change on reconnect but names usually don't).
+function volumeStoreKey() { return `hush:volumes:${state.code || 'room'}`; }
+function loadPeerVolumes() {
+  try {
+    const raw = localStorage.getItem(volumeStoreKey());
+    const parsed = raw ? JSON.parse(raw) : {};
+    if (parsed && typeof parsed === 'object') {
+      for (const [key, value] of Object.entries(parsed)) {
+        const volume = Math.min(2, Math.max(0, Number(value) || 0));
+        state.peerVolumes.set(key, volume);
+      }
+    }
+  } catch { /* ignore */ }
+}
+function savePeerVolumes() {
+  try {
+    localStorage.setItem(volumeStoreKey(), JSON.stringify([...state.peerVolumes]));
+  } catch { /* ignore */ }
+}
+function getPeerVolume(participant) {
+  if (!participant) return 1;
+  if (state.peerVolumes.has(participant.id)) return state.peerVolumes.get(participant.id);
+  const byName = state.peerVolumes.get(`name:${participant.name}`);
+  return byName !== undefined ? byName : 1;
+}
+function setPeerVolume(participant, value) {
+  if (!participant) return 1;
+  const volume = Math.min(2, Math.max(0, Number(value) || 0));
+  state.peerVolumes.set(participant.id, volume);
+  // Also remember by name so the setting survives a reconnect (new id).
+  state.peerVolumes.set(`name:${participant.name}`, volume);
+  savePeerVolumes();
+  state.mesh?.setPeerVolume(participant.id, volume);
+  renderPeople();
+  renderTiles();
+  return volume;
+}
+function applySavedPeerVolumes() {
+  for (const participant of state.participants.values()) {
+    if (participant.id === state.selfId) continue;
+    const volume = getPeerVolume(participant);
+    if (volume !== 1) state.peerVolumes.set(participant.id, volume);
+    state.mesh?.setPeerVolume(participant.id, volume);
   }
 }
 
@@ -141,7 +188,24 @@ const els = {
   shell: $('#room-shell'),
   ctxMenu: $('#ctx-menu'),
   soundVolume: $('#sound-volume'),
-  soundTest: $('#sound-test')
+  soundTest: $('#sound-test'),
+  soundboardBtn: $('#soundboard-btn'),
+  soundboardLabel: $('#soundboard-label'),
+  soundboardPanel: $('#soundboard-panel'),
+  soundboardTitle: $('#soundboard-title'),
+  soundboardGrid: $('#soundboard-grid'),
+  soundboardVolume: $('#soundboard-volume'),
+  soundboardClose: $('#soundboard-close'),
+  deafenBtn: $('#deafen-btn'),
+  deafenLabel: $('#deafen-label'),
+  boardAddForm: $('#board-add-form'),
+  boardAddTitle: $('#board-add-title'),
+  boardFile: $('#board-file'),
+  boardName: $('#board-name'),
+  boardEmoji: $('#board-emoji'),
+  boardAddBtn: $('#board-add-btn'),
+  boardClearBtn: $('#board-clear-btn'),
+  boardAddNote: $('#board-add-note')
 };
 
 const state = {
@@ -182,7 +246,12 @@ const state = {
   pinnedMessageId: null,
   hostId: null,
   isHost: false,
-  deviceId: getOrCreateDeviceId()
+  deviceId: getOrCreateDeviceId(),
+  peerVolumes: new Map(), // participantId -> 0..2 (0=mute, 1=100%, 2=200%)
+  deafened: false,
+  soundboardOpen: false,
+  boardCooldownUntil: 0,
+  customSounds: [] // this room's uploaded sounds (deleted when room empties)
 };
 
 initI18n();
@@ -205,6 +274,8 @@ try {
 function init() {
   state.soundsOn = getSoundsEnabled();
   if (els.soundVolume) els.soundVolume.value = String(Math.round(getSoundVolume() * 100));
+  if (els.soundboardVolume) els.soundboardVolume.value = String(Math.round(getSoundboardVolume() * 100));
+  loadPeerVolumes();
   const formatted = formatCode(state.code);
   els.gateCode.textContent = formatted || '—';
   els.roomCode.textContent = formatted || '—';
@@ -239,6 +310,8 @@ function init() {
   applyStatusLabel();
   updateDocumentTitle();
   updateSoundUi();
+  renderSoundboardLabels();
+  preloadCustomEmojis();
   updateDropLabel();
   updateSearchUi();
   updateChatEmpty(0);
@@ -309,12 +382,14 @@ function bindEvents() {
   if (els.emojiMenu) {
     els.emojiMenu.replaceChildren();
     for (const emoji of EMOJIS) {
-      const button = el('button', 'emoji-choice', emoji);
+      const button = el('button', 'emoji-choice');
       button.type = 'button';
       button.dataset.emoji = emoji;
-      button.setAttribute('aria-label', emoji);
+      button.setAttribute('aria-label', `:${emoji}:`);
+      button.title = `:${emoji}:`;
+      button.append(customEmojiImage(emoji, 'custom-emoji custom-emoji-sm'));
       button.addEventListener('click', () => {
-        insertEmoji(emoji);
+        insertEmoji(`:${emoji}:`);
         closeEmojiMenu();
       });
       els.emojiMenu.append(button);
@@ -365,17 +440,37 @@ function bindEvents() {
   els.soundToggle?.addEventListener('click', toggleSounds);
   els.soundVolume?.addEventListener('input', () => setSoundVolume(Number(els.soundVolume.value) / 100));
   els.soundTest?.addEventListener('click', () => playSound('success', { force: true }));
-  // Right-click admin menu (people + tiles)
+  // Soundboard + deafen
+  els.soundboardBtn?.addEventListener('click', () => toggleSoundboard());
+  els.soundboardClose?.addEventListener('click', () => toggleSoundboard(false));
+  els.soundboardVolume?.addEventListener('input', () => setSoundboardVolume(Number(els.soundboardVolume.value) / 100));
+  els.deafenBtn?.addEventListener('click', () => toggleDeafen());
+  if (els.boardEmoji) {
+    els.boardEmoji.replaceChildren();
+    for (const emoji of CUSTOM_EMOJIS) {
+      const option = document.createElement('option');
+      option.value = emoji.id;
+      option.textContent = emoji.id;
+      els.boardEmoji.append(option);
+    }
+  }
+  els.boardAddForm?.addEventListener('submit', (event) => { event.preventDefault(); addCustomSound(); });
+  els.boardClearBtn?.addEventListener('click', clearCustomSounds);
+  renderSoundboardGrid();
+  // Right-click menu (people + tiles): per-peer volume for everyone,
+  // admin actions additionally when you are the host.
   document.addEventListener('contextmenu', (event) => {
     const node = event.target?.closest?.('.person, .tile');
     if (!node?.dataset?.participant) return;
-    if (!state.isHost) return;
     if (node.dataset.participant === state.selfId) return;
     event.preventDefault();
-    openAdminMenu(node.dataset.participant, event.clientX, event.clientY);
+    openParticipantMenu(node.dataset.participant, event.clientX, event.clientY);
   });
   document.addEventListener('click', (event) => {
     if (els.ctxMenu && !els.ctxMenu.hidden && !els.ctxMenu.contains(event.target)) closeAdminMenu();
+  });
+  document.addEventListener('input', (event) => {
+    if (event.target?.closest?.('[data-volume-input]')) syncMasterVolume();
   });
   els.micSettingsBtn?.addEventListener('click', openMicSettings);
   els.micClose?.addEventListener('click', closeMicSettings);
@@ -441,6 +536,22 @@ function bindEvents() {
       if (emoji) state.socket?.emit('reaction:send', { emoji });
     });
   });
+  // Floating reactions use the same custom emoji picker (all 43).
+  if (els.reactionMenu) {
+    for (const emoji of CUSTOM_EMOJIS) {
+      const button = el('button', 'reaction-choice reaction-choice-custom');
+      button.type = 'button';
+      button.dataset.emoji = emoji.id;
+      button.setAttribute('aria-label', `:${emoji.id}:`);
+      button.title = `:${emoji.id}:`;
+      button.append(customEmojiImage(emoji.id, 'custom-emoji custom-emoji-sm'));
+      button.addEventListener('click', () => {
+        closeReactionMenu();
+        state.socket?.emit('reaction:send', { emoji: emoji.id });
+      });
+      els.reactionMenu.append(button);
+    }
+  }
 
   els.screenStage.addEventListener('click', cycleScreenShare);
 
@@ -640,13 +751,33 @@ function applyJoinState(response) {
   }
 
   state.messages = response.room.messages ?? [];
+  state.customSounds = Array.isArray(response.room.customSounds) ? response.room.customSounds : [];
+  renderSoundboardGrid();
   state.pinnedMessageId = response.room.pinnedMessageId ?? null;
   state.lastDay = null;
   state.speaking.clear();
+  applySavedPeerVolumes();
+  syncMasterVolume();
   renderMessages();
   renderAll();
   renderPinned();
   updateDocumentTitle();
+}
+
+function syncMasterVolume() {
+  const master = getSettings().volume ?? 1;
+  state.mesh?.setMasterVolume(state.deafened ? 0 : master);
+}
+
+function toggleDeafen(force) {
+  state.deafened = typeof force === 'boolean' ? force : !state.deafened;
+  state.mesh?.setDeafened(state.deafened);
+  if (els.deafenBtn) {
+    els.deafenBtn.setAttribute('aria-pressed', String(state.deafened));
+    els.deafenBtn.classList.toggle('is-active', state.deafened);
+  }
+  if (els.deafenLabel) els.deafenLabel.textContent = t(state.deafened ? 'deafen.on' : 'deafen.off');
+  playSound(state.deafened ? 'click' : 'success');
 }
 
 function renderPinned() {
@@ -827,6 +958,9 @@ function bindRoomEvents(socket) {
   socket.on('peer:joined', ({ participant } = {}) => {
     if (!participant?.id) return;
     state.participants.set(participant.id, participant);
+    const volume = getPeerVolume(participant);
+    if (volume !== 1) state.peerVolumes.set(participant.id, volume);
+    state.mesh?.setPeerVolume(participant.id, volume);
     if (state.soundsOn) playSound('join');
     renderTiles();
     renderPeople();
@@ -860,9 +994,7 @@ function bindRoomEvents(socket) {
       state.activeScreenId = null;
     }
     if (participant.handRaised && participant.id !== state.selfId) playSound('hand');
-    renderTiles();
-    renderPeople();
-    updateStageHeader();
+    queueRender();
     updateScreenStage();
     renderControls();
   });
@@ -909,6 +1041,37 @@ function bindRoomEvents(socket) {
   socket.on('chat:typing', ({ id, name, typing } = {}) => {
     if (!id || id === state.selfId) return;
     setTypingUser(id, name, typing);
+  });
+
+  socket.on('soundboard:play', ({ id, custom = false, url = '', emojiId = '', soundName = '', name, from } = {}) => {
+    if (custom) {
+      if (!url || !String(url).startsWith('/uploads/')) return;
+      playCustomSound(url);
+      if (from !== state.selfId) floatCustomEmoji(name || t('screen.someone'), emojiId || 'star', soundName || '');
+      return;
+    }
+    if (!id || !isSoundboardId(id)) return;
+    playSoundboard(id);
+    if (from !== state.selfId) floatCustomEmoji(name || t('screen.someone'), soundboardEmojiId(id), t(`soundboard.${id}`));
+  });
+
+  socket.on('soundboard:added', ({ sound } = {}) => {
+    if (!sound?.id || !sound?.url) return;
+    if (!state.customSounds.some((s) => s.id === sound.id)) state.customSounds.push(sound);
+    renderSoundboardGrid();
+    toast(t('soundboard.added'), 'info', 2400);
+  });
+
+  socket.on('soundboard:deleted', ({ id } = {}) => {
+    if (!id) return;
+    state.customSounds = state.customSounds.filter((s) => s.id !== id);
+    renderSoundboardGrid();
+  });
+
+  socket.on('soundboard:cleared', () => {
+    state.customSounds = [];
+    renderSoundboardGrid();
+    toast(t('soundboard.cleared'), 'info', 2400);
   });
 
   socket.on('reaction:receive', ({ name, emoji, id } = {}) => {
@@ -989,6 +1152,20 @@ function updatePresence() {
 }
 
 /* ---------------- Rendering ---------------- */
+
+// Batch rapid presence bursts into one frame (12 ppl toggling mics used
+// to re-render everyone's tiles+list dozens of times per second).
+let renderQueued = false;
+function queueRender() {
+  if (renderQueued) return;
+  renderQueued = true;
+  requestAnimationFrame(() => {
+    renderQueued = false;
+    renderTiles();
+    renderPeople();
+    updateStageHeader();
+  });
+}
 
 function renderAll() {
   renderTiles();
@@ -1087,6 +1264,20 @@ function updateTile(tile, participant) {
     if (initialsNode) initialsNode.textContent = initials(participant.name);
   }
 
+  // Volume badge (left corner) when adjusted away from 100%.
+  if (!isSelf && getPeerVolume(participant) !== 1) {
+    let volBadge = $('.tile-vol', tile);
+    if (!volBadge) {
+      volBadge = document.createElement('span');
+      volBadge.className = 'tile-vol';
+      tile.append(volBadge);
+    }
+    volBadge.replaceChildren();
+    volBadge.append(icon('i-volume'), document.createTextNode(`${Math.round(getPeerVolume(participant) * 100)}%`));
+  } else {
+    $('.tile-vol', tile)?.remove();
+  }
+
   const badges = $('.tile-badges', tile);
   if (badges) {
     badges.replaceChildren();
@@ -1180,6 +1371,14 @@ function renderPeople() {
     statusText.textContent = participantState(participant);
 
     body.append(nameRow, statusText);
+    const volume = getPeerVolume(participant);
+    if (participant.id !== state.selfId && volume !== 1) {
+      const volBadge = document.createElement('span');
+      volBadge.className = 'person-vol';
+      volBadge.append(icon('i-volume'));
+      volBadge.append(document.createTextNode(`${Math.round(volume * 100)}%`));
+      body.append(volBadge);
+    }
 
     const status = document.createElement('span');
     status.className = 'person-status';
@@ -1578,6 +1777,19 @@ function renderMessageText(container, text) {
 
 function appendHighlighted(parent, segment) {
   if (!segment) return;
+  // Custom Hush emoji shortcodes (:laugh:) render as images, even inside
+  // searched/highlighted text — the shortcode stays in the stored text.
+  for (const part of splitEmojiShortcodes(segment)) {
+    if (part.emoji) {
+      parent.append(customEmojiImage(part.emoji, 'custom-emoji message-emoji'));
+      continue;
+    }
+    appendHighlightedText(parent, part.text);
+  }
+}
+
+function appendHighlightedText(parent, segment) {
+  if (!segment) return;
   const query = state.searchQuery.trim();
   if (!query) {
     parent.append(document.createTextNode(segment));
@@ -1660,11 +1872,12 @@ function buildMessageMeta(message = {}) {
     chip.title = ids.length === 1
       ? t('chat.reactionOne')
       : t('chat.reactionMany', { count: ids.length });
-    chip.append(document.createTextNode(emoji), el('span', '', String(ids.length)));
+    chip.append(customEmojiImage(emoji, 'custom-emoji custom-emoji-xs'), el('span', '', String(ids.length)));
     meta.append(chip);
   }
 
-  const react = el('button', 'message-react', '🙂');
+  const react = el('button', 'message-react');
+  react.append(customEmojiImage('smile', 'custom-emoji custom-emoji-xs'));
   react.type = 'button';
   react.dataset.action = 'react';
   react.title = t('chat.reactTitle');
@@ -1942,11 +2155,12 @@ function openReactionPopover(anchor, messageId) {
   popover.setAttribute('role', 'menu');
 
   for (const emoji of REACTIONS) {
-    const button = el('button', 'reaction-choice', emoji);
+    const button = el('button', 'reaction-choice');
     button.type = 'button';
     button.dataset.emoji = emoji;
     button.setAttribute('role', 'menuitem');
-    button.setAttribute('aria-label', t('chat.reactWith', { emoji }));
+    button.setAttribute('aria-label', t('chat.reactWith', { emoji: `:${emoji}:` }));
+    button.append(customEmojiImage(emoji, 'custom-emoji custom-emoji-sm'));
     button.addEventListener('click', () => {
       closeReactionPopover();
       sendMessageReaction(messageId, emoji);
@@ -2028,8 +2242,20 @@ function closeReactionMenu() {
 
 function floatReaction(name, emoji) {
   if (!els.reactionLayer) return;
+  // Legacy "custom:<id>" form still renders; anything else is ignored.
+  const id = typeof emoji === 'string' && emoji.startsWith('custom:') ? emoji.slice(7) : emoji;
+  if (!isCustomEmoji(id)) return;
   const node = el('div', 'floating-reaction');
-  node.append(el('span', '', emoji), el('small', '', name));
+  node.append(customEmojiImage(id), el('small', '', name));
+  node.style.left = `${8 + Math.random() * 78}%`;
+  els.reactionLayer.append(node);
+  setTimeout(() => node.remove(), 3200);
+}
+
+function floatCustomEmoji(name, emojiId, label = '') {
+  if (!els.reactionLayer) return;
+  const node = el('div', 'floating-reaction');
+  node.append(customEmojiImage(emojiId || 'star'), el('small', '', label ? `${name} · ${label}` : name));
   node.style.left = `${8 + Math.random() * 78}%`;
   els.reactionLayer.append(node);
   setTimeout(() => node.remove(), 3200);
@@ -2574,6 +2800,7 @@ function leaveRoom() {
   } catch {
     // The socket may already be gone.
   }
+  state.customSounds = [];
   state.mesh?.dispose();
   state.socket?.disconnect();
   window.location.href = '/';
@@ -2629,6 +2856,7 @@ function handleLanguageChange() {
   renderMessages();
   renderPinned();
   renderAll();
+  renderSoundboardLabels();
   renderTyping();
   renderControls();
   updateDocumentTitle();
@@ -2648,12 +2876,15 @@ function handleLanguageChange() {
 function handleShortcut(event) {
   if (event.key === 'Escape') {
     closeShortcuts();
+    closeMicSettings();
     closeReactionMenu();
     closeReactionPopover();
+    closeAdminMenu();
+    toggleSoundboard(false);
     return;
   }
 
-  if (els.shortcutsDialog?.open) return;
+  if (els.shortcutsDialog?.open || els.micDialog?.open) return;
 
   const target = event.target;
   const inField =
@@ -2709,6 +2940,14 @@ function handleShortcut(event) {
       event.preventDefault();
       refreshPing();
       break;
+    case 'b':
+      event.preventDefault();
+      toggleSoundboard();
+      break;
+    case 'd':
+      event.preventDefault();
+      toggleDeafen();
+      break;
     default:
       break;
   }
@@ -2735,33 +2974,234 @@ function dayLabel(timestamp) {
   return intlDateTime(date, { weekday: 'long', month: 'short', day: 'numeric' }) || date.toDateString();
 }
 
-/* ---------------- Admin context menu (right-click) ---------------- */
+/* ---------------- Soundboard ---------------- */
 
-function openAdminMenu(targetId, x, y) {
+function renderSoundboardGrid() {
+  if (!els.soundboardGrid) return;
+  els.soundboardGrid.replaceChildren();
+  // Built-in sounds with custom Hush emojis (public/emoji/).
+  for (const sound of SOUNDBOARD_SOUNDS) {
+    const button = el('button', 'soundboard-sound');
+    button.type = 'button';
+    button.dataset.sound = sound.id;
+    const face = el('span', 'soundboard-emoji');
+    face.append(customEmojiImage(sound.emojiId));
+    button.append(face);
+    const name = el('span', 'soundboard-name');
+    name.dataset.boardName = sound.id;
+    name.textContent = t(`soundboard.${sound.id}`);
+    button.append(name);
+    button.addEventListener('click', () => playBoardSound(sound.id));
+    els.soundboardGrid.append(button);
+  }
+  // This room's custom sounds (uploaded audio).
+  for (const sound of state.customSounds) {
+    const button = el('button', 'soundboard-sound is-custom');
+    button.type = 'button';
+    button.dataset.sound = sound.id;
+    const face = el('span', 'soundboard-emoji');
+    face.append(customEmojiImage(sound.emojiId || 'star'));
+    button.append(face);
+    button.append(el('span', 'soundboard-name', sound.name || t('soundboard.custom')));
+    button.title = sound.name || '';
+    button.addEventListener('click', () => playBoardSound(sound.id));
+    const mine = sound.addedById === state.selfId;
+    if (mine || state.isHost) {
+      const del = el('button', 'custom-btn-delete', '×');
+      del.type = 'button';
+      del.title = t('soundboard.delete');
+      del.setAttribute('aria-label', t('soundboard.delete'));
+      del.addEventListener('click', (event) => { event.stopPropagation(); deleteCustomSound(sound.id); });
+      button.append(del);
+    }
+    els.soundboardGrid.append(button);
+  }
+  if (els.boardClearBtn) els.boardClearBtn.hidden = !(state.isHost && state.customSounds.length);
+}
+
+async function addCustomSound() {
+  const file = els.boardFile?.files?.[0];
+  if (!file) { toast(t('soundboard.invalidFile'), 'error', 3600); return; }
+  if (state.customSounds.length >= 12) { toast(t('soundboard.boardFull'), 'error', 3600); return; }
+  if (els.boardAddBtn) els.boardAddBtn.disabled = true;
+  try {
+    const body = new FormData();
+    body.append('file', file);
+    body.append('name', els.boardName?.value || file.name.replace(/\.[^.]+$/, ''));
+    body.append('emojiId', els.boardEmoji?.value || 'star');
+    body.append('addedById', state.selfId || '');
+    body.append('addedBy', state.selfName || '');
+    const response = await fetch(`/api/rooms/${encodeURIComponent(state.code)}/soundboard`, { method: 'POST', body });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const key = data.error === 'board-full' ? 'soundboard.boardFull'
+        : data.error === 'unsupported-file-type' || data.error === 'limit_file_size' ? 'soundboard.invalidFile'
+        : 'error.generic';
+      throw new Error(key);
+    }
+    if (els.boardFile) els.boardFile.value = '';
+    if (els.boardName) els.boardName.value = '';
+  } catch (error) {
+    toast(errorText(error, 'error.generic'), 'error', 4200);
+  } finally {
+    if (els.boardAddBtn) els.boardAddBtn.disabled = false;
+  }
+}
+
+async function deleteCustomSound(id) {
+  try {
+    const response = await emitAck('soundboard:deleteCustom', { id }, 5000);
+    if (!response?.ok) throw new Error(response?.error === 'not-admin' ? 'admin.notAdmin' : 'soundboard.invalidFile');
+    toast(t('soundboard.removed'), 'info', 2200);
+  } catch (error) {
+    toast(errorText(error, 'error.generic'), 'error', 3600);
+  }
+}
+
+async function clearCustomSounds() {
+  try {
+    const response = await emitAck('soundboard:clearCustom', {}, 5000);
+    if (!response?.ok) throw new Error('admin.notAdmin');
+  } catch (error) {
+    toast(errorText(error, 'error.generic'), 'error', 3600);
+  }
+}
+
+function toggleSoundboard(force) {
+  state.soundboardOpen = typeof force === 'boolean' ? force : !state.soundboardOpen;
+  if (els.soundboardPanel) els.soundboardPanel.hidden = !state.soundboardOpen;
+  if (els.soundboardBtn) {
+    els.soundboardBtn.setAttribute('aria-pressed', String(state.soundboardOpen));
+    els.soundboardBtn.setAttribute('aria-expanded', String(state.soundboardOpen));
+  }
+  if (state.soundboardOpen) renderSoundboardLabels();
+}
+
+function renderSoundboardLabels() {
+  if (els.soundboardTitle) els.soundboardTitle.textContent = t('soundboard.title');
+  if (els.soundboardLabel) els.soundboardLabel.textContent = t('soundboard.open');
+  if (els.boardAddTitle) els.boardAddTitle.textContent = t('soundboard.addTitle');
+  if (els.boardAddNote) els.boardAddNote.textContent = t('soundboard.addNote');
+  if (els.boardAddBtn) els.boardAddBtn.textContent = t('soundboard.add');
+  if (els.boardClearBtn) els.boardClearBtn.textContent = t('soundboard.clearAll');
+  if (els.boardName) els.boardName.placeholder = t('soundboard.addName');
+  if (els.boardEmoji) els.boardEmoji.setAttribute('aria-label', t('soundboard.chooseEmoji'));
+  if (els.soundboardBtn) {
+    els.soundboardBtn.title = t('soundboard.title');
+    els.soundboardBtn.setAttribute('aria-label', t('soundboard.title'));
+  }
+  if (els.deafenLabel) els.deafenLabel.textContent = t(state.deafened ? 'deafen.on' : 'deafen.off');
+  if (els.deafenBtn) {
+    els.deafenBtn.title = t(state.deafened ? 'deafen.on' : 'deafen.off');
+    els.deafenBtn.setAttribute('aria-label', t(state.deafened ? 'deafen.on' : 'deafen.off'));
+  }
+  for (const node of document.querySelectorAll('[data-board-name]')) {
+    node.textContent = t(`soundboard.${node.dataset.boardName}`);
+  }
+}
+
+async function playBoardSound(id) {
+  if (Date.now() < state.boardCooldownUntil) return;
+  // Built-in: synth. Custom: play the uploaded file locally first.
+  if (isSoundboardId(id)) {
+    state.boardCooldownUntil = Date.now() + 700;
+    playSoundboard(id);
+  } else {
+    const sound = state.customSounds.find((s) => s.id === id);
+    if (!sound) return;
+    state.boardCooldownUntil = Date.now() + 700;
+    playCustomSound(sound.url);
+  }
+  if (state.socket?.connected && state.online) {
+    try { await emitAck('soundboard:play', { id }, 4000); } catch { /* local play already happened */ }
+  }
+}
+
+/* ---------------- Context menu (right-click): volume + admin ---------------- */
+
+function openParticipantMenu(targetId, x, y) {
   if (!els.ctxMenu) return;
   const target = state.participants.get(targetId);
   if (!target) return;
   els.ctxMenu.replaceChildren();
   const title = el('div', 'ctx-title', t('admin.menuFor', { name: target.name }));
   els.ctxMenu.append(title);
-  const mk = (label, danger, handler) => {
-    const btn = el('button', `ctx-item${danger ? ' is-danger' : ''}`, label);
+
+  // Per-peer voice volume — available to everyone, not just the host.
+  const volume = getPeerVolume(target);
+  const section = el('div', 'ctx-volume');
+  const row = el('div', 'ctx-volume-label');
+  row.append(el('span', '', t('volume.title')));
+  const valueOut = el('span', 'ctx-volume-value', `${Math.round(volume * 100)}%`);
+  row.append(valueOut);
+  const slider = document.createElement('input');
+  slider.type = 'range';
+  slider.min = '0'; slider.max = '200'; slider.step = '5';
+  slider.value = String(Math.round(volume * 100));
+  slider.setAttribute('aria-label', t('volume.for', { name: target.name }));
+  slider.addEventListener('input', () => {
+    const next = setPeerVolume(target, Number(slider.value) / 100);
+    valueOut.textContent = `${Math.round(next * 100)}%`;
+  });
+  slider.addEventListener('change', () => playSound('click'));
+  // Stop the slider from closing the menu via the document click handler.
+  slider.addEventListener('click', (event) => event.stopPropagation());
+  slider.addEventListener('pointerdown', (event) => event.stopPropagation());
+  const quick = el('div', 'ctx-volume-quick');
+  for (const [label, value] of [['0%', 0], ['50%', 0.5], ['100%', 1], ['150%', 1.5], ['200%', 2]]) {
+    const btn = el('button', '', label);
     btn.type = 'button';
-    btn.setAttribute('role', 'menuitem');
-    btn.addEventListener('click', () => { closeAdminMenu(); handler(); });
-    els.ctxMenu.append(btn);
-  };
-  mk(t('admin.kick'), true, () => adminAction('admin:kick', targetId, t('admin.kickConfirm', { name: target.name })));
-  mk(t('admin.disconnect'), true, () => adminAction('admin:disconnect', targetId, t('admin.kickConfirm', { name: target.name })));
-  mk(t('admin.mute'), false, () => adminAction('admin:mute', targetId, null));
-  mk(t('admin.ban'), true, () => adminAction('admin:ban', targetId, t('admin.banConfirm', { name: target.name, minutes: 60 })));
-  mk(t('admin.transfer'), false, () => adminAction('admin:transfer', targetId, null));
+    btn.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const next = setPeerVolume(target, value);
+      slider.value = String(Math.round(next * 100));
+      valueOut.textContent = `${Math.round(next * 100)}%`;
+    });
+    quick.append(btn);
+  }
+  const muteRow = el('button', 'ctx-item', volume === 0 ? t('volume.unmute') : t('volume.mute'));
+  muteRow.type = 'button';
+  muteRow.setAttribute('role', 'menuitem');
+  muteRow.addEventListener('click', () => {
+    setPeerVolume(target, volume === 0 ? 1 : 0);
+    closeAdminMenu();
+  });
+  const resetRow = el('button', 'ctx-item', t('volume.reset'));
+  resetRow.type = 'button';
+  resetRow.setAttribute('role', 'menuitem');
+  resetRow.addEventListener('click', () => {
+    setPeerVolume(target, 1);
+    closeAdminMenu();
+  });
+  section.append(row, slider, quick);
+  els.ctxMenu.append(section, muteRow, resetRow);
+
+  // Admin actions only when you are the host.
+  if (state.isHost) {
+    els.ctxMenu.append(el('div', 'ctx-sep'));
+    const mk = (label, danger, handler) => {
+      const btn = el('button', `ctx-item${danger ? ' is-danger' : ''}`, label);
+      btn.type = 'button';
+      btn.setAttribute('role', 'menuitem');
+      btn.addEventListener('click', () => { closeAdminMenu(); handler(); });
+      els.ctxMenu.append(btn);
+    };
+    mk(t('admin.kick'), true, () => adminAction('admin:kick', targetId, t('admin.kickConfirm', { name: target.name })));
+    mk(t('admin.disconnect'), true, () => adminAction('admin:disconnect', targetId, t('admin.kickConfirm', { name: target.name })));
+    mk(t('admin.mute'), false, () => adminAction('admin:mute', targetId, null));
+    mk(t('admin.ban'), true, () => adminAction('admin:ban', targetId, t('admin.banConfirm', { name: target.name, minutes: 60 })));
+    mk(t('admin.transfer'), false, () => adminAction('admin:transfer', targetId, null));
+  }
+
   els.ctxMenu.hidden = false;
-  const w = 220, h = els.ctxMenu.offsetHeight || 160;
+  const w = 240, h = els.ctxMenu.offsetHeight || 240;
   els.ctxMenu.style.left = `${Math.min(x, window.innerWidth - w - 8)}px`;
   els.ctxMenu.style.top = `${Math.min(y, window.innerHeight - h - 8)}px`;
   playSound('click');
 }
+
+// Backwards-compatible alias (older code path).
+function openAdminMenu(targetId, x, y) { openParticipantMenu(targetId, x, y); }
 
 function closeAdminMenu() {
   if (els.ctxMenu) els.ctxMenu.hidden = true;

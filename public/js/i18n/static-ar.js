@@ -35,7 +35,7 @@ export const staticAr = {
   You: 'أنت',
   'Are we still on for 3?': 'هل ما زلنا متفقين على الثالثة؟',
   "Yep — room's open.": 'نعم — الغرفة مفتوحة.',
-  'Joining now 👋': 'أنضم الآن 👋',
+  'Joining now': 'أنضم الآن',
   'Sam is typing': 'سام يكتب',
   'Message the room…': 'راسل الغرفة…',
 
@@ -71,7 +71,7 @@ export const staticAr = {
   'Camera on': 'الكاميرا تعمل',
   'Sharing screen': 'يشارك الشاشة',
   "I'll drop the notes here after.": 'سأضع الملاحظات هنا بعد قليل.',
-  'Perfect. 👌': 'ممتاز. 👌',
+  'Perfect.': 'ممتاز.',
 
   // Split section: screen share
   "Show, don't explain": 'أرِهم، ولا تشرح',
@@ -324,5 +324,23 @@ export const staticAr = {
   Unban: 'إلغاء الحظر',
   'Right-click a person for admin actions': 'انقر بزر الفأرة الأيمن على شخص لإجراءات الإدارة',
   'Sound volume': 'مستوى الصوت',
-  Test: 'تجربة'
+  Test: 'تجربة',
+  Soundboard: 'لوحة الصوت',
+  'Close soundboard': 'إغلاق لوحة الصوت',
+  'Voice volume': 'مستوى صوت الشخص',
+  'Reset to 100%': 'إعادة إلى 100٪',
+  Deafen: 'كتم السماعات',
+  'Soundboard (B)': 'لوحة الصوت (B)',
+  'Deafen (D)': 'كتم السماعات (D)',
+  'Soundboard volume': 'مستوى صوت اللوحة',
+  'Open the soundboard': 'فتح لوحة الصوت',
+  'Deafen (mute all speakers)': 'كتم السماعات (كتم الجميع)',
+  'Add a custom sound for this room': 'أضف صوتًا مخصصًا لهذه الغرفة',
+  'Audio file': 'ملف صوتي',
+  'Sound name': 'اسم الصوت',
+  'Choose emoji': 'اختر إيموجي',
+  Add: 'إضافة',
+  'Clear all': 'مسح الكل',
+  'Audio only, 2 MB max. Custom sounds are deleted completely when the last person leaves this room.':
+    'صوت فقط، بحد أقصى 2 ميغابايت. تُحذف الأصوات المخصصة كليًا عند مغادرة آخر شخص لهذه الغرفة.'
 };

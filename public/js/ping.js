@@ -1,15 +1,21 @@
 import { t, onLanguageChange } from './i18n.js';
 
-// Live latency ("ping") meter — v3:
-// - 3 parallel probes per round, take the MIN (best) RTT — kills polling/queue jitter
-// - displayed value = min of last 5 rounds (games-style best ping, drops spikes fast)
-// - monotonic clock (performance.now), warmup samples discarded
-// - median/average/jitter still reported in the Connection card
+// Live latency ("ping") meter — v4 (lower + fresher than v3):
+// - 2 parallel probes per round, take the MIN (best) RTT — kills
+//   polling/queue jitter without flooding the server (v3 used 3, which
+//   added contention and raised the very ping it was measuring)
+// - displayed value = min of last 4 rounds, updated every ~3s when good
+//   (v3 waited 5s, so improvements showed late)
+// - monotonic clock (performance.now), only 1 warmup round discarded
+// - paused while the tab is hidden (no wasted probes / battery)
+// - chart only redraws when the People panel is actually visible
 // Prefers Socket.IO round-trip; falls back to GET /api/ping.
+// NOTE: ping measures real network RTT — it cannot go below physics.
+// The server-side wins (TCP_NODELAY, 5s heartbeat) are in src/app.js.
 
-const TIMEOUT_MS = 2500;
-const MAX_SAMPLES = 20;
-const PROBES = 3;
+const TIMEOUT_MS = 1500;
+const MAX_SAMPLES = 24;
+const PROBES = 2;
 
 let started = false;
 let getSocket = () => null;
@@ -80,7 +86,7 @@ async function measureViaSocket(socket) {
   for (let i = 0; i < PROBES; i += 1) probes.push(probeOnce(socket, ++seq).catch(() => null));
   const results = (await Promise.all(probes)).filter((v) => v != null);
   if (!results.length) throw new Error('all-probes-failed');
-  return Math.min(...results); // best of 3
+  return Math.min(...results); // best of 2
 }
 
 async function measureViaHttp() {
@@ -102,6 +108,7 @@ async function measureViaHttp() {
 }
 
 async function measure() {
+  if (document.hidden) { scheduleNext(); return; }
   let ms = null;
   try {
     const socket = getSocket?.();
@@ -109,13 +116,18 @@ async function measure() {
     else ms = await measureViaHttp();
   } catch { ms = null; }
   lastSample = ms;
+  // During heavy media (screen share) the signaling socket queues behind
+  // media packets — the HTTP probe is not suppressed, but don't let one
+  // burst round poison the displayed value.
   if (ms != null) {
-    if (warmup < 2) { warmup += 1; /* discard first 2 warmup rounds */ }
+    if (warmup < 1) { warmup += 1; samples.push(ms); if (displayed == null) displayed = ms; }
     else {
       samples.push(ms);
       if (samples.length > MAX_SAMPLES) samples.shift();
       rounds.push(ms);
-      if (rounds.length > 5) rounds.shift();
+      if (rounds.length > 4) rounds.shift();
+      // Displayed = recent best (min of last 4 rounds): drops show
+      // immediately, a single spike cannot poison the badge.
       displayed = Math.min(...rounds);
     }
   }
@@ -125,10 +137,10 @@ async function measure() {
 
 function nextInterval() {
   const q = qualityFor(displayed);
-  if (q === 'good') return 5000;
-  if (q === 'fair') return 3500;
-  if (q === 'poor') return 2000;
-  return 1200;
+  if (q === 'good') return 3000;
+  if (q === 'fair') return 2000;
+  if (q === 'poor') return 1200;
+  return 900;
 }
 
 function scheduleNext() {
@@ -140,6 +152,10 @@ function scheduleNext() {
 function drawChart() {
   const canvas = document.querySelector('[data-ping-chart]');
   if (!canvas) return;
+  // Skip the canvas work when the panel holding it is hidden.
+  if (canvas.offsetParent === null && !canvas.closest('.panel-people')) return;
+  const panel = canvas.closest('.panel-people');
+  if (panel && panel.hidden) return;
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   const width = canvas.clientWidth || 300;
   const height = canvas.clientHeight || 56;
@@ -211,7 +227,7 @@ function render() {
   drawChart();
 }
 
-export function refreshPing() { warmup = 0; void measure(); }
+export function refreshPing() { warmup = 0; if (timer) clearTimeout(timer); void measure(); }
 export function getPingSamples() { return [...samples]; }
 export function getPingModel() {
   return { last: lastSample, displayed, median: median(samples), avg: average(), jitter: jitter(), quality: qualityFor(displayed) };

@@ -1,6 +1,75 @@
 {
-  "version": "3.0.0",
+  "version": "6.0.0",
   "entries": [
+    {
+      "date": "2026-11-07",
+      "ts": 1763100000000,
+      "kind": "update",
+      "kindEn": "Update",
+      "kindAr": "تحديث",
+      "titleEn": "45 custom Hush emojis — the whole site uses only them, zero global emojis",
+      "titleAr": "45 إيموجي Hush مخصصًا — الموقع كله يستخدمها فقط، بدون أي إيموجي عالمي",
+      "pointsEn": [
+        "NEW: 27 more hand-made SVGs in public/emoji/ (smile, laugh, love, cool, think, sad, angry, party, sleep, mindblown, pray, strong, hundred, sparkles, glowstar, idea, book, coffee, pizza, ball, game, rocket, check, cross, eyes, wave, ok, thumbs up/down) — 45 total.",
+        "Every Unicode emoji was removed from the site: chat picker, message reactions, floating reactions, soundboard, and the landing page now show Hush emoji images only (verified by a test that scans all public assets).",
+        "Chat emojis are now shortcodes (:laugh:) that render as Hush images in messages — including inside search highlights — so typing :tada: shows the site's own party emoji.",
+        "Message reactions and floating reactions store custom emoji ids; the server rejects Unicode reactions. The landing demo and its check marks use Hush images too."
+      ],
+      "pointsAr": [
+        "جديد: 27 ملف SVG يدويًا إضافيًا في public/emoji/ (ابتسامة، ضحك، حب، بارد، تفكير، حزن، غضب، احتفال، نوم، دهشة، دعاء، قوة، مئة، بريق، نجمة متوهجة، فكرة، كتاب، قهوة، بيتزا، كرة، لعبة، صاروخ، صح، خطأ، عيون، تلويح، تمام، إبهام أعلى/أسفل) — المجموع 45.",
+        "أُزيل كل إيموجي يونيكود من الموقع: منتقي الدردشة وتفاعلات الرسائل والتفاعلات العائمة ولوحة الصوت والصفحة الرئيسية تعرض صور إيموجي Hush فقط (يتحقق اختبار بمسح كل ملفات public).",
+        "أصبح إيموجي الدردشة أكوادًا مثل :laugh: تُعرَض كصور Hush في الرسائل — حتى داخل إبراز البحث — فكتابة :tada: تُظهر إيموجي الاحتفال الخاص بالموقع.",
+        "تفاعلات الرسائل والتفاعلات العائمة تخزّن معرفات إيموجي مخصصة؛ والخادم يرفض التفاعلات اليونيكود. وعرض الصفحة الرئيسية وعلامات الصح فيها تستخدم صور Hush أيضًا."
+      ]
+    },
+    {
+      "date": "2026-11-07",
+      "ts": 1763000000000,
+      "kind": "update",
+      "kindEn": "Update",
+      "kindAr": "تحديث",
+      "titleEn": "Custom Hush emojis + per-room custom soundboard (deleted when the room empties)",
+      "titleAr": "إيموجي Hush مخصص + لوحة صوت مخصصة لكل غرفة (تُحذف عند فراغها)",
+      "pointsEn": [
+        "NEW: Custom site emojis — 16 hand-made SVGs in public/emoji/ (airhorn, applause, cat, tada, heart, fire, star…). The soundboard now shows these instead of Unicode emojis, and they also work as floating reactions.",
+        "NEW: Custom soundboard per room — upload any audio clip (2 MB max, 12 per room) with a name and a custom emoji. It plays for everyone in that room only.",
+        "Custom sounds are deleted completely when the last person leaves the room (files + metadata), and again if the idle room is cleaned up — nothing lingers on disk. The adder or the host can delete one sound; the host can clear the whole board.",
+        "FIX: per-peer volume no longer double-plays when WebAudio gain-routing is active; ping badge logic cleaned up."
+      ],
+      "pointsAr": [
+        "جديد: إيموجي مخصص للموقع — 16 ملف SVG يدويًا في public/emoji/ (بوق، تصفيق، قطة، تا-دا، قلب، نار، نجمة…). لوحة الصوت تعرض هذه بدل إيموجي يونيكود، وتعمل أيضًا كتفاعلات عائمة.",
+        "جديد: لوحة صوت مخصصة لكل غرفة — ارفع أي مقطع صوتي (بحد أقصى 2 ميغابايت، 12 لكل غرفة) مع اسم وإيموجي مخصص. يُشغَّل للجميع في تلك الغرفة فقط.",
+        "تُحذف الأصوات المخصصة كليًا عند مغادرة آخر شخص للغرفة (الملفات + البيانات)، وعند تنظيف الغرفة الخاملة — لا يبقى شيء على القرص. صاحب الصوت أو المضيف يمكنه حذف صوت، والمضيف يمكنه مسح اللوحة كلها.",
+        "إصلاح: مستوى صوت كل شخص لم يعد يُشغَّل مرتين عند تفعيل توجيه WebAudio؛ ونُظّفت منطق شارة البنغ."
+      ]
+    },
+    {
+      "date": "2026-11-07",
+      "ts": 1762900000000,
+      "kind": "update",
+      "kindEn": "Update",
+      "kindAr": "تحديث",
+      "titleEn": "Soundboard + per-person volume (right-click) + ping v4 + performance fixes",
+      "titleAr": "لوحة صوت + مستوى صوت كل شخص (كليك يمين) + بنغ v4 + إصلاحات أداء",
+      "pointsEn": [
+        "NEW: Soundboard — 12 synthesized sounds (airhorn, applause, sad trombone, boing, ding, meow…) played for the whole room. Button in the toolbar or press B. No audio files, works offline.",
+        "NEW: Right-click any person or tile to set their voice volume 0–200% (slider + quick buttons + mute). WebAudio gain nodes allow true boost above 100%. Saved per room and per person across reconnects. Hosts still get admin actions below it.",
+        "NEW: Deafen (D) — mute all speakers for you only, without touching anyone else.",
+        "Ping v4: 2 probes instead of 3 (less self-contention), 3s refresh when good, 1.5s timeout, paused while the tab is hidden, chart only draws when visible.",
+        "Server: TCP_NODELAY on sockets (kills the 40ms Nagle stall), 5s heartbeat, ETag revalidation for JS/CSS (304 instead of full refetch), immutable caching for sounds.",
+        "FIX: WebRTC 'disconnected' no longer kills the call (only 'failed' does); speaking monitor no longer rebuilds itself on every packet; presence bursts batch into one render frame; notification sounds reuse decoded audio instead of refetching.",
+        "FIX: global IP counters are per-server (no cross-instance leaks in tests) and swept; client IP honors X-Forwarded-For behind proxies; shortcuts no longer fire while the mic dialog is open."
+      ],
+      "pointsAr": [
+        "جديد: لوحة صوت — 12 صوتًا مركّبًا (بوق، تصفيق، ترمبون حزين، بوينغ، جرس، مواء…) تُشغَّل للغرفة كلها. زر في الشريط أو اضغط B. بلا ملفات صوتية، ويعمل دون اتصال.",
+        "جديد: انقر بزر الفأرة الأيمن على أي شخص أو بلاطة لضبط مستوى صوته 0–200٪ (منزلق + أزرار سريعة + كتم). عقد Gain في WebAudio تسمح برفع حقيقي فوق 100٪. يُحفظ لكل غرفة ولكل شخص عبر إعادة الاتصال. المضيف ما يزال يجد إجراءات الإدارة تحته.",
+        "جديد: كتم السماعات (D) — كتم الجميع لك وحدك دون التأثير على الآخرين.",
+        "بنغ v4: مجسّان بدل 3 (ازدحام أقل)، تحديث كل 3 ثوانٍ عند الجودة، مهلة 1.5 ثانية، إيقاف أثناء إخفاء التبويب، والرسم البياني يُرسم فقط عند الظهور.",
+        "الخادم: TCP_NODELAY على المقابس (يُلغي تأخير Nagle البالغ 40ms)، نبض كل 5 ثوانٍ، تحقق ETag لملفات JS/CSS (304 بدل إعادة التنزيل الكامل)، وتخزين دائم للأصوات.",
+        "إصلاح: حالة WebRTC «disconnected» لم تعد تقطع المكالمة (فقط «failed»)؛ مراقب التحدث لم يعد يُعاد بناؤه عند كل حزمة؛ رشقات الحضور تُجمَّع في إطار عرض واحد؛ أصوات الإشعارات تُعيد استخدام الصوت المفكوك بدل إعادة جلبه.",
+        "إصلاح: عدّادات IP العالمية أصبحت لكل خادم (لا تسرب بين النسخ في الاختبارات) وتُمسح دوريًا؛ عنوان IP العميل يحترم X-Forwarded-For خلف الوكلاء؛ الاختصارات لم تعد تعمل أثناء فتح نافذة الميكروفون."
+      ]
+    },
     {
       "date": "2026-11-07",
       "ts": 1762819200000,

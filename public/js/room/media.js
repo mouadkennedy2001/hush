@@ -84,6 +84,14 @@ export class MediaMesh {
     };
     this.monitors = new Map();
     this.audioContext = null;
+    // Per-peer playback volume (0 = muted, 1 = 100%, 2 = 200% boost).
+    // Values above 1 need a WebAudio GainNode — an <audio> element caps
+    // at 1.0. Keyed by peer socket id; the room layer persists them.
+    this.peerVolumes = new Map();
+    this.peerAudio = new Map(); // peerId -> { source, gain }
+    this.masterVolume = 1; // global speaker slider (0..1)
+    this.deafened = false;
+    this._monitorStreams = new Map(); // monitor key -> stream
     this.micSettings = loadMicSettings();
     this.micFx = null;
     this.rawAudioTrack = null;
@@ -213,6 +221,68 @@ export class MediaMesh {
       if (media) this.#attachRemoteAudio(peer, media);
       peer.audioEl?.play?.().catch(() => {});
     }
+  }
+
+  /* ---------------- Per-peer + master volume ---------------- */
+
+  _effectiveVolume(peerId) {
+    if (this.deafened) return 0;
+    const peerVol = this.peerVolumes.has(peerId) ? this.peerVolumes.get(peerId) : 1;
+    return Math.max(0, peerVol) * this.masterVolume;
+  }
+
+  getPeerVolume(peerId) {
+    return this.peerVolumes.has(peerId) ? this.peerVolumes.get(peerId) : 1;
+  }
+
+  setPeerVolume(peerId, value) {
+    const volume = Math.min(2, Math.max(0, Number(value) || 0));
+    this.peerVolumes.set(peerId, volume);
+    const node = this.peerAudio.get(peerId);
+    if (node?.gain) {
+      const ctx = this.audioContext;
+      try {
+        if (ctx) node.gain.gain.setTargetAtTime(this._effectiveVolume(peerId), ctx.currentTime, 0.02);
+        else node.gain.gain.value = this._effectiveVolume(peerId);
+      } catch { /* ignore */ }
+    }
+    const peer = this.peers.get(peerId);
+    if (peer?.audioEl) {
+      peer.audioEl.dataset.peerVolume = String(volume);
+      peer.audioEl.volume = Math.min(1, this._effectiveVolume(peerId));
+      // If WebAudio gain-routing is active, the element must stay muted
+      // (otherwise the peer is heard twice). Only toggle it on fallback.
+      if (!peer.audioEl.dataset.gainRouted) {
+        peer.audioEl.muted = this._effectiveVolume(peerId) === 0;
+      }
+    }
+    return volume;
+  }
+
+  setMasterVolume(value) {
+    this.masterVolume = Math.min(1, Math.max(0, Number(value) || 0));
+    for (const [id, node] of this.peerAudio) {
+      const ctx = this.audioContext;
+      try {
+        if (ctx) node.gain.gain.setTargetAtTime(this._effectiveVolume(id), ctx.currentTime, 0.02);
+      } catch { /* ignore */ }
+    }
+    for (const [id, peer] of this.peers) {
+      if (peer.audioEl) peer.audioEl.volume = Math.min(1, this._effectiveVolume(id));
+    }
+  }
+
+  setDeafened(value) {
+    this.deafened = Boolean(value);
+    this.setMasterVolume(this.masterVolume); // re-applies effective gain
+  }
+
+  #teardownPeerAudio(peerId) {
+    const node = this.peerAudio.get(peerId);
+    if (!node) return;
+    try { node.source.disconnect(); } catch { /* ignore */ }
+    try { node.gain.disconnect(); } catch { /* ignore */ }
+    this.peerAudio.delete(peerId);
   }
 
   /* ---------------- Mic voice processing (MicFx) ---------------- */
@@ -367,6 +437,7 @@ export class MediaMesh {
       }
     }
     this.#stopMonitor(`remote:${id}`);
+    this.#teardownPeerAudio(id);
     if (peer.audioEl) {
       peer.audioEl.pause?.();
       peer.audioEl.srcObject = null;
@@ -506,8 +577,9 @@ export class MediaMesh {
     audioEl.autoplay = true;
     audioEl.playsInline = true;
     audioEl.muted = false;
-    audioEl.volume = 1;
     audioEl.dataset.peer = id;
+    audioEl.dataset.peerVolume = String(this.getPeerVolume(id));
+    audioEl.volume = Math.min(1, this._effectiveVolume(id));
     this.audioContainer.append(audioEl);
 
     peer = {
@@ -580,15 +652,16 @@ export class MediaMesh {
         // may have fired before the element was ready to play.
         this.#attachRemoteAudio(peer, channel);
       }
-      if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+      // Only 'failed' is fatal. 'disconnected' is usually transient
+      // (ICE consent loss / Wi-Fi blip) and recovers on its own —
+      // closing on it used to kill working calls and could resurrect
+      // peers who had already left the room.
+      if (pc.connectionState === 'failed') {
         const peerId = peer.id;
-        const wasFailed = pc.connectionState === 'failed';
-        // Tear the dead pair down and try one fresh negotiation so a
-        // transient network blip does not mute a peer forever.
         this.closePeer(peerId);
-        if (wasFailed) this.onError(this.translate('media.peerFailed'));
+        this.onError(this.translate('media.peerFailed'));
         setTimeout(() => {
-          if (this.peers.has(peerId) || !this.socket?.connected) return;
+          if (!this.socket?.connected) return;
           this.connectToPeer(peerId).catch(() => {});
         }, 1500);
       }
@@ -669,13 +742,56 @@ export class MediaMesh {
     // (empty) audio stream placeholder — assigning it would overwrite the
     // real media stream and silence the peer.
     if (channel.name !== 'media') return;
-    if (peer.audioEl.srcObject !== channel.streams.audio) {
-      peer.audioEl.srcObject = channel.streams.audio;
+    const stream = channel.streams.audio;
+    if (!stream?.getAudioTracks?.().length) return;
+
+    // WebAudio path: stream -> GainNode -> destination. This allows
+    // per-peer boost above 100% (up to 200%). If AudioContext fails we
+    // fall back to the plain <audio> element (clamped to 1.0).
+    const context = this.#ensureAudioContext();
+    let routed = false;
+    if (context) {
+      try {
+        context.resume?.().catch(() => {});
+        if (!this.peerAudio.has(peer.id)) {
+          const source = context.createMediaStreamSource(stream);
+          const gain = context.createGain();
+          gain.gain.value = this._effectiveVolume(peer.id);
+          source.connect(gain);
+          gain.connect(context.destination);
+          this.peerAudio.set(peer.id, { source, gain });
+        } else {
+          // Stream may have been replaced (track re-negotiated): rebuild.
+          const existing = this.peerAudio.get(peer.id);
+          if (existing.source.stream !== stream) {
+            this.#teardownPeerAudio(peer.id);
+            const source = context.createMediaStreamSource(stream);
+            const gain = context.createGain();
+            gain.gain.value = this._effectiveVolume(peer.id);
+            source.connect(gain);
+            gain.connect(context.destination);
+            this.peerAudio.set(peer.id, { source, gain });
+          }
+        }
+        routed = true;
+      } catch { /* fall through to element playback */ }
     }
-    peer.audioEl.muted = false;
-    peer.audioEl.volume = 1;
-    peer.audioEl.play?.().catch(() => {});
-    this.#monitor(`remote:${peer.id}`, channel.streams.audio);
+
+    if (peer.audioEl.srcObject !== stream) {
+      peer.audioEl.srcObject = stream;
+    }
+    const effective = this._effectiveVolume(peer.id);
+    peer.audioEl.dataset.gainRouted = routed ? '1' : '';
+    peer.audioEl.dataset.peerVolume = String(this.getPeerVolume(peer.id));
+    if (routed) {
+      // Avoid double playback: WebAudio handles the sound.
+      peer.audioEl.muted = true;
+    } else {
+      peer.audioEl.muted = effective === 0;
+      peer.audioEl.volume = Math.min(1, effective);
+      peer.audioEl.play?.().catch(() => {});
+    }
+    this.#monitor(`remote:${peer.id}`, stream);
   }
 
   /* ---------------- Local tracks ---------------- */
@@ -761,7 +877,10 @@ export class MediaMesh {
 
   #monitor(key, stream) {
     if (!stream || !stream.getAudioTracks().length) return;
+    // Don't rebuild the analyser on every attach — same stream = same monitor.
+    if (this._monitorStreams.get(key) === stream && this.monitors.has(key)) return;
     this.#stopMonitor(key);
+    this._monitorStreams.set(key, stream);
 
     const context = this.#ensureAudioContext();
     if (!context) return;
@@ -810,6 +929,7 @@ export class MediaMesh {
   }
 
   #stopMonitor(key) {
+    this._monitorStreams.delete(key);
     const stop = this.monitors.get(key);
     if (!stop) return;
     stop();

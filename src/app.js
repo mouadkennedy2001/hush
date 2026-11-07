@@ -13,8 +13,16 @@ import { attachRealtime } from './realtime.js';
 import {
   MAX_UPLOAD_BYTES,
   UPLOAD_EXTENSIONS,
-  UPLOAD_MIME_TYPES
+  UPLOAD_MIME_TYPES,
+  SOUNDBOARD_IDS,
+  CUSTOM_EMOJI_IDS,
+  CUSTOM_EMOJI_SET,
+  MAX_CUSTOM_SOUNDS_PER_ROOM,
+  MAX_BOARD_AUDIO_BYTES,
+  BOARD_AUDIO_EXTENSIONS,
+  BOARD_AUDIO_MIME_TYPES
 } from './constants.js';
+import { normalizeCustomSound } from './rooms.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -67,16 +75,23 @@ export async function createHushServer({
   await fs.mkdir(dataDir, { recursive: true });
   await fs.mkdir(uploadsDir, { recursive: true });
 
-  const rooms = new RoomManager({ dataDir, idleTtlMs, historyTtlMs, log });
+  const rooms = new RoomManager({ dataDir, uploadsDir, idleTtlMs, historyTtlMs, log });
   await rooms.init();
 
   const app = express();
   const server = http.createServer(app);
+  // Lower latency: TCP_NODELAY kills Nagle's 40ms delayed-ACK stall on
+  // small signaling packets; shorter keep-alive timeouts recycle fast.
+  server.keepAliveTimeout = 30_000;
+  server.headersTimeout = 35_000;
+  server.on('connection', (socket) => {
+    try { socket.setNoDelay?.(true); } catch { /* ignore */ }
+  });
   const io = new SocketServer(server, {
     maxHttpBufferSize: 256_000,
-    // Faster dead-peer detection = lower perceived ping + quicker reconnect.
-    pingInterval: 8000,
-    pingTimeout: 12000,
+    // Faster dead-peer detection = quicker reconnect + fresher ping.
+    pingInterval: 5000,
+    pingTimeout: 8000,
     transports: ['websocket', 'polling'],
     cors: { origin: false }
   });
@@ -157,6 +172,11 @@ export async function createHushServer({
     res.json({
       sounds: ['message', 'mention', 'join', 'leave', 'error', 'kick', 'ban', 'success', 'click', 'blip', 'hand', 'knock', 'camera', 'share', 'reaction', 'pop']
     });
+  });
+
+  app.get('/api/soundboard', (req, res) => {
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.json({ sounds: SOUNDBOARD_IDS, emojis: CUSTOM_EMOJI_IDS });
   });
 
   app.get('/api/health', async (req, res, next) => {
@@ -258,6 +278,80 @@ export async function createHushServer({
     });
   });
 
+  // Custom room soundboard: upload an audio clip for THIS room only.
+  // The file lives in uploads/<code>/board/ and is deleted completely
+  // when the last person leaves the room (see realtime leave()) or when
+  // the idle room is cleaned up. Cap: 12 sounds, 2 MB each, audio only.
+  const boardUpload = multer({
+    storage: multer.diskStorage({
+      destination(req, file, callback) {
+        try {
+          const directory = path.join(uploadsDir, req.roomCode, 'board');
+          mkdirSync(directory, { recursive: true });
+          callback(null, directory);
+        } catch (error) { callback(error); }
+      },
+      filename(req, file, callback) {
+        callback(null, `${randomUUID()}${path.extname(file.originalname).toLowerCase()}`);
+      }
+    }),
+    limits: { fileSize: MAX_BOARD_AUDIO_BYTES, files: 1 },
+    fileFilter(req, file, callback) {
+      const extension = path.extname(file.originalname).toLowerCase();
+      const lowerName = String(file.originalname || '').toLowerCase();
+      const dangerous = /\.(exe|sh|bat|js|html?|svg|php|jsp|py)$/.test(lowerName);
+      const mimeOk = BOARD_AUDIO_MIME_TYPES.has(file.mimetype) || String(file.mimetype || '').startsWith('audio/')
+        || String(file.mimetype || '').startsWith('video/webm');
+      if (dangerous || !BOARD_AUDIO_EXTENSIONS.has(extension) || !mimeOk) {
+        const error = new Error('unsupported-file-type');
+        error.status = 415;
+        return callback(error);
+      }
+      callback(null, true);
+    }
+  });
+
+  app.post('/api/rooms/:code/soundboard', uploadLimit, async (req, res, next) => {
+    const code = normalizeCode(req.params.code);
+    if (!isValidCode(code)) { req.resume(); return res.status(400).json({ error: 'invalid-code' }); }
+    if (!(await rooms.codeExists(code))) { req.resume(); return res.status(404).json({ error: 'room-not-found' }); }
+    req.roomCode = code;
+    boardUpload.single('file')(req, res, async (error) => {
+      if (error) return next(error);
+      if (!req.file) return res.status(400).json({ error: 'missing-file' });
+      try {
+        const room = await rooms.getOrCreate(code);
+        if ((room.customSounds || []).length >= MAX_CUSTOM_SOUNDS_PER_ROOM) {
+          try { await fs.unlink(req.file.path); } catch { /* ignore */ }
+          return res.status(409).json({ error: 'board-full' });
+        }
+        const emojiId = CUSTOM_EMOJI_SET.has(String(req.body?.emojiId)) ? String(req.body.emojiId) : 'star';
+        const sound = normalizeCustomSound({
+          id: randomUUID(),
+          name: cleanUploadName(req.body?.name || req.file.originalname).slice(0, 40),
+          emojiId,
+          url: `/uploads/${code}/board/${req.file.filename}`,
+          size: req.file.size,
+          mime: req.file.mimetype,
+          addedById: String(req.body?.addedById || ''),
+          addedBy: cleanUploadName(req.body?.addedBy || '').slice(0, 32),
+          createdAt: Date.now()
+        }, code);
+        if (!sound) {
+          try { await fs.unlink(req.file.path); } catch { /* ignore */ }
+          return res.status(400).json({ error: 'invalid-sound' });
+        }
+        const saved = await rooms.addCustomSound(room, sound);
+        if (!saved) {
+          try { await fs.unlink(req.file.path); } catch { /* ignore */ }
+          return res.status(409).json({ error: 'board-full' });
+        }
+        io.to(`room:${code}`).emit('soundboard:added', { sound: saved });
+        res.status(201).json({ sound: saved });
+      } catch (err) { next(err); }
+    });
+  });
+
   app.get('/r/:code', (req, res) => {
     res.sendFile(path.join(publicDir, 'room.html'));
   });
@@ -280,13 +374,20 @@ export async function createHushServer({
   app.use(
     express.static(publicDir, {
       etag: true,
+      // HTML never caches (always fresh room shell). JS/CSS revalidate
+      // quickly via ETag (304, no re-download) instead of full refetch
+      // on every reload — less bandwidth, faster joins, lower ping noise.
       setHeaders(res, filePath) {
         res.setHeader('X-Content-Type-Options', 'nosniff');
-        const dynamic = /\.(?:html|js|css)$/i.test(filePath);
-        res.setHeader(
-          'Cache-Control',
-          dynamic ? 'no-cache' : 'public, max-age=3600'
-        );
+        if (/\.html$/i.test(filePath)) {
+          res.setHeader('Cache-Control', 'no-cache');
+        } else if (/\.(?:js|css)$/i.test(filePath)) {
+          res.setHeader('Cache-Control', 'public, max-age=60, must-revalidate');
+        } else if (/\.(?:wav|svg|png|ico)$/i.test(filePath)) {
+          res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
+        } else {
+          res.setHeader('Cache-Control', 'public, max-age=3600');
+        }
       }
     })
   );

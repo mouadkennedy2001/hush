@@ -55,7 +55,14 @@ export function updateSettings(patch) {
 export function applyVolume() {
   const volume = Math.min(1, Math.max(0, Number(settings.volume) || 0));
   for (const audio of document.querySelectorAll('#remote-audio audio')) {
-    if (audio.volume !== volume) audio.volume = volume;
+    // Respect per-peer volume (right-click menu): effective = master x peer.
+    const peerVol = Number(audio.dataset?.peerVolume ?? 1) || 0;
+    const effective = Math.min(1, volume * peerVol);
+    if (audio.volume !== effective) audio.volume = effective;
+    // When the mesh routes via WebAudio it mutes the element itself;
+    // only unmute the element if there is no gain routing active.
+    if (!audio.dataset?.gainRouted && peerVol === 0) audio.muted = true;
+    else if (!audio.dataset?.gainRouted && peerVol > 0 && volume > 0) audio.muted = false;
   }
   const output = document.querySelector('[data-volume-value]');
   const label = `${Math.round(volume * 100)}%`;
