@@ -2504,7 +2504,16 @@ html[dir="rtl"] .gate-code code {
 .emoji-menu {
   animation: emoji-menu-in 160ms cubic-bezier(.2,.9,.3,1.1);
   border-radius: 14px;
+  width: min(320px, calc(100vw - 24px));
 }
+.custom-sticker { width: 36px; height: 36px; object-fit: contain; border-radius: 10px; flex: none; }
+.emoji-sticker { width: 34px; height: 34px; }
+.message-sticker { width: 44px; height: 44px; vertical-align: -8px; }
+.message.is-emoji-only .message-sticker { width: 64px; height: 64px; }
+.message-gif { max-width: min(280px, 100%); max-height: 240px; border-radius: 12px; display: block; margin-top: 4px; }
+.gif-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.gif-row .gif-input { flex: 1 1 160px; }
+.sticker-tab { border-style: dashed; }
 @keyframes emoji-menu-in { from { opacity: 0; transform: translateY(6px) scale(.98); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .emoji-menu, .message-emoji, .floating-reaction .custom-emoji { animation: none; transition: none; } }
 .custom-emoji { width: 26px; height: 26px; object-fit: contain; border-radius: 8px; filter: drop-shadow(0 2px 4px rgba(27,27,27,.2)); transition: transform 150ms cubic-bezier(.34,1.56,.64,1), background-color 120ms ease; flex: none; }

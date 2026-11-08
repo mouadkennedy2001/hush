@@ -5,7 +5,7 @@ import { initTheme, toggleTheme } from './theme.js';
 import { startPing, refreshPing } from './ping.js';
 import { initSettings, getSettings, updateSettings } from './settings.js';
 import { SOUNDBOARD_SOUNDS, playSoundboard, playCustomSound, getSoundboardVolume, setSoundboardVolume, isSoundboardId, soundboardEmojiId } from './soundboard.js';
-import { CUSTOM_EMOJIS, EMOJI_CATEGORIES, customEmojiImage, isCustomEmoji, emojiUrl, splitEmojiShortcodes, preloadCustomEmojis, pushRecentEmoji, getRecentEmojis, searchEmojis, isEmojiOnlyMessage, emojiLabel } from './emoji.js';
+import { CUSTOM_EMOJIS, CUSTOM_STICKERS, STICKER_CATEGORIES, EMOJI_CATEGORIES, customEmojiImage, customStickerImage, isCustomSticker, isGifUrl, gifImage, isCustomEmoji, emojiUrl, splitEmojiShortcodes, preloadCustomEmojis, pushRecentEmoji, getRecentEmojis, searchEmojis, searchStickers, isEmojiOnlyMessage, emojiLabel, stickerLabel } from './emoji.js';
 import { playSound, getSoundsEnabled, setSoundsEnabled, getSoundVolume, setSoundVolume } from './sounds.js';
 import { initChangelog } from './changelog.js';
 import { initLibraries } from './libraries-log.js';
@@ -1774,7 +1774,11 @@ function renderMessageText(container, text) {
       link.href = url;
       link.target = '_blank';
       link.rel = 'noopener noreferrer';
-      container.append(link);
+      if (isGifUrl(url)) {
+        container.append(gifImage(url));
+      } else {
+        container.append(link);
+      }
       if (trailing) appendHighlighted(container, trailing);
     }
 
@@ -1786,11 +1790,14 @@ function renderMessageText(container, text) {
 
 function appendHighlighted(parent, segment) {
   if (!segment) return;
-  // Custom Hush emoji shortcodes (:laugh:) render as images, even inside
-  // searched/highlighted text — the shortcode stays in the stored text.
+  // Custom Hush emoji + sticker shortcodes (:laugh:, :sticker-01:) render as
+  // images, even inside searched/highlighted text — the shortcode stays in
+  // the stored text.
   for (const part of splitEmojiShortcodes(segment)) {
     if (part.emoji) {
-      parent.append(customEmojiImage(part.emoji, 'custom-emoji message-emoji'));
+      parent.append(isCustomSticker(part.emoji)
+        ? customStickerImage(part.emoji, 'custom-sticker message-sticker')
+        : customEmojiImage(part.emoji, 'custom-emoji message-emoji'));
       continue;
     }
     appendHighlightedText(parent, part.text);
@@ -2233,24 +2240,68 @@ function buildRoomEmojiMenu() {
     const grid = $('#emoji-grid', els.emojiMenu);
     if (!grid) return;
     grid.replaceChildren();
+    const isStickerCat = STICKER_CATEGORIES.some((c) => c.id === activeCat);
+    if (activeCat === 'gif') {
+      const hint = el('p', 'emoji-empty', t('gif.hint'));
+      grid.append(hint);
+      const row = el('div', 'gif-row');
+      const input = el('input', 'emoji-search gif-input');
+      input.type = 'url';
+      input.placeholder = 'https://…/image.gif';
+      input.setAttribute('aria-label', 'GIF link');
+      const add = el('button', 'btn btn-primary btn-sm', t('gif.add'));
+      add.type = 'button';
+      const open = el('button', 'btn btn-quiet btn-sm', t('gif.openFree'));
+      open.type = 'button';
+      open.addEventListener('click', () => {
+        const q = encodeURIComponent(String(query || '').trim() || 'funny');
+        window.open(`https://tenor.com/search/${q}`, '_blank', 'noopener,noreferrer');
+      });
+      add.addEventListener('click', () => {
+        const url = input.value.trim();
+        if (!isGifUrl(url)) { toast(t('gif.invalid'), 'error', 3000); return; }
+        insertEmoji(url);
+        closeEmojiMenu();
+      });
+      row.append(input, add, open);
+      grid.append(row);
+      return;
+    }
     let list;
-    if (query) list = searchEmojis(query);
-    else if (activeCat === 'recent') {
-      list = getRecentEmojis().map((id) => CUSTOM_EMOJIS.find((e) => e.id === id)).filter(Boolean);
+    if (isStickerCat && !query) {
+      list = CUSTOM_STICKERS.filter((e) => e.cat === activeCat).map((e) => ({ ...e, kind: 'sticker' }));
+    } else if (isStickerCat && query) {
+      list = searchStickers(query).map((e) => ({ ...e, kind: 'sticker' }));
+    } else if (query) {
+      const emojis = searchEmojis(query).map((e) => ({ ...e, kind: 'emoji' }));
+      const stickers = searchStickers(query).map((e) => ({ ...e, kind: 'sticker' }));
+      list = [...emojis, ...stickers];
+    } else if (activeCat === 'recent') {
+      list = getRecentEmojis()
+        .map((id) => {
+          const e = CUSTOM_EMOJIS.find((x) => x.id === id);
+          const s = CUSTOM_STICKERS.find((x) => x.id === id);
+          return e ? { ...e, kind: 'emoji' } : s ? { ...s, kind: 'sticker' } : null;
+        })
+        .filter(Boolean);
       if (!list.length) { grid.append(el('div', 'emoji-empty', t('emoji.noRecent'))); return; }
     } else {
-      list = activeCat === 'all' ? CUSTOM_EMOJIS : CUSTOM_EMOJIS.filter((e) => e.cat === activeCat);
+      list = activeCat === 'all' ? CUSTOM_EMOJIS.map((e) => ({ ...e, kind: 'emoji' })) : CUSTOM_EMOJIS.filter((e) => e.cat === activeCat).map((e) => ({ ...e, kind: 'emoji' }));
     }
     if (!list.length) { grid.append(el('div', 'emoji-empty', t('emoji.noResults'))); return; }
     for (const entry of list) {
       const emoji = typeof entry === 'string' ? entry : entry.id;
+      const kind = entry.kind || 'emoji';
       const button = el('button', 'emoji-choice');
       button.type = 'button';
       button.dataset.emoji = emoji;
-      button.setAttribute('aria-label', `${emojiLabel(emoji, locale())} :${emoji}:`);
+      const label = kind === 'sticker' ? stickerLabel(emoji, locale()) : emojiLabel(emoji, locale());
+      button.setAttribute('aria-label', `${label} :${emoji}:`);
       button.setAttribute('role', 'option');
-      button.title = `:${emoji}: — ${emojiLabel(emoji, locale())}`;
-      button.append(customEmojiImage(emoji, 'custom-emoji custom-emoji-sm'));
+      button.title = `:${emoji}: — ${label}`;
+      button.append(kind === 'sticker'
+        ? customStickerImage(emoji, 'custom-sticker emoji-sticker')
+        : customEmojiImage(emoji, 'custom-emoji custom-emoji-sm'));
       button.addEventListener('click', () => {
         insertEmoji(`:${emoji}:`);
         pushRecentEmoji(emoji);
@@ -2271,6 +2322,29 @@ function buildRoomEmojiMenu() {
     });
     tabs.append(tab);
   }
+  for (const cat of STICKER_CATEGORIES) {
+    const tab = el('button', 'emoji-tab sticker-tab', cat.en);
+    tab.type = 'button';
+    tab.dataset.cat = cat.id;
+    tab.setAttribute('aria-pressed', String(cat.id === activeCat));
+    tab.title = `${cat.en} / ${cat.ar}`;
+    tab.addEventListener('click', () => {
+      activeCat = cat.id;
+      for (const b of tabs.querySelectorAll('.emoji-tab')) b.setAttribute('aria-pressed', String(b === tab));
+      renderGrid(search.value);
+    });
+    tabs.append(tab);
+  }
+  const gifTab = el('button', 'emoji-tab', 'GIF');
+  gifTab.type = 'button';
+  gifTab.dataset.cat = 'gif';
+  gifTab.setAttribute('aria-pressed', String(activeCat === 'gif'));
+  gifTab.addEventListener('click', () => {
+    activeCat = 'gif';
+    for (const b of tabs.querySelectorAll('.emoji-tab')) b.setAttribute('aria-pressed', String(b === gifTab));
+    renderGrid(search.value);
+  });
+  tabs.append(gifTab);
   const grid = el('div', 'emoji-grid');
   grid.id = 'emoji-grid';
   els.emojiMenu.setAttribute('role', 'dialog');

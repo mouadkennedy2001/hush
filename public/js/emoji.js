@@ -106,6 +106,90 @@ export function searchEmojis(query, limit = 60) {
     e.id.includes(q) || e.en.toLowerCase().includes(q) || String(e.ar ?? '').includes(q)
   ).slice(0, limit);
 }
+
+// Permanent SVG sticker library (65 pieces, public/sticker/ + source Sticker/).
+// Shared with chat shortcodes (`:sticker-01:`) across rooms and servers.
+export const CUSTOM_STICKERS = [];
+const STICKER_FACES = ['مبتسم','يضحك','يحب','مندهش','نعسان','غاضب','سعيد','خجل','واثق','مستغرب','ودود','مثبت','مرح'];
+const STICKER_ANIMALS = ['قط','كلب','ثعلب','أرنب','باندا','بومة','بطريق','نمر','فيل','ذئب','سلحفاة','سمكة','فراشة'];
+const STICKER_OBJECTS = ['قهوة','بيتزا','صاروخ','كتاب','موسيقى','لعبة','كرة','تاج','مفتاح','نجمة','قلب','قمر','شمس'];
+const STICKER_EMBLEMS = ['هلال','تمر','دلة','فهد','خنجر','برج','سفينة','جمل','بومة','تاج','علم','درع','كنز'];
+const STICKER_NOTES = ['مذكرة','تذكير','قائمة','علامة','هدية','رسالة','قلب','نار','ماء','شجرة','زهرة','مطر','ثلج'];
+const STICKER_EN_F = ['Smiley','Laughing','Loved','Surprised','Sleepy','Angry','Happy','Shy','Confident','Wow','Friendly','Calm','Cheerful'];
+const STICKER_EN_A = ['Cat','Dog','Fox','Bunny','Panda','Owl','Penguin','Tiger','Elephant','Wolf','Turtle','Fish','Butterfly'];
+const STICKER_EN_O = ['Coffee','Pizza','Rocket','Book','Music','Game','Ball','Crown','Key','Star','Heart','Moon','Sun'];
+const STICKER_EN_E = ['Crescent','Dates','Dallah','Falcon','Sword','Tower','Ship','Camel','Owl','Crown','Flag','Shield','Treasure'];
+const STICKER_EN_N = ['Note','Reminder','List','Bookmark','Gift','Letter','Heart','Fire','Water','Tree','Flower','Rain','Snow'];
+{
+  const groups = [
+    ['faces', STICKER_FACES, STICKER_EN_F],
+    ['animals', STICKER_ANIMALS, STICKER_EN_A],
+    ['objects', STICKER_OBJECTS, STICKER_EN_O],
+    ['emblems', STICKER_EMBLEMS, STICKER_EN_E],
+    ['notes', STICKER_NOTES, STICKER_EN_N]
+  ];
+  let n = 0;
+  for (const [cat, ars, ens] of groups) {
+    for (let i = 0; i < 13; i += 1) {
+      n += 1;
+      const id = `sticker-${String(n).padStart(2, '0')}`;
+      CUSTOM_STICKERS.push({ id, url: `/sticker/${id}.svg`, cat, en: ens[i], ar: ars[i] });
+    }
+  }
+}
+export const STICKER_CATEGORIES = [
+  { id: 'faces', en: 'Faces', ar: 'وجوه' },
+  { id: 'animals', en: 'Animals', ar: 'حيوانات' },
+  { id: 'objects', en: 'Objects', ar: 'أشياء' },
+  { id: 'emblems', en: 'Emblems', ar: 'رموز' },
+  { id: 'notes', en: 'Notes', ar: 'ملاحظات' }
+];
+const STICKER_BY_ID = new Map(CUSTOM_STICKERS.map((e) => [e.id, e]));
+export function isCustomSticker(id) { return STICKER_BY_ID.has(id); }
+export function stickerUrl(id) { return STICKER_BY_ID.get(id)?.url ?? '/sticker/sticker-01.svg'; }
+export function stickerLabel(id, lang = 'en') {
+  const e = STICKER_BY_ID.get(id);
+  if (!e) return `:${id}:`;
+  return lang === 'ar' ? e.ar : e.en;
+}
+export function customStickerImage(id, className = 'custom-sticker') {
+  const img = document.createElement('img');
+  img.src = stickerUrl(id);
+  img.alt = stickerLabel(id, typeof document !== 'undefined' && document.documentElement?.lang === 'ar' ? 'ar' : 'en');
+  img.title = `:${id}:`;
+  img.className = className;
+  img.draggable = false;
+  img.loading = 'lazy';
+  img.decoding = 'async';
+  return img;
+}
+export function searchStickers(query, limit = 65) {
+  const q = String(query ?? '').trim().toLowerCase();
+  if (!q) return CUSTOM_STICKERS.slice(0, limit);
+  return CUSTOM_STICKERS.filter((e) =>
+    e.id.includes(q) || e.en.toLowerCase().includes(q) || String(e.ar ?? '').includes(q)
+  ).slice(0, limit);
+}
+
+// GIF links: any direct https .gif renders inline (no API key, no fetch).
+// Free sites without keys: Tenor (https://tenor.com/search/...) and
+// Giphy (https://giphy.com/search/...) — open, search, copy the direct GIF
+// link, paste it here. No CORS fetch, no quotas, no secrets.
+export function isGifUrl(url) {
+  const u = String(url ?? '').trim();
+  if (!/^https:\/\/.+\.gif(?:\?.*)?$/i.test(u)) return false;
+  return !u.includes('..') && !u.includes('\\') && !u.includes('<') && !u.includes('>');
+}
+export function gifImage(url, className = 'message-gif') {
+  const img = document.createElement('img');
+  img.src = String(url).trim();
+  img.alt = 'GIF';
+  img.className = className;
+  img.loading = 'lazy';
+  img.decoding = 'async';
+  img.referrerPolicy = 'no-referrer';
+  return img;
+}
 export function customEmojiImage(id, className = 'custom-emoji') {
   const img = document.createElement('img');
   img.src = emojiUrl(id);
@@ -118,12 +202,13 @@ export function customEmojiImage(id, className = 'custom-emoji') {
   return img;
 }
 // Split text into plain segments and custom-emoji shortcodes.
+// Both :emoji: and :sticker-01: shortcodes become images.
 export function splitEmojiShortcodes(text) {
   const parts = [];
   let last = 0;
   for (const match of String(text ?? '').matchAll(SHORTCODE_RE)) {
     const id = match[1];
-    if (!BY_ID.has(id)) continue;
+    if (!BY_ID.has(id) && !STICKER_BY_ID.has(id)) continue;
     const index = match.index ?? 0;
     if (index > last) parts.push({ text: String(text).slice(last, index) });
     parts.push({ emoji: id });
@@ -149,11 +234,11 @@ export function getRecentEmojis() {
   try {
     const raw = localStorage.getItem(RECENT_KEY);
     const list = raw ? JSON.parse(raw) : [];
-    return Array.isArray(list) ? list.filter((id) => BY_ID.has(id)).slice(0, 12) : [];
+    return Array.isArray(list) ? list.filter((id) => BY_ID.has(id) || STICKER_BY_ID.has(id)).slice(0, 12) : [];
   } catch { return []; }
 }
 export function pushRecentEmoji(id) {
-  if (!BY_ID.has(id)) return;
+  if (!BY_ID.has(id) && !STICKER_BY_ID.has(id)) return;
   try {
     const recent = [id, ...getRecentEmojis().filter((x) => x !== id)].slice(0, 12);
     localStorage.setItem(RECENT_KEY, JSON.stringify(recent));

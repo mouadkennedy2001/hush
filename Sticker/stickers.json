@@ -1,0 +1,461 @@
+{
+  "version": "1.0.0",
+  "count": 65,
+  "stickers": [
+    {
+      "id": "sticker-01",
+      "cat": "faces",
+      "en": "Smiley",
+      "ar": "مبتسم",
+      "url": "/sticker/sticker-01.svg"
+    },
+    {
+      "id": "sticker-02",
+      "cat": "faces",
+      "en": "Laughing",
+      "ar": "يضحك",
+      "url": "/sticker/sticker-02.svg"
+    },
+    {
+      "id": "sticker-03",
+      "cat": "faces",
+      "en": "Loved",
+      "ar": "يحب",
+      "url": "/sticker/sticker-03.svg"
+    },
+    {
+      "id": "sticker-04",
+      "cat": "faces",
+      "en": "Surprised",
+      "ar": "مندهش",
+      "url": "/sticker/sticker-04.svg"
+    },
+    {
+      "id": "sticker-05",
+      "cat": "faces",
+      "en": "Sleepy",
+      "ar": "نعسان",
+      "url": "/sticker/sticker-05.svg"
+    },
+    {
+      "id": "sticker-06",
+      "cat": "faces",
+      "en": "Angry",
+      "ar": "غاضب",
+      "url": "/sticker/sticker-06.svg"
+    },
+    {
+      "id": "sticker-07",
+      "cat": "faces",
+      "en": "Happy",
+      "ar": "سعيد",
+      "url": "/sticker/sticker-07.svg"
+    },
+    {
+      "id": "sticker-08",
+      "cat": "faces",
+      "en": "Shy",
+      "ar": "خجل",
+      "url": "/sticker/sticker-08.svg"
+    },
+    {
+      "id": "sticker-09",
+      "cat": "faces",
+      "en": "Confident",
+      "ar": "واثق",
+      "url": "/sticker/sticker-09.svg"
+    },
+    {
+      "id": "sticker-10",
+      "cat": "faces",
+      "en": "Wow",
+      "ar": "مستغرب",
+      "url": "/sticker/sticker-10.svg"
+    },
+    {
+      "id": "sticker-11",
+      "cat": "faces",
+      "en": "Friendly",
+      "ar": "ودود",
+      "url": "/sticker/sticker-11.svg"
+    },
+    {
+      "id": "sticker-12",
+      "cat": "faces",
+      "en": "Calm",
+      "ar": "مثبت",
+      "url": "/sticker/sticker-12.svg"
+    },
+    {
+      "id": "sticker-13",
+      "cat": "faces",
+      "en": "Cheerful",
+      "ar": "مرح",
+      "url": "/sticker/sticker-13.svg"
+    },
+    {
+      "id": "sticker-14",
+      "cat": "animals",
+      "en": "Cat",
+      "ar": "قط",
+      "url": "/sticker/sticker-14.svg"
+    },
+    {
+      "id": "sticker-15",
+      "cat": "animals",
+      "en": "Dog",
+      "ar": "كلب",
+      "url": "/sticker/sticker-15.svg"
+    },
+    {
+      "id": "sticker-16",
+      "cat": "animals",
+      "en": "Fox",
+      "ar": "ثعلب",
+      "url": "/sticker/sticker-16.svg"
+    },
+    {
+      "id": "sticker-17",
+      "cat": "animals",
+      "en": "Bunny",
+      "ar": "أرنب",
+      "url": "/sticker/sticker-17.svg"
+    },
+    {
+      "id": "sticker-18",
+      "cat": "animals",
+      "en": "Panda",
+      "ar": "د Panda",
+      "url": "/sticker/sticker-18.svg"
+    },
+    {
+      "id": "sticker-19",
+      "cat": "animals",
+      "en": "Owl",
+      "ar": "بومة",
+      "url": "/sticker/sticker-19.svg"
+    },
+    {
+      "id": "sticker-20",
+      "cat": "animals",
+      "en": "Penguin",
+      "ar": "بطريق",
+      "url": "/sticker/sticker-20.svg"
+    },
+    {
+      "id": "sticker-21",
+      "cat": "animals",
+      "en": "Tiger",
+      "ar": "نمر",
+      "url": "/sticker/sticker-21.svg"
+    },
+    {
+      "id": "sticker-22",
+      "cat": "animals",
+      "en": "Elephant",
+      "ar": "فيل",
+      "url": "/sticker/sticker-22.svg"
+    },
+    {
+      "id": "sticker-23",
+      "cat": "animals",
+      "en": "Wolf",
+      "ar": "ذئب",
+      "url": "/sticker/sticker-23.svg"
+    },
+    {
+      "id": "sticker-24",
+      "cat": "animals",
+      "en": "Turtle",
+      "ar": "سلحفاة",
+      "url": "/sticker/sticker-24.svg"
+    },
+    {
+      "id": "sticker-25",
+      "cat": "animals",
+      "en": "Fish",
+      "ar": "سمكة",
+      "url": "/sticker/sticker-25.svg"
+    },
+    {
+      "id": "sticker-26",
+      "cat": "animals",
+      "en": "Butterfly",
+      "ar": "فراشة",
+      "url": "/sticker/sticker-26.svg"
+    },
+    {
+      "id": "sticker-27",
+      "cat": "objects",
+      "en": "Coffee",
+      "ar": "قهوة",
+      "url": "/sticker/sticker-27.svg"
+    },
+    {
+      "id": "sticker-28",
+      "cat": "objects",
+      "en": "Pizza",
+      "ar": "بيتزا",
+      "url": "/sticker/sticker-28.svg"
+    },
+    {
+      "id": "sticker-29",
+      "cat": "objects",
+      "en": "Rocket",
+      "ar": "صاروخ",
+      "url": "/sticker/sticker-29.svg"
+    },
+    {
+      "id": "sticker-30",
+      "cat": "objects",
+      "en": "Book",
+      "ar": "كتاب",
+      "url": "/sticker/sticker-30.svg"
+    },
+    {
+      "id": "sticker-31",
+      "cat": "objects",
+      "en": "Music",
+      "ar": "موسيقى",
+      "url": "/sticker/sticker-31.svg"
+    },
+    {
+      "id": "sticker-32",
+      "cat": "objects",
+      "en": "Game",
+      "ar": "لعبة",
+      "url": "/sticker/sticker-32.svg"
+    },
+    {
+      "id": "sticker-33",
+      "cat": "objects",
+      "en": "Ball",
+      "ar": "كرة",
+      "url": "/sticker/sticker-33.svg"
+    },
+    {
+      "id": "sticker-34",
+      "cat": "objects",
+      "en": "Crown",
+      "ar": "تاج",
+      "url": "/sticker/sticker-34.svg"
+    },
+    {
+      "id": "sticker-35",
+      "cat": "objects",
+      "en": "Key",
+      "ar": "مفتاح",
+      "url": "/sticker/sticker-35.svg"
+    },
+    {
+      "id": "sticker-36",
+      "cat": "objects",
+      "en": "Star",
+      "ar": "نجمة",
+      "url": "/sticker/sticker-36.svg"
+    },
+    {
+      "id": "sticker-37",
+      "cat": "objects",
+      "en": "Heart",
+      "ar": "قلب",
+      "url": "/sticker/sticker-37.svg"
+    },
+    {
+      "id": "sticker-38",
+      "cat": "objects",
+      "en": "Moon",
+      "ar": "قمر",
+      "url": "/sticker/sticker-38.svg"
+    },
+    {
+      "id": "sticker-39",
+      "cat": "objects",
+      "en": "Sun",
+      "ar": "شمس",
+      "url": "/sticker/sticker-39.svg"
+    },
+    {
+      "id": "sticker-40",
+      "cat": "emblems",
+      "en": "Crescent",
+      "ar": "هلال",
+      "url": "/sticker/sticker-40.svg"
+    },
+    {
+      "id": "sticker-41",
+      "cat": "emblems",
+      "en": "Dates",
+      "ar": "تمر",
+      "url": "/sticker/sticker-41.svg"
+    },
+    {
+      "id": "sticker-42",
+      "cat": "emblems",
+      "en": "Dallah",
+      "ar": "دلة",
+      "url": "/sticker/sticker-42.svg"
+    },
+    {
+      "id": "sticker-43",
+      "cat": "emblems",
+      "en": "Falcon",
+      "ar": "فهد",
+      "url": "/sticker/sticker-43.svg"
+    },
+    {
+      "id": "sticker-44",
+      "cat": "emblems",
+      "en": "Sword",
+      "ar": "خنجر",
+      "url": "/sticker/sticker-44.svg"
+    },
+    {
+      "id": "sticker-45",
+      "cat": "emblems",
+      "en": "Tower",
+      "ar": "برج",
+      "url": "/sticker/sticker-45.svg"
+    },
+    {
+      "id": "sticker-46",
+      "cat": "emblems",
+      "en": "Ship",
+      "ar": "سفينة",
+      "url": "/sticker/sticker-46.svg"
+    },
+    {
+      "id": "sticker-47",
+      "cat": "emblems",
+      "en": "Camel",
+      "ar": "جمل",
+      "url": "/sticker/sticker-47.svg"
+    },
+    {
+      "id": "sticker-48",
+      "cat": "emblems",
+      "en": "Owl",
+      "ar": "بومة",
+      "url": "/sticker/sticker-48.svg"
+    },
+    {
+      "id": "sticker-49",
+      "cat": "emblems",
+      "en": "Crown",
+      "ar": "تاج",
+      "url": "/sticker/sticker-49.svg"
+    },
+    {
+      "id": "sticker-50",
+      "cat": "emblems",
+      "en": "Flag",
+      "ar": "علم",
+      "url": "/sticker/sticker-50.svg"
+    },
+    {
+      "id": "sticker-51",
+      "cat": "emblems",
+      "en": "Shield",
+      "ar": "درع",
+      "url": "/sticker/sticker-51.svg"
+    },
+    {
+      "id": "sticker-52",
+      "cat": "emblems",
+      "en": "Treasure",
+      "ar": "كنز",
+      "url": "/sticker/sticker-52.svg"
+    },
+    {
+      "id": "sticker-53",
+      "cat": "notes",
+      "en": "Note",
+      "ar": "مذكرة",
+      "url": "/sticker/sticker-53.svg"
+    },
+    {
+      "id": "sticker-54",
+      "cat": "notes",
+      "en": "Reminder",
+      "ar": "تذكير",
+      "url": "/sticker/sticker-54.svg"
+    },
+    {
+      "id": "sticker-55",
+      "cat": "notes",
+      "en": "List",
+      "ar": "قائمة",
+      "url": "/sticker/sticker-55.svg"
+    },
+    {
+      "id": "sticker-56",
+      "cat": "notes",
+      "en": "Bookmark",
+      "ar": "علامة",
+      "url": "/sticker/sticker-56.svg"
+    },
+    {
+      "id": "sticker-57",
+      "cat": "notes",
+      "en": "Gift",
+      "ar": "هدية",
+      "url": "/sticker/sticker-57.svg"
+    },
+    {
+      "id": "sticker-58",
+      "cat": "notes",
+      "en": "Letter",
+      "ar": "رسالة",
+      "url": "/sticker/sticker-58.svg"
+    },
+    {
+      "id": "sticker-59",
+      "cat": "notes",
+      "en": "Heart",
+      "ar": "قلب",
+      "url": "/sticker/sticker-59.svg"
+    },
+    {
+      "id": "sticker-60",
+      "cat": "notes",
+      "en": "Fire",
+      "ar": "نار",
+      "url": "/sticker/sticker-60.svg"
+    },
+    {
+      "id": "sticker-61",
+      "cat": "notes",
+      "en": "Water",
+      "ar": "ماء",
+      "url": "/sticker/sticker-61.svg"
+    },
+    {
+      "id": "sticker-62",
+      "cat": "notes",
+      "en": "Tree",
+      "ar": "شجرة",
+      "url": "/sticker/sticker-62.svg"
+    },
+    {
+      "id": "sticker-63",
+      "cat": "notes",
+      "en": "Flower",
+      "ar": "زهرة",
+      "url": "/sticker/sticker-63.svg"
+    },
+    {
+      "id": "sticker-64",
+      "cat": "notes",
+      "en": "Rain",
+      "ar": "مطر",
+      "url": "/sticker/sticker-64.svg"
+    },
+    {
+      "id": "sticker-65",
+      "cat": "notes",
+      "en": "Snow",
+      "ar": "ثلج",
+      "url": "/sticker/sticker-65.svg"
+    }
+  ]
+}

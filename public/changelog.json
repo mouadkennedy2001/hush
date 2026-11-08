@@ -1,6 +1,27 @@
 {
-  "version": "10.2.0",
+  "version": "11.0.0",
   "entries": [
+    {
+      "date": "2026-11-08",
+      "ts": 1763480300000,
+      "kind": "update",
+      "kindEn": "Update",
+      "kindAr": "تحديث",
+      "titleEn": "65 stickers + GIF links + 12 new sounds + balanced emoji refresh",
+      "titleAr": "65 ستيكر + روابط GIF + 12 صوتًا جديدًا + تجديد متوازن للإيموجي",
+      "pointsEn": [
+        "NEW permanent stickers: 65 clean SVG stickers (5 categories x 13) in Sticker/ (source) + public/sticker/ (runtime) with bilingual manifest. Insert as :sticker-NN: and shown large (44px, 64px alone) in rooms and servers.",
+        "NEW GIF links: any direct https .gif renders inline in chat with zero API keys. Free search via Tenor (tenor.com/search) — copy the direct link and paste it here.",
+        "NEW sounds (12): welcome/goodbye/coin/levelup/warning/achievement/whoosh/chime/bubble/slide/dingdong/echo as real WAV files + fallback synth, listed in /api/sounds.",
+        "Emoji display rebalanced: streak-free 26px picker glyphs, 44px stickers, reduced-motion respected, test coverage for all 65+12 additions."
+      ],
+      "pointsAr": [
+        "جديد: ستيكرات دائمة: 65 SVG نظيفة (5 فئات × 13) في Sticker/ (مصدر) + public/sticker/ (تشغيل) مع بيان ثنائي اللغة. تُدرج كـ :sticker-NN: وتُعرض كبيرة (44px، وحدها 64px) في الغرف والخوادم.",
+        "جديد: روابط GIF: أي رابط https مباشر .gif يُعرض داخل الرسالة بدون مفاتيح API. بحث مجاني عبر Tenor (tenor.com/search) — انسخ الرابط المباشر والصقه هنا.",
+        "جديد: أصوات (12): welcome/goodbye/coin/levelup/warning/achievement/whoosh/chime/bubble/slide/dingdong/echo كملفات WAV حقيقية + synth احتياطي، ومدرجة في /api/sounds.",
+        "أُعيد توازن عرض الإيموجي: رسوم 26px نظيفة في المنتقي، 44px للستيكرات، احترام تقليل الحركة، وتغطية اختبار لكل الإضافات (65+12)."
+      ]
+    },
     {
       "date": "2026-11-08",
       "ts": 1763480200000,
