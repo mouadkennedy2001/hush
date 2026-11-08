@@ -32,7 +32,11 @@ export const DEFAULT_MIC_SETTINGS = Object.freeze({
   monitor: false, // hear yourself through speakers (feedback risk)
   quality: 'auto', // auto | performance | quality
   deviceId: '',
-  preset: 'voice'
+  preset: 'voice',
+  // mic_ev1 second stage (mic/mic_ev1 spectral suppressor) — mic folder plan.
+  enhance: true,
+  enhanceStrength: 0.8, // 0..1
+  micVersion: 'ev1'
 });
 
 export const MIC_PRESETS = Object.freeze({
@@ -43,6 +47,8 @@ export const MIC_PRESETS = Object.freeze({
   quiet: { enabled: true, gate: true, gateThresholdDb: -34, amplificationDb: 4, deDistort: 15, autoGainControl: true, echoCancellation: true, noiseSuppression: true }
 });
 
+import { sanitizeMicSettings } from './mic-settings.js';
+
 const clamp = (value, min, max) => Math.min(max, Math.max(min, Number(value) || 0));
 const dbToLinear = (db) => Math.pow(10, clamp(db, 0, 24) / 20);
 
@@ -52,7 +58,8 @@ export function loadMicSettings() {
     if (!raw) return { ...DEFAULT_MIC_SETTINGS };
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object') return { ...DEFAULT_MIC_SETTINGS };
-    return { ...DEFAULT_MIC_SETTINGS, ...parsed };
+    // Security: never trust stored numbers/ids — clamp + whitelist every field.
+    return sanitizeMicSettings({ ...DEFAULT_MIC_SETTINGS, ...parsed });
   } catch {
     return { ...DEFAULT_MIC_SETTINGS };
   }
@@ -80,7 +87,7 @@ function makeSoftClipCurve(drivePercent) {
 
 export class MicFx {
   constructor(settings) {
-    this.settings = { ...settings };
+    this.settings = sanitizeMicSettings(settings, DEFAULT_MIC_SETTINGS);
     this.context = null;
     this.nodes = null;
     this.processedTrack = null;
@@ -164,7 +171,7 @@ export class MicFx {
 
   /** Live-apply new settings without renegotiation. */
   applySettings() {
-    this.settings = { ...this.settings };
+    this.settings = sanitizeMicSettings(this.settings, DEFAULT_MIC_SETTINGS);
     if (!this.nodes || !this.context) return;
     const { preamp, compressor, shaper, gateGain, monitorGain } = this.nodes;
     const performance = this.#isPerformance();
@@ -172,15 +179,16 @@ export class MicFx {
     preamp.gain.setTargetAtTime(dbToLinear(this.settings.amplificationDb), this.context.currentTime, 0.03);
     compressor.ratio.setTargetAtTime(performance ? 1 : 3, this.context.currentTime, 0.03);
     shaper.curve = makeSoftClipCurve(performance ? this.settings.deDistort * 0.5 : this.settings.deDistort);
-    gateGain.gain.setTargetAtTime(this.settings.gate ? gateGain.gain.value : 1, this.context.currentTime, 0.03);
-    monitorGain.gain.setTargetAtTime(this.settings.monitor ? 0.9 : 0, this.context.currentTime, 0.03);
+    // Security: monitor is capped at 0.4 (was 0.9) — full-gain monitor
+    // through speakers fed the mic and caused feedback howling.
+    monitorGain.gain.setTargetAtTime(this.settings.monitor ? 0.4 : 0, this.context.currentTime, 0.03);
 
     if (this.settings.gate) this.#startGate();
     else this.#stopGate();
   }
 
   update(settings) {
-    this.settings = { ...this.settings, ...settings };
+    this.settings = sanitizeMicSettings({ ...this.settings, ...settings }, DEFAULT_MIC_SETTINGS);
     this.applySettings();
   }
 

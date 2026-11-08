@@ -33,7 +33,7 @@ test('servers are separate from rooms: permanent, own chat, invite link', async 
     assert.equal(created.status, 201);
     server = (await created.json()).server;
     assert.ok(server.id.startsWith('srv_'));
-    assert.ok(typeof server.inviteCode === 'string' && server.inviteCode.length === 6);
+    assert.ok(typeof server.inviteCode === 'string' && server.inviteCode.length === 10, 'invite is 10-char crypto code (A5)');
     assert.equal(server.channels.length, 2);
     // Channels carry NO room code — separate systems.
     for (const ch of server.channels) {
@@ -82,10 +82,16 @@ test('servers are separate from rooms: permanent, own chat, invite link', async 
       const denied = await ack(bob, 'server:chat:edit', { channelId: textChannel.id, messageId: message.id, text: 'hacked' });
       assert.equal(denied.ok, false);
 
-      // Member can add a channel (REST), owner regenerates invite
-      const added = await fetch(`${url}/api/servers/${server.id}/channels`, {
+      // N3/A14: member can NO LONGER add a channel (owner-only policy).
+      const addedAsMember = await fetch(`${url}/api/servers/${server.id}/channels`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: 'random', type: 'text', deviceId: 'device-nomember1' })
+      });
+      assert.equal(addedAsMember.status, 403, 'member must not add channels (owner-only)');
+      // Owner CAN add a channel (REST), owner regenerates invite
+      const added = await fetch(`${url}/api/servers/${server.id}/channels`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'random', type: 'text', deviceId: 'device-server-1' })
       });
       assert.equal(added.status, 201);
       const regen = await fetch(`${url}/api/servers/${server.id}/regenerate-invite`, {
@@ -108,7 +114,7 @@ test('servers are separate from rooms: permanent, own chat, invite link', async 
   address = await hush.start();
   url = `http://127.0.0.1:${address.port}`;
   try {
-    const list = await fetch(`${url}/api/servers`).then((r) => r.json());
+    const list = await fetch(`${url}/api/servers?deviceId=device-server-1`).then((r) => r.json());
     assert.equal(list.servers.length, 1);
     assert.equal(list.servers[0].channels.length, 3);
     const socket = ioClient(url, { transports: ['websocket'], forceNew: true });

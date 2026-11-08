@@ -19,7 +19,8 @@ export function getDeviceId() {
 }
 
 export async function fetchServers() {
-  const res = await fetch('/api/servers', { cache: 'no-store' });
+  const deviceId = getDeviceId();
+  const res = await fetch(`/api/servers?deviceId=${encodeURIComponent(deviceId)}`, { cache: 'no-store' });
   if (!res.ok) return [];
   const data = await res.json().catch(() => ({}));
   return Array.isArray(data.servers) ? data.servers : [];
@@ -33,6 +34,12 @@ export async function createServer({ name, iconEmojiId, ownerName }) {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || 'create-failed');
+  // A1: persist the opaque session token issued for this server.
+  try {
+    if (data.sessionToken && data.server?.id) {
+      sessionStorage.setItem(`hush:session:${data.server.id}`, data.sessionToken);
+    }
+  } catch { /* ignore */ }
   return data.server;
 }
 

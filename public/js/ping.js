@@ -1,6 +1,7 @@
 import { t, onLanguageChange } from './i18n.js';
+import { createPingOp, PING_OP_VERSION } from './ping-op/ping-op.js';
 
-// Live latency ("ping") meter — v4 (lower + fresher than v3):
+// Live latency ("ping") meter — powered by PING OP v1.0 (see PING OP/src/client.js):
 // - 2 parallel probes per round, take the MIN (best) RTT — kills
 //   polling/queue jitter without flooding the server (v3 used 3, which
 //   added contention and raised the very ping it was measuring)
@@ -12,6 +13,7 @@ import { t, onLanguageChange } from './i18n.js';
 // Prefers Socket.IO round-trip; falls back to GET /api/ping.
 // NOTE: ping measures real network RTT — it cannot go below physics.
 // The server-side wins (TCP_NODELAY, 5s heartbeat) are in src/app.js.
+// Statistics (min/avg/jitter/loss/score) come from the PING OP core engine.
 
 const TIMEOUT_MS = 1500;
 const MAX_SAMPLES = 24;
@@ -26,6 +28,8 @@ let samples = [];
 let rounds = []; // min per round
 let seq = 0;
 let warmup = 0;
+const pingOp = createPingOp({ maxSamples: 60 });
+export const PING_OP_UI_VERSION = PING_OP_VERSION;
 
 function nowMono() { return performance.now(); }
 
@@ -116,6 +120,8 @@ async function measure() {
     else ms = await measureViaHttp();
   } catch { ms = null; }
   lastSample = ms;
+  // Feed the PING OP core engine so server/client share one stats model.
+  pingOp.sample(ms);
   // During heavy media (screen share) the signaling socket queues behind
   // media packets — the HTTP probe is not suppressed, but don't let one
   // burst round poison the displayed value.
@@ -227,10 +233,12 @@ function render() {
   drawChart();
 }
 
-export function refreshPing() { warmup = 0; if (timer) clearTimeout(timer); void measure(); }
+export function refreshPing() { warmup = 0; pingOp.reset(); if (timer) clearTimeout(timer); void measure(); }
 export function getPingSamples() { return [...samples]; }
+export function getPingOpStats() { return pingOp.getStats(); }
 export function getPingModel() {
-  return { last: lastSample, displayed, median: median(samples), avg: average(), jitter: jitter(), quality: qualityFor(displayed) };
+  const op = pingOp.getStats();
+  return { last: lastSample, displayed, median: median(samples), avg: average(), jitter: jitter(), quality: qualityFor(displayed), score: op.score, version: PING_OP_VERSION };
 }
 
 export function startPing({ socketGetter = () => null } = {}) {

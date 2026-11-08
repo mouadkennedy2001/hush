@@ -42,6 +42,7 @@
         <span class="ping-badge" data-ping-badge data-quality="offline" title="Ping">
           <span class="ping-dot" aria-hidden="true"></span>
           <span data-ping-value>-- ms</span>
+          <span class="ping-op-badge">PING OP</span>
         </span>
         <button class="theme-toggle" type="button" data-theme-toggle title="Switch to dark theme" aria-label="Switch to dark theme" aria-pressed="false">
           <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -63,6 +64,9 @@
         </button>
         <button class="btn btn-quiet btn-sm" type="button" data-open-log title="Log" aria-label="Log">
           <span data-log-label>Log</span><span class="log-dot" data-log-badge hidden aria-hidden="true"></span>
+        </button>
+        <button class="btn btn-quiet btn-sm" type="button" data-open-libraries-log title="Libraries" aria-label="Libraries">
+          <span data-libraries-label>Libraries</span><span class="log-dot" data-libraries-badge hidden aria-hidden="true"></span>
         </button>
         <button class="btn btn-quiet btn-sm" type="button" data-open-join>Join with a code</button>
         <button class="btn btn-primary btn-sm" type="button" data-create-room>Open a room</button>
@@ -378,6 +382,9 @@
         </div>
         <div class="servers-bar" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px">
           <button class="btn btn-primary" type="button" data-open-server id="open-server-btn">Create a server</button>
+          <label class="field" style="margin:0;flex:1;min-width:200px">
+            <input id="server-search-input" name="server-search" maxlength="40" placeholder="Search servers" aria-label="Search servers" />
+          </label>
         </div>
         <form class="join-inline" id="invite-form">
           <label class="field" style="margin:0;flex:1;min-width:220px">

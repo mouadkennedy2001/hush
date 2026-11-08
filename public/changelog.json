@@ -1,6 +1,87 @@
 {
-  "version": "8.0.0",
+  "version": "10.1.0",
   "entries": [
+    {
+      "date": "2026-11-08",
+      "ts": 1763480100000,
+      "kind": "security",
+      "kindEn": "Security",
+      "kindAr": "أمن",
+      "titleEn": "Full server sessions, owner-only channels, mic_ev1 voice enhancement, and icon/RTL polish",
+      "titleAr": "جلسات كاملة للخوادم + القنوات للمالك فقط + تحسين الصوت mic_ev1 + تلميع الأيقونات والاتجاه",
+      "pointsEn": [
+        "SECURITY (A1/A2/A4): every server create/join now issues an opaque session token bound to device+server. Privileged REST/socket calls prefer the token over the raw deviceId, and public summaries no longer broadcast owner/device ids or member device lists (owners keep moderation ids).",
+        "AUDIT FIX (A3/A5/A10/A11/A12): concurrent first-load races in server chat are single-flighted, invites moved to crypto (10-char), pending channel writes are drained before delete so images cannot resurrect, stored files are re-validated, and channel ids are validated on every path.",
+        "POLICY (N1/N2/N3/N4): channels are owner-only (members now get 403), a per-device cap (10 servers) added on top of the global 100, ownership transfer added (POST /api/servers/:id/transfer), and a per-server upload quota (512 MB, env UPLOAD_QUOTA_BYTES).",
+        "RELIABILITY (A18/A19/A23): atomic writes fsync file+dir and keep a .bak; corrupt files are quarantined instead of zeroed; every server socket handler is try/catch-wrapped and the process logs unhandled rejections instead of vanishing them.",
+        "MIC (mic_ev1): new mic/ library — WebAudio chain (high-pass/low-pass, smart gate, spectral suppressor, limiter, AGC) with optional AudioWorklet, wired as a fail-safe second stage after MicFx in rooms AND server voice. Bypass + strength are in mic settings. Full plan: mic_ev1 -> ev1.9 -> mic_ev2.",
+        "UI/ICONS (A29-A52): server stage survives phones (scroll + min-height), members sheet toggle for small screens, channel rows are real buttons with aria-current, destructive actions visible on touch, Arabic kickers keep joined letterforms, pressed states visible, kick uses a user-x icon, and copy falls back on non-secure contexts."
+      ],
+      "pointsAr": [
+        "أمن (A1/A2/A4): كل إنشاء/انضمام لخادم يُصدر الآن توكن جلسة مبهمًا مربوطًا بالجهاز+الخادم. النداءات المميزة تُفضّل التوكن على deviceId الخام، والخلاصات العامة لم تعد تبث معرّفات المالك/الأعضاء (المالك يحمل معرّفات الإشراف).",
+        "إصلاح تدقيق (A3/A5/A10/A11/A12): سباقات التحميل الأولي في دردشة الخادم أصبحت single-flight، والدعوات انتقلت إلى crypto (10 أحرف)، والكتابة المعلقة للقنوات تُفك قبل الحذف حتى لا تعود الصور، والملفات المخزنة تُتحقق من جديد، ومعرّفات القنوات تُتحقق في كل مسار.",
+        "سياسات (N1/N2/N3/N4): القنوات للمالك فقط (الأعضاء يحصلون الآن على 403)، وحد لكل جهاز (10 خوادم) فوق العام 100، ونقل الملكية (POST /api/servers/:id/transfer)، وحصة رفع لكل خادم (512 MB، متغيّر UPLOAD_QUOTA_BYTES).",
+        "موثوقية (A18/A19/A23): الكتابة الذرية تُزامن الملف+المجلد وتحمل نسخة .bak؛ الملفات التالفة تُعزل بدل تصفيرها؛ كل معالج سوكت للخادم مُغلّف بـ try/catch والعملية تسجل الرفوض غير المعالجة بدل إخفائها.",
+        "صوت (mic_ev1): مكتبة ميك جديدة — سلسلة WebAudio (high-pass/low-pass، بوابة ذكية، قامع طيفي، limiter، AGC) مع AudioWorklet اختياري، مربوطة كمرحلة ثانية فاشلة-آمنة بعد MicFx في الغرف والصوت الخادمي معًا. التجاوز والشدة في إعدادات المايك. الخطة كاملة: mic_ev1 → ev1.9 → mic_ev2.",
+        "واجهة/أيقونات (A29-A52): مرحلة الخادم تصمد على الجوال (سكرول + min-height)، وحوار ورقة الأعضاء للشاشات الصغيرة، وصفوف القنوات أزرار حقيقية مع aria-current، وإجراءات مدمّرة مرئية باللمس، وحروف العناوين العربية تبقى موصولة، والحالة المضغوطة مرئية، والطرد بأيقونة user-x، والنسخ يقع على fallback السياقات غير الآمنة."
+      ]
+    },
+    {
+      "date": "2026-11-07",
+      "ts": 1763400000000,
+      "kind": "update",
+      "kindEn": "Update",
+      "kindAr": "تحديث",
+      "titleEn": "Server audit fix + member rooms, P2P screen sharing, and smarter emoji",
+      "titleAr": "تدقيق الخادم + غرف الأعضاء ومشاركة الشاشة P2P وإيموجي أذكى",
+      "pointsEn": [
+        "AUDIT FIX 1-100: upload path is now validated with the server id format, REST kick/ban immediately disconnects the device's live sockets, joining a new server never drops you from the old one before success, chat history refreshes the live server object, voice joins are rate-limited, and deleted servers free all cached histories.",
+        "MEMBERSHIP: every member (owner or joined via invite) can now create permanent channels and the new temporary voice rooms. The owner keeps delete-server, delete-channel, regenerate-invite, and kick/ban.",
+        "NEW Create Voice Room (temporary): any member creates a voice room with an optional name that defaults to Room of your name. Only the creator can rename or close it. The room is ephemeral — when the last person leaves, it disappears for everyone. This closes the loop on everyone having room-creation power.",
+        "NEW Screen sharing in server voice channels and temporary rooms (P2P: the server only relays WebRTC signaling, media goes browser-to-browser). Includes a share screen button, a screen stage, speaker presence, and switching between multiple shares.",
+        "FIX home page now shows only the servers you added (created or joined). Servers you never joined never appear, even though the API still lists everything for diagnostics.",
+        "NEW server page keeps its dedicated layout (server.html): temporary rooms, screen sharing, online dots, reactions, and the enriched emoji picker all live on that page.",
+        "NEW emoji appearance v10: larger 32px glyphs with a soft pop-in, hover lifts and rotations, selected icon rings, and bigger emoji-only messages. Search, categories, and recent emojis still apply."
+      ],
+      "pointsAr": [
+        "إصلاح تدقيق 1-100: مسار الرفع يُتحقق الآن بصيغة معرّف الخادم، والطرد/الحظر عبر REST يفصل مقبس الجهاز المتصل فورًا، والانضمام إلى خادم جديد لا يخرجك من القديم قبل النجاح، وسجل الدردشة يُحدّث كائن الخادم الحي، ودخول الصوت محدود المعدل، والخوادم المحذوفة تُحرّر كل السجلات المخزنة.",
+        "العضوية: كل عضو (مالك أو من انضم بالدعوة) يمكنه الآن إنشاء قنوات دائمة والغرف الصوتية المؤقتة الجديدة. المالك يحتفظ بالحذف وتجديد الدعوة والطرد والحظر.",
+        "جديد إنشاء غرفة صوتية (مؤقتة): أي عضو ينشئ غرفة صوتية باسم اختياري افتراضيًا Room of اسمك. فقط المنشئ يعيد تسميتها أو يغلقها. الغرفة مؤقتة — عند مغادرة آخر شخص تختفي للجميع. وهذا يحقق صلاحية إنشاء الغرف للجميع.",
+        "جديد مشاركة الشاشة في القنوات الصوتية والغرف المؤقتة (P2P: الخادم يمرّر إشارات WebRTC فقط والمحتوى يذهب مباشرة من متصفح إلى متصفح). يشمل زر مشاركة الشاشة ومنصّة شاشة وحضور مشاركة والتبديل بين عدة مشاركات.",
+        "إصلاح: الصفحة الرئيسية تعرض الآن فقط الخوادم التي أضفتها (أنشأتها أو انضممت إليها). الخوادم التي لم تنضم إليها لا تظهر أبدًا، بينما الـ API ما يزال يعرض كل شيء لأغراض التشخيص.",
+        "جديد: صفحة الخادم المخصصة تحتفظ بتخطيطها (server.html): الغرف المؤقتة ومشاركة الشاشة ونقاط الاتصال والتفاعلات ومنتقي الإيموجي الغني تعيش على تلك الصفحة.",
+        "جديد: مظهر الإيموجي v10: رسوم أكبر 32px مع ظهور ناعم ورفع عند التمرير ودوران، وحلقات اختيار للأيقونات، ورسائل إيموجي كبيرة فقط. البحث والأقسام والأخير ما تزال مطبقة."
+      ]
+    },
+    {
+      "date": "2026-11-07",
+      "ts": 1763350000000,
+      "kind": "update",
+      "kindEn": "Update",
+      "kindAr": "تحديث",
+      "titleEn": "Servers fixed almost completely: owner UI, messages, reactions, emoji design, and join flow",
+      "titleAr": "إصلاح شبه كامل للخوادم: واجهة المالك والرسائل والتفاعلات وتصميم الإيموجي وتدفق الانضمام",
+      "pointsEn": [
+        "FIX owner UI was hidden: server summaries now include the owner id, so the owner sees regenerate-invite, the danger zone, channel delete, and the host badge. The public server list no longer leaks invite codes — codes are sent only to members.",
+        "FIX member counts were off by one (owner counted twice) — the count is now the real unique-member count, including online members in the header (for example 3 members, 2 online).",
+        "FIX your own server messages could not be edited after reconnecting (old code keyed ownership to the socket id). Ownership is now keyed to the device id, so edit/delete survive reconnects and new tabs.",
+        "NEW server message reactions (8: thumbs up, heart, laugh, tada, eyes, applause, fire, check) with chips that show the count and your state, plus copy-message and owner delete-for-everyone.",
+        "FIX uploads required no membership — now the server upload route requires a member device id and keeps the strict double-extension file filter.",
+        "FIX leaving a server voice channel did nothing server-side (the old leave call was rejected as channel-not-found). Chat also carries anti-spam scoring, per-channel drafts, and multi-user typing.",
+        "NEW emoji design v9: category tabs (Faces, Hands, Fun, Sounds), live search in English and Arabic, recent emojis, and big emoji-only messages. The picker is a scrollable grid with labels and never overlaps.",
+        "NEW server improvements: online/offline dots, owner can kick members, channel rename, reconnect now reloads the channel you are in, server descriptions and search on the home page."
+      ],
+      "pointsAr": [
+        "إصلاح: كانت واجهة المالك مخفية — خلاصات السيرفر تعرض الآن معرّف المالك، فالمالك يرى إعادة توليد الدعوة ومنطقة الخطر وحذف القنوات وشارة المضيف. قائمة الخوادم العامة لم تعد تسرّب رموز الدعوة — الرموز تُرسل للأعضاء فقط.",
+        "إصلاح: عدد الأعضاء كان زائدًا بواحد (المالك يُحسب مرتين) — العدد الآن هو العدد الحقيقي للأعضاء الفريدين، مع المتصلين في الترويسة (مثال: 3 أعضاء، 2 متصل).",
+        "إصلاح: رسائلك في السيرفر لم تُعدَّل بعد إعادة الاتصال (الكود القديم ربط الملكية بمعرّف المقبس). الملكية الآن مربوطة بمعرّف الجهاز، فالتعديل والحذف يبقيان بعد إعادة الاتصال والتبويبات الجديدة.",
+        "جديد: تفاعلات على رسائل السيرفر (8: إبهام أعلى، قلب، ضحك، تا-دا، عيون، تصفيق، نار، صح) مع شرائح تُظهر العدد وحالتك، إضافة إلى نسخ الرسالة وحذف المالك للجميع.",
+        "إصلاح: الرفع كان لا يتطلب عضوية — مسار رفع السيرفر يتطلب الآن معرّف جهاز عضو ويبقي مرشّح الامتداد المزدوج الصارم.",
+        "إصلاح: مغادرة القناة الصوتية في السيرفر لم تفعل شيئًا في الخادم (نداء المغادرة القديم كان يُرفض). والدردشة تحمل الآن نقاط منع السبام ومسودات لكل قناة وكتابة متعددة المستخدمين.",
+        "جديد: تصميم إيموجي v9: تبويبات أقسام (وجوه، أيدٍ، متعة، أصوات)، بحث مباشر بالإنجليزية والعربية، إيموجي أخير، ورسائل إيموجي كبيرة فقط. المنتقي شبكة قابلة للتمرير مع تسميات ولا يتداخل أبدًا.",
+        "جديد: تحسينات الخوادم: نقاط متصل/غير متصل، والمالك يمكنه طرد الأعضاء، وإعادة تسمية القنوات، وإعادة الاتصال تُحمّل قناتك الحالية، وأوصاف للخادم وبحث في الصفحة الرئيسية."
+      ]
+    },
     {
       "date": "2026-11-07",
       "ts": 1763300000000,

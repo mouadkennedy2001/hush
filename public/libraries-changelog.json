@@ -1,0 +1,67 @@
+{
+  "version": "libraries-1.0.0",
+  "updated": "2026-11-08",
+  "entries": [
+    {
+      "date": "2026-11-08",
+      "ts": 1763480100000,
+      "library": "ping-op",
+      "version": "1.0.0",
+      "kind": "update",
+      "titleEn": "PING OP v1.0 — Ping Optimizer (تحسين البنق)",
+      "titleAr": "PING OP v1.0 — تحسين البنق (Ping Optimizer)",
+      "pointsEn": [
+        "Written from scratch: core stats engine (min/avg/median/max/jitter/loss/score 0-100) + adaptive cadence (good 3s / fair 2s / poor 1.2s / offline 0.9s).",
+        "Server adapter: TCP_NODELAY hardening + 5 probes/s per socket + GET /api/ping with no-store and X-Ping-Op header.",
+        "Client: 2 parallel probes (min), min-of-last-4 display, monotonic clock, paused when the tab is hidden, sparkline only when visible.",
+        "Arabic badge: OP Optimizer = تحسين — shown beside ping in rooms and servers."
+      ],
+      "pointsAr": [
+        "مكتوبة من الصفر: محرك إحصاءات (أدنى/متوسط/وسيط/أقصى/اهتزاز/فقدان/نتيجة 0-100) + دورة تكيّفية (جيد 3s / مقبول 2s / ضعيف 1.2s / منقطع 0.9s).",
+        "محول الخادم: تقوية TCP_NODELAY + حد 5 مجسات/ثانية لكل سوكت + GET /api/ping بدون تخزين مع ترويسة X-Ping-Op.",
+        "العميل: مجسّان متوازيان (الأدنى) + عرض أدنى 4 أخيرة + ساعة أحادية + إيقاف عند إخفاء التبويب + رسم شرارة عند الظهور فقط.",
+        "شارة عربية: OP تعني Optimizer = تحسين — تظهر بجانب البنق في الغرف والخوادم."
+      ]
+    },
+    {
+      "date": "2026-11-08",
+      "ts": 1763480100000,
+      "library": "mic",
+      "version": "ev1.1",
+      "kind": "update",
+      "titleEn": "mic ev1.1 — Maximum purity + security",
+      "titleAr": "mic ev1.1 — أقصى نقاوة + أمن",
+      "pointsEn": [
+        "Maximum purity by default (gate + compressor + limiter + spectral at strength 0.8, no bypass unless requested).",
+        "Gate fix: RMS meter from Analyser so the mic never mutes when AudioWorklet is missing.",
+        "Worklet now truly suppresses (floor-follow gain) instead of a silent copy; shared AudioContext (one, not three).",
+        "Security: mic-settings.js sanitizes every field (clamp + whitelist + deviceId shape); monitor capped at 0.4 against feedback."
+      ],
+      "pointsAr": [
+        "أقصى نقاوة افتراضيًا (بوابة + ضاغط + limiter + طيفي بقوة 0.8، بلا تجاوز إلا بطلب صريح).",
+        "إصلاح البوابة: مقياس RMS من Analyser حتى لا يصمت المايك بدون AudioWorklet.",
+        "المعالج يقمع فعليًا (تابع أرضية) بدل النسخ الصامت؛ سياق صوتي مشترك واحد (لا ثلاثة).",
+        "أمن: mic-settings.js يطهّر كل حقل (تقييد + قائمة بيضاء + فحص deviceId)؛ المراقبة 0.4 ضد التغذية الراجعة."
+      ]
+    },
+    {
+      "date": "2026-11-08",
+      "ts": 1763480100000,
+      "library": "mic",
+      "version": "ev1",
+      "kind": "update",
+      "titleEn": "mic ev1 — First working voice pipeline",
+      "titleAr": "mic ev1 — أول خط صوتي عامل",
+      "pointsEn": [
+        "WebAudio chain: high-pass/low-pass, smart noise gate, light spectral suppressor, limiter, AGC.",
+        "Optional AudioWorklet with main-thread fallback; fail-safe bypass keeps the call alive.",
+        "Level + CPU meter; wired in rooms and server voice after MicFx."
+      ],
+      "pointsAr": [
+        "سلسلة WebAudio: high-pass/low-pass + بوابة ضجيج ذكية + قامع طيفي خفيف + limiter + AGC.",
+        "AudioWorklet اختياري مع مسار احتياطي؛ تجاوز آمن يحفظ المكالمة.",
+        "مقياس مستوى + CPU؛ مربوط في الغرف وصوت الخادم بعد MicFx."
+      ]
+    }
+  ]
+}

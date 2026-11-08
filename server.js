@@ -29,3 +29,12 @@ async function shutdown(signal) {
 
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
+
+// A23: unhandled rejections must not silently vanish — log them so a bad
+// socket handler surfaces in production instead of corrupting state quietly.
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled rejection (logged, process keeps running):', reason);
+});
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught exception:', error);
+});

@@ -2,6 +2,7 @@ import { initI18n, onLanguageChange, t } from './i18n.js';
 import { initTheme } from './theme.js';
 import { startPing } from './ping.js';
 import { initChangelog } from './changelog.js';
+import { initLibraries } from './libraries-log.js';
 import { CUSTOM_EMOJIS, customEmojiImage } from './emoji.js';
 import { fetchServers, createServer, serverIconUrl, serverUrl, inviteUrl, lookupInvite } from './servers.js';
 
@@ -20,6 +21,7 @@ initI18n();
 initTheme();
 startPing();
 initChangelog();
+initLibraries();
 applyPageMeta();
 onLanguageChange(applyPageMeta);
 
@@ -61,18 +63,26 @@ const serverIconPicker = $('#server-icon-picker');
 const serverDialogError = $('#server-dialog-error');
 let selectedIcon = 'star';
 
-function renderServers(servers) {
+function renderServers(servers, query = '') {
   if (!serverGrid) return;
   serverGrid.replaceChildren();
-  if (!servers.length) {
+  // Only servers the visitor added (created or joined) are shown here.
+  // On the API side, those are exactly the summaries carrying an invite code
+  // for this device — strangers' servers (inviteCode null) never render.
+  const mine = (servers || []).filter((s) => s.inviteCode || s.isOwner);
+  const q = String(query ?? '').trim().toLowerCase();
+  const visible = q
+    ? mine.filter((s) => s.name.toLowerCase().includes(q) || String(s.description ?? '').toLowerCase().includes(q))
+    : mine;
+  if (!visible.length) {
     const p = document.createElement('p');
     p.className = 'muted';
     p.id = 'server-empty';
-    p.textContent = t('server.empty');
+    p.textContent = servers?.length && !mine.length ? t('server.onlyMyServers') : t('server.empty');
     serverGrid.append(p);
     return;
   }
-  for (const server of servers) {
+  for (const server of visible) {
     const card = document.createElement('article');
     card.className = 'server-card';
     const icon = document.createElement('img');
@@ -88,6 +98,18 @@ function renderServers(servers) {
     meta.className = 'muted';
     meta.textContent = t('server.members', { count: server.memberCount ?? 1 }) + ' · ' + (server.channels?.length ?? 0) + ' ' + t('server.channels');
     body.append(title, meta);
+    if (server.description) {
+      const desc = document.createElement('p');
+      desc.className = 'server-description';
+      desc.textContent = server.description;
+      body.append(desc);
+    }
+    if (server.isOwner) {
+      const mine = document.createElement('span');
+      mine.className = 'host-badge';
+      mine.textContent = t('server.myServer');
+      body.append(mine);
+    }
     card.append(icon, body);
     const open = document.createElement('a');
     open.className = 'btn btn-primary btn-sm';
@@ -110,7 +132,7 @@ function renderServers(servers) {
 
 async function refreshServers() {
   try {
-    renderServers(await fetchServers());
+    renderServers(await fetchServers(), $('#server-search-input')?.value ?? '');
   } catch {
     if (serverEmpty) serverEmpty.textContent = t('server.empty');
   }
@@ -118,6 +140,14 @@ async function refreshServers() {
 
 refreshServers();
 setInterval(refreshServers, 15000);
+let serverSearchTimer = null;
+$('#server-search-input')?.addEventListener('input', () => {
+  clearTimeout(serverSearchTimer);
+  serverSearchTimer = setTimeout(async () => {
+    try { renderServers(await fetchServers(), $('#server-search-input').value); }
+    catch { /* keep previous list */ }
+  }, 220);
+});
 
 if (serverIconPicker) {
   for (const emoji of CUSTOM_EMOJIS) {

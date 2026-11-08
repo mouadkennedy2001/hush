@@ -5,9 +5,10 @@ import { initTheme, toggleTheme } from './theme.js';
 import { startPing, refreshPing } from './ping.js';
 import { initSettings, getSettings, updateSettings } from './settings.js';
 import { SOUNDBOARD_SOUNDS, playSoundboard, playCustomSound, getSoundboardVolume, setSoundboardVolume, isSoundboardId, soundboardEmojiId } from './soundboard.js';
-import { CUSTOM_EMOJIS, customEmojiImage, isCustomEmoji, emojiUrl, splitEmojiShortcodes, preloadCustomEmojis } from './emoji.js';
+import { CUSTOM_EMOJIS, EMOJI_CATEGORIES, customEmojiImage, isCustomEmoji, emojiUrl, splitEmojiShortcodes, preloadCustomEmojis, pushRecentEmoji, getRecentEmojis, searchEmojis, isEmojiOnlyMessage, emojiLabel } from './emoji.js';
 import { playSound, getSoundsEnabled, setSoundsEnabled, getSoundVolume, setSoundVolume } from './sounds.js';
 import { initChangelog } from './changelog.js';
+import { initLibraries } from './libraries-log.js';
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -264,6 +265,7 @@ initI18n();
 initTheme();
 initSettings();
 initChangelog();
+initLibraries();
 startPing({ socketGetter: () => state.socket });
 onLanguageChange(handleLanguageChange);
 try {
@@ -386,20 +388,7 @@ function bindEvents() {
     toggleEmojiMenu();
   });
   if (els.emojiMenu) {
-    els.emojiMenu.replaceChildren();
-    for (const emoji of EMOJIS) {
-      const button = el('button', 'emoji-choice');
-      button.type = 'button';
-      button.dataset.emoji = emoji;
-      button.setAttribute('aria-label', `:${emoji}:`);
-      button.title = `:${emoji}:`;
-      button.append(customEmojiImage(emoji, 'custom-emoji custom-emoji-sm'));
-      button.addEventListener('click', () => {
-        insertEmoji(`:${emoji}:`);
-        closeEmojiMenu();
-      });
-      els.emojiMenu.append(button);
-    }
+    buildRoomEmojiMenu();
   }
 
   els.composer.addEventListener('submit', (event) => {
@@ -576,7 +565,7 @@ function bindEvents() {
     if (!els.reactionMenu.hidden && !els.reactionMenu.contains(event.target) && event.target !== els.reactionBtn) {
       closeReactionMenu();
     }
-    if (els.emojiMenu && !els.emojiMenu.hidden && !els.emojiMenu.contains(event.target) && event.target !== els.emojiBtn) {
+    if (els.emojiMenu && !els.emojiMenu.hidden && !els.emojiMenu.contains(event.target) && !els.emojiBtn?.contains(event.target)) {
       closeEmojiMenu();
     }
   });
@@ -1722,6 +1711,7 @@ function createMessageNode(message) {
   const article = el('article', 'message');
   article.dataset.messageId = message.id;
   article.classList.toggle('is-self', isSelf);
+  if (message.text && isEmojiOnlyMessage(message.text)) article.classList.add('is-emoji-only');
 
   const avatar = el(
     'span',
@@ -2229,11 +2219,86 @@ async function sendMessageReaction(messageId, emoji) {
   }
 }
 
+function buildRoomEmojiMenu() {
+  els.emojiMenu.replaceChildren();
+  const search = el('input', 'emoji-search');
+  search.type = 'search';
+  search.placeholder = t('emoji.search');
+  search.setAttribute('aria-label', t('emoji.search'));
+  const tabs = el('div', 'emoji-tabs');
+  let activeCat = 'all';
+  const renderGrid = (query = '') => {
+    const grid = $('#emoji-grid', els.emojiMenu);
+    if (!grid) return;
+    grid.replaceChildren();
+    let list;
+    if (query) list = searchEmojis(query);
+    else if (activeCat === 'recent') {
+      list = getRecentEmojis().map((id) => CUSTOM_EMOJIS.find((e) => e.id === id)).filter(Boolean);
+      if (!list.length) { grid.append(el('div', 'emoji-empty', t('emoji.noRecent'))); return; }
+    } else {
+      list = activeCat === 'all' ? CUSTOM_EMOJIS : CUSTOM_EMOJIS.filter((e) => e.cat === activeCat);
+    }
+    if (!list.length) { grid.append(el('div', 'emoji-empty', t('emoji.noResults'))); return; }
+    for (const entry of list) {
+      const emoji = typeof entry === 'string' ? entry : entry.id;
+      const button = el('button', 'emoji-choice');
+      button.type = 'button';
+      button.dataset.emoji = emoji;
+      button.setAttribute('aria-label', `:${emoji}:`);
+      button.title = `:${emoji}: — ${emojiLabel(emoji, locale())}`;
+      button.append(customEmojiImage(emoji, 'custom-emoji custom-emoji-sm'));
+      button.addEventListener('click', () => {
+        insertEmoji(`:${emoji}:`);
+        pushRecentEmoji(emoji);
+        closeEmojiMenu();
+      });
+      grid.append(button);
+    }
+  };
+  for (const cat of EMOJI_CATEGORIES) {
+    const tab = el('button', 'emoji-tab', cat.id === 'recent' ? t('emoji.recent') : cat.id === 'all' ? t('emoji.all') : t(`emoji.cat.${cat.id}`));
+    tab.type = 'button';
+    tab.dataset.cat = cat.id;
+    tab.setAttribute('aria-pressed', String(cat.id === activeCat));
+    tab.addEventListener('click', () => {
+      activeCat = cat.id;
+      for (const b of tabs.querySelectorAll('.emoji-tab')) b.setAttribute('aria-pressed', String(b === tab));
+      renderGrid(search.value);
+    });
+    tabs.append(tab);
+  }
+  const grid = el('div', 'emoji-grid');
+  grid.id = 'emoji-grid';
+  els.emojiMenu.append(search, tabs, grid);
+  search.addEventListener('input', () => renderGrid(search.value));
+  search.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeEmojiMenu(); e.stopPropagation(); });
+  renderGrid();
+}
+
 function toggleEmojiMenu() {
   if (!els.emojiMenu) return;
   const willOpen = els.emojiMenu.hidden;
   els.emojiMenu.hidden = !willOpen;
+  if (willOpen) {
+    const rect = els.emojiBtn?.getBoundingClientRect();
+    if (rect) {
+      const menuW = Math.min(272, window.innerWidth - 24);
+      const menuH = 380;
+      const rtl = document.documentElement.dir === 'rtl' || document.documentElement.lang === 'ar';
+      let left = rtl ? rect.right - menuW : rect.left;
+      left = Math.max(8, Math.min(left, window.innerWidth - menuW - 8));
+      let top = rect.top - menuH - 8;
+      if (top < 8) top = Math.min(rect.bottom + 8, window.innerHeight - menuH - 8);
+      els.emojiMenu.style.left = `${left}px`;
+      els.emojiMenu.style.right = 'auto';
+      els.emojiMenu.style.top = `${Math.max(8, top)}px`;
+      els.emojiMenu.style.bottom = 'auto';
+    }
+  }
   els.emojiBtn?.setAttribute('aria-expanded', String(willOpen));
+  // Do NOT steal focus from the composer on open — users type while the
+  // picker is open. Focus stays in the message input (usage improvement).
 }
 
 function closeEmojiMenu() {
@@ -2479,13 +2544,16 @@ async function uploadFile(file) {
 
   showComposerHint(t('upload.uploading', { name: file.name }));
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20000);
   try {
     const body = new FormData();
     body.append('file', file);
 
     const response = await fetch(`/api/rooms/${encodeURIComponent(state.code)}/upload`, {
       method: 'POST',
-      body
+      body,
+      signal: controller.signal
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(uploadErrorKey(data.error, response.status));
@@ -2495,6 +2563,7 @@ async function uploadFile(file) {
   } catch (error) {
     toast(errorText(error, 'upload.failed'), 'error', 4800);
   } finally {
+    clearTimeout(timeout);
     hideComposerHint();
   }
 }

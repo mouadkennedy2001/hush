@@ -313,6 +313,7 @@ export const staticAr = {
 
   // Log / admin (static)
   Log: 'السجل',
+  Libraries: 'المكتبات',
   'Changelog': 'سجل التغييرات',
   Host: 'المضيف',
   'Admin actions': 'إجراءات الإدارة',
@@ -363,6 +364,12 @@ export const staticAr = {
   'Create server': 'إنشاء الخادم',
   'My server': 'خادمي',
   'My servers': 'خوادمي',
+  'Search servers': 'ابحث في الخوادم',
+  'Temporary voice rooms': 'غرف صوتية مؤقتة',
+  'Create voice room': 'إنشاء غرفة صوتية',
+  'Room name (optional)': 'اسم الغرفة (اختياري)',
+  'Share': 'مشاركة',
+  'Server messages': 'رسائل الخادم',
   'No servers yet. Create the first one.': 'لا خوادم بعد. أنشئ الأول.',
   'Server name': 'اسم الخادم',
   'Channel name': 'اسم القناة',

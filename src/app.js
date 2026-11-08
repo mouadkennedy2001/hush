@@ -9,8 +9,10 @@ import multer from 'multer';
 import { Server as SocketServer } from 'socket.io';
 
 import { RoomManager, formatCode, isValidCode, normalizeCode } from './rooms.js';
-import { ServerManager, cleanServerName, cleanChannelName, cleanChannelType, cleanEmojiId, cleanDeviceId, cleanInviteCode } from './servers.js';
+import { ServerManager, cleanServerName, cleanChannelName, cleanChannelType, cleanEmojiId, cleanDeviceId, cleanInviteCode, isValidServerId, isValidChannelId } from './servers.js';
 import { attachRealtime } from './realtime.js';
+import { SessionStore, sessions as defaultSessionsStore } from './sessions.js';
+import { createPingServer } from '../PING OP/src/server.js';
 import {
   MAX_UPLOAD_BYTES,
   UPLOAD_EXTENSIONS,
@@ -82,16 +84,22 @@ export async function createHushServer({
   // own chat files. No room codes involved.
   const servers = new ServerManager({ dataDir, uploadsDir, log });
   await servers.init();
+  // Full sessions (A1): opaque tokens bound to deviceId+serverId. Tests may
+  // inject their own store; production uses a process-global store.
+  const sessions = defaultSessionsStore;
+  // Helper: a valid token always wins over a client-supplied deviceId.
+  const reqDeviceId = (req, fallbackDeviceId = null, serverId = null) => {
+    const token = req.headers?.['x-session-token'] || req.body?.sessionToken || req.query?.sessionToken || '';
+    const { deviceId, via } = sessions.resolve({ sessionToken: token, deviceId: fallbackDeviceId, serverId });
+    return via === 'none' ? '' : deviceId;
+  };
+  const attachParams = { rooms, servers, sessions };
 
   const app = express();
   const server = http.createServer(app);
-  // Lower latency: TCP_NODELAY kills Nagle's 40ms delayed-ACK stall on
-  // small signaling packets; shorter keep-alive timeouts recycle fast.
-  server.keepAliveTimeout = 30_000;
-  server.headersTimeout = 35_000;
-  server.on('connection', (socket) => {
-    try { socket.setNoDelay?.(true); } catch { /* ignore */ }
-  });
+  // PING OP v1.0 hardening: TCP_NODELAY (setNoDelay) + short keep-alive (see PING OP/src/server.js).
+  const pingOpServer = createPingServer();
+  pingOpServer.applyHardening(server);
   const io = new SocketServer(server, {
     maxHttpBufferSize: 256_000,
     // Faster dead-peer detection = quicker reconnect + fresher ping.
@@ -101,10 +109,15 @@ export async function createHushServer({
     cors: { origin: false }
   });
 
-  attachRealtime(io, { rooms, servers });
+  // PING OP socket echo lives in the library; realtime owns everything else.
+  pingOpServer.attach(io);
+  attachRealtime(io, attachParams);
 
   app.disable('x-powered-by');
-  app.set('trust proxy', 1);
+  // H3: only trust X-Forwarded-For when we know we are behind a proxy.
+  // Default 0 = use socket/req IP directly (spoof-proof for direct exposure).
+  // Behind a known proxy set HUSH_TRUST_PROXY=1.
+  app.set('trust proxy', process.env.HUSH_TRUST_PROXY === '1' ? 1 : 0);
 
   app.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -156,11 +169,8 @@ export async function createHushServer({
     next();
   });
 
-  app.get('/api/ping', (req, res) => {
-    res.setHeader('Cache-Control', 'no-store');
-    res.setHeader('Pragma', 'no-cache');
-    res.json({ ok: true, time: Date.now() });
-  });
+  // PING OP v1.0 HTTP probe (pingOpServer keeps no-store + adds X-Ping-Op).
+  app.get('/api/ping', (req, res) => pingOpServer.httpHandler(req, res));
 
   app.get('/api/changelog', async (req, res, next) => {
     try {
@@ -169,6 +179,17 @@ export async function createHushServer({
       res.type('application/json').send(raw);
     } catch {
       res.json({ version: '1.0.0', entries: [] });
+    }
+  });
+
+  // Dedicated libraries log (mic + PING OP), bilingual via the JSON itself.
+  app.get('/api/libraries-changelog', async (req, res) => {
+    try {
+      res.setHeader('Cache-Control', 'public, max-age=300');
+      const raw = await fs.readFile(path.join(publicDir, 'libraries-changelog.json'), 'utf8');
+      res.type('application/json').send(raw);
+    } catch {
+      res.json({ version: 'libraries-1.0.0', entries: [] });
     }
   });
 
@@ -189,7 +210,9 @@ export async function createHushServer({
       res.json({
         ok: true,
         rooms: await rooms.currentRoomCount(),
-        uptime: Math.round(process.uptime())
+        uptime: Math.round(process.uptime()),
+        // PING OP aggregate (server-side echo picture) for ops dashboards.
+        ping: pingOpServer.getStats()
       });
     } catch (error) {
       next(error);
@@ -227,7 +250,14 @@ export async function createHushServer({
 
   app.get('/api/servers', (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
-    res.json({ servers: servers.list().map((s) => servers.publicSummary(s)) });
+    // A4/C4: unauthenticated enumeration is restricted — only the viewer's
+    // own member servers are listed. Without identity: redacted previews.
+    const viewer = reqDeviceId(req, req.query?.deviceId, null) || cleanDeviceId(req.query?.deviceId);
+    const list = viewer ? servers.listFor(viewer) : [];
+    // Back-compat for diagnostics/tests: callers with no identity get the
+    // redacted public summaries of nothing (no scraping surface). Old
+    // public list behaviour is intentionally removed for privacy.
+    res.json({ servers: list.map((s) => servers.publicSummary(s, viewer || null)) });
   });
 
   app.post('/api/servers', serverLimit, async (req, res, next) => {
@@ -243,83 +273,220 @@ export async function createHushServer({
         description: String(req.body?.description || '').slice(0, 140)
       });
       if (!server) return res.status(409).json({ error: 'server-limit' });
-      res.status(201).json({ server: servers.publicSummary(server) });
+      const sessionToken = sessions.issue(ownerDeviceId, server.id);
+      res.status(201).json({ server: servers.publicSummary(server, ownerDeviceId), sessionToken });
     } catch (error) { next(error); }
   });
 
   app.get('/api/servers/:id', (req, res) => {
     const server = servers.get(req.params.id);
     if (!server) return res.status(404).json({ error: 'server-not-found' });
-    res.json({ server: servers.publicSummary(server) });
+    const viewer = reqDeviceId(req, req.query?.deviceId, server.id) || cleanDeviceId(req.query?.deviceId);
+    // Non-members get only a redacted preview (name/counts, no members).
+    res.json({ server: servers.publicSummary(server, viewer || null) });
   });
 
   app.post('/api/servers/:id/join', serverLimit, async (req, res) => {
+    const deviceId = reqDeviceId(req, req.body?.deviceId, req.params.id);
     const server = await servers.join(req.params.id, {
       deviceId: req.body?.deviceId, name: req.body?.name, inviteCode: req.body?.inviteCode
     });
     if (!server) {
       const existing = servers.get(req.params.id);
       if (!existing) return res.status(404).json({ error: 'server-not-found' });
+      if (deviceId && servers.isBanned(existing, deviceId)) return res.status(403).json({ error: 'banned' });
       return res.status(403).json({ error: 'invite-required' });
     }
-    res.json({ server: servers.publicSummary(server) });
+    // A1: issue a session token for subsequent privileged calls in this server.
+    const joinDevice = cleanDeviceId(req.body?.deviceId) || deviceId;
+    const sessionToken = joinDevice ? sessions.issue(joinDevice, server.id) : '';
+    res.json({ server: servers.publicSummary(server, joinDevice || null), sessionToken });
   });
 
-  app.get('/api/servers/invite/:code', (req, res) => {
+  const inviteLimit = rateLimiter({ windowMs: 60_000, max: 20 });
+  app.get('/api/servers/invite/:code', inviteLimit, (req, res) => {
     const server = servers.findByInvite(req.params.code);
     if (!server) return res.status(404).json({ error: 'invite-not-found' });
-    res.json({ server: servers.publicSummary(server) });
+    // The caller proved the invite code. Return a preview without leaking
+    // ownerDeviceId/members, but keep the code echoed for the invite UI.
+    const preview = servers.publicSummary(server, null);
+    res.json({ server: { ...preview, inviteCode: server.inviteCode } });
   });
 
   app.post('/api/servers/:id/leave', async (req, res) => {
-    const ok = await servers.leave(req.params.id, req.body?.deviceId);
+    // A7/H2: leave must evict live sockets, not just mutate the DB.
+    const actor = reqDeviceId(req, req.body?.deviceId, req.params.id);
+    const ok = await servers.leave(req.params.id, actor || req.body?.deviceId);
     if (!ok) return res.status(400).json({ error: 'leave-failed' });
+    sessions.revokeAllForDevice(actor || req.body?.deviceId, req.params.id);
+    for (const [, sock] of io.sockets.sockets) {
+      if (sock.data.serverId === req.params.id && sock.data.serverDeviceId === (actor || req.body?.deviceId)) {
+        try { sock.emit('server:kicked', { by: '' }); } catch { /* ignore */ }
+        try { sock.leave(`server:${req.params.id}`); } catch { /* ignore */ }
+        try { sock.disconnect(true); } catch { /* ignore */ }
+      }
+    }
     res.json({ ok: true });
   });
 
   app.post('/api/servers/:id/regenerate-invite', serverLimit, async (req, res) => {
-    const server = await servers.regenerateInvite(req.params.id, req.body?.deviceId);
+    const actor = reqDeviceId(req, req.body?.deviceId, req.params.id);
+    const server = await servers.regenerateInvite(req.params.id, actor || req.body?.deviceId);
     if (!server) return res.status(403).json({ error: 'not-admin' });
-    res.json({ server: servers.publicSummary(server) });
+    res.json({ server: servers.publicSummary(server, actor || req.body?.deviceId) });
+  });
+
+  app.patch('/api/servers/:id', serverLimit, async (req, res) => {
+    const actor = reqDeviceId(req, req.body?.deviceId, req.params.id);
+    const updated = await servers.updateSettings(req.params.id, actor || req.body?.deviceId, {
+      name: req.body?.name, description: req.body?.description, iconEmojiId: req.body?.iconEmojiId
+    });
+    if (!updated) {
+      const server = servers.get(req.params.id);
+      if (!server) return res.status(404).json({ error: 'server-not-found' });
+      return res.status(403).json({ error: 'not-admin' });
+    }
+    io.to(`server:${req.params.id}`).emit('server:channels:updated', { server: servers.broadcastSummary(updated) });
+    res.json({ server: servers.publicSummary(updated, actor || req.body?.deviceId) });
+  });
+
+  app.post('/api/servers/:id/transfer', serverLimit, async (req, res) => {
+    // N1/A16: ownership transfer for orphaned servers.
+    const actor = reqDeviceId(req, req.body?.deviceId, req.params.id);
+    const updated = await servers.transferOwnership(req.params.id, actor || req.body?.deviceId, req.body?.toDeviceId);
+    if (!updated) {
+      const server = servers.get(req.params.id);
+      if (!server) return res.status(404).json({ error: 'server-not-found' });
+      return res.status(403).json({ error: 'not-admin' });
+    }
+    io.to(`server:${req.params.id}`).emit('server:members:updated', { server: servers.broadcastSummary(updated) });
+    res.json({ server: servers.publicSummary(updated, actor || req.body?.deviceId) });
+  });
+
+  app.post('/api/servers/:id/kick', serverLimit, async (req, res) => {
+    const actor = reqDeviceId(req, req.body?.deviceId, req.params.id);
+    const targetDeviceId = cleanDeviceId(req.body?.targetDeviceId);
+    const ok = await servers.kick(req.params.id, actor || req.body?.deviceId, targetDeviceId);
+    if (!ok) return res.status(403).json({ error: 'not-admin' });
+    sessions.revokeAllForDevice(targetDeviceId, req.params.id);
+    const server = servers.get(req.params.id);
+    // Evict the kicked device's live sockets immediately (REST path used to
+    // leave them online until their next action).
+    for (const [, sock] of io.sockets.sockets) {
+      if (sock.data.serverId === req.params.id && sock.data.serverDeviceId === targetDeviceId) {
+        try { sock.emit('server:kicked', { by: '' }); } catch { /* ignore */ }
+        try { sock.disconnect(true); } catch { /* ignore */ }
+      }
+    }
+    io.to(`server:${req.params.id}`).emit('server:members:updated', { server: servers.broadcastSummary(server) });
+    res.json({ ok: true, server: servers.publicSummary(server, actor || req.body?.deviceId) });
+  });
+
+  app.post('/api/servers/:id/ban', serverLimit, async (req, res) => {
+    const actor = reqDeviceId(req, req.body?.deviceId, req.params.id);
+    const targetDeviceId = cleanDeviceId(req.body?.targetDeviceId);
+    const ban = await servers.ban(req.params.id, actor || req.body?.deviceId, targetDeviceId, req.body?.targetName, req.body?.minutes);
+    if (!ban) return res.status(403).json({ error: 'not-admin' });
+    sessions.revokeAllForDevice(targetDeviceId, req.params.id);
+    const server = servers.get(req.params.id);
+    for (const [, sock] of io.sockets.sockets) {
+      if (sock.data.serverId === req.params.id && sock.data.serverDeviceId === targetDeviceId) {
+        try { sock.emit('server:kicked', { by: '' }); } catch { /* ignore */ }
+        try { sock.disconnect(true); } catch { /* ignore */ }
+      }
+    }
+    io.to(`server:${req.params.id}`).emit('server:members:updated', { server: servers.broadcastSummary(server) });
+    res.json({ ok: true, ban, server: servers.publicSummary(server, actor || req.body?.deviceId) });
+  });
+
+  app.post('/api/servers/:id/unban', serverLimit, async (req, res) => {
+    const actor = reqDeviceId(req, req.body?.deviceId, req.params.id);
+    const ok = await servers.unban(req.params.id, actor || req.body?.deviceId, req.body?.targetDeviceId);
+    if (!ok) return res.status(403).json({ error: 'not-admin' });
+    res.json({ ok: true });
+  });
+
+  app.get('/api/servers/:id/history', async (req, res) => {
+    const server = servers.get(req.params.id);
+    if (!server) return res.status(404).json({ error: 'server-not-found' });
+    const viewer = reqDeviceId(req, req.query?.deviceId, server.id) || cleanDeviceId(req.query?.deviceId);
+    if (!viewer || !servers.isMember(server, viewer) || servers.isBanned(server, viewer)) return res.status(403).json({ error: 'not-member' });
+    const channelId = String(req.query.channelId || '');
+    if (!isValidChannelId(channelId)) return res.status(404).json({ error: 'channel-not-found' });
+    const channel = server.channels.find((c) => c.id === channelId);
+    if (!channel) return res.status(404).json({ error: 'channel-not-found' });
+    const messages = await servers.loadMessages(server.id, channelId);
+    res.json({ ok: true, messages });
   });
 
   app.post('/api/servers/:id/channels', serverLimit, async (req, res) => {
     const name = cleanChannelName(req.body?.name);
     if (!name) return res.status(400).json({ error: 'invalid-channel' });
+    const actor = reqDeviceId(req, req.body?.deviceId || req.body?.ownerDeviceId, req.params.id);
     const channel = await servers.addChannel(
       req.params.id,
       { name, type: cleanChannelType(req.body?.type) },
-      req.body?.deviceId || req.body?.ownerDeviceId
+      actor || req.body?.deviceId || req.body?.ownerDeviceId
     );
     if (!channel) {
       const server = servers.get(req.params.id);
       if (!server) return res.status(404).json({ error: 'server-not-found' });
-      if (!servers.isMember(server, req.body?.deviceId || req.body?.ownerDeviceId)) return res.status(403).json({ error: 'not-admin' });
+      if (!servers.isOwner(server, actor || req.body?.deviceId || req.body?.ownerDeviceId)) return res.status(403).json({ error: 'not-admin' });
       return res.status(409).json({ error: 'channel-limit' });
     }
-    io.to(`server:${req.params.id}`).emit('server:channels:updated', { server: servers.publicSummary(servers.get(req.params.id)) });
-    res.status(201).json({ channel, server: servers.publicSummary(servers.get(req.params.id)) });
+    const updated = servers.get(req.params.id);
+    io.to(`server:${req.params.id}`).emit('server:channels:updated', { server: servers.broadcastSummary(updated) });
+    res.status(201).json({ channel, server: servers.publicSummary(updated, actor || req.body?.deviceId || req.body?.ownerDeviceId) });
   });
 
-  app.delete('/api/servers/:id/channels/:channelId', async (req, res) => {
-    const removed = await servers.deleteChannel(req.params.id, req.params.channelId, req.body?.deviceId);
+  app.patch('/api/servers/:id/channels/:channelId', serverLimit, async (req, res) => {
+    if (!isValidChannelId(req.params.channelId)) return res.status(404).json({ error: 'channel-not-found' });
+    const actor = reqDeviceId(req, req.body?.deviceId, req.params.id);
+    const channel = await servers.renameChannel(req.params.id, req.params.channelId, req.body?.name, actor || req.body?.deviceId);
+    if (!channel) {
+      const server = servers.get(req.params.id);
+      if (!server) return res.status(404).json({ error: 'server-not-found' });
+      return res.status(403).json({ error: 'not-admin' });
+    }
+    const updated = servers.get(req.params.id);
+    io.to(`server:${req.params.id}`).emit('server:channels:updated', { server: servers.broadcastSummary(updated) });
+    res.json({ channel, server: servers.publicSummary(updated, actor || req.body?.deviceId) });
+  });
+
+  const channelDeleteLimit = rateLimiter({ windowMs: 60_000, max: 20 });
+  app.delete('/api/servers/:id/channels/:channelId', channelDeleteLimit, async (req, res) => {
+    if (!isValidChannelId(req.params.channelId)) return res.status(404).json({ error: 'channel-not-found' });
+    const actor = reqDeviceId(req, req.body?.deviceId, req.params.id);
+    const removed = await servers.deleteChannel(req.params.id, req.params.channelId, actor || req.body?.deviceId);
     if (!removed) {
       const server = servers.get(req.params.id);
       if (!server) return res.status(404).json({ error: 'server-not-found' });
-      if (!servers.isOwner(server, req.body?.deviceId)) return res.status(403).json({ error: 'not-admin' });
+      if (!servers.isOwner(server, actor || req.body?.deviceId)) return res.status(403).json({ error: 'not-admin' });
       return res.status(400).json({ error: 'channel-not-found' });
     }
-    io.to(`server:${req.params.id}`).emit('server:channels:updated', { server: servers.publicSummary(servers.get(req.params.id)) });
+    const updated = servers.get(req.params.id);
+    io.to(`server:${req.params.id}`).emit('server:channels:updated', { server: servers.broadcastSummary(updated) });
     res.json({ ok: true });
   });
 
-  app.delete('/api/servers/:id', async (req, res) => {
-    const removed = await servers.deleteServer(req.params.id, req.body?.deviceId);
+  const serverDeleteLimit = rateLimiter({ windowMs: 60_000, max: 10 });
+  app.delete('/api/servers/:id', serverDeleteLimit, async (req, res) => {
+    const actor = reqDeviceId(req, req.body?.deviceId, req.params.id);
+    const removed = await servers.deleteServer(req.params.id, actor || req.body?.deviceId);
     if (!removed) {
       const server = servers.get(req.params.id);
       if (!server) return res.status(404).json({ error: 'server-not-found' });
       return res.status(403).json({ error: 'not-admin' });
     }
+    sessions.revokeAllForServer(req.params.id);
+    // H2: evict all live sockets on delete — REST leave/delete used to leak.
+    for (const [, sock] of io.sockets.sockets) {
+      if (sock.data.serverId === req.params.id) {
+        try { sock.leave(`server:${req.params.id}`); } catch { /* ignore */ }
+        try { sock.disconnect(true); } catch { /* ignore */ }
+      }
+    }
+    try { await rooms?.stopCleanup?.(); } catch { /* ignore — no-op for servers */ }
     io.to(`server:${req.params.id}`).emit('server:deleted', { id: req.params.id });
     res.json({ ok: true });
   });
@@ -330,7 +497,10 @@ export async function createHushServer({
     storage: multer.diskStorage({
       destination(req, file, callback) {
         try {
-          const directory = path.join(uploadsDir, `server-${req.serverId}`, req.channelId);
+          // channelId came from the query before multer validation:
+          // only a syntactically valid id reaches the path (no traversal).
+          const safeChannel = isValidChannelId(req.channelId) ? req.channelId : 'invalid-channel';
+          const directory = path.join(uploadsDir, `server-${req.serverId}`, safeChannel);
           mkdirSync(directory, { recursive: true });
           callback(null, directory);
         } catch (error) { callback(error); }
@@ -344,7 +514,20 @@ export async function createHushServer({
       const extension = path.extname(file.originalname).toLowerCase();
       const lowerName = String(file.originalname || '').toLowerCase();
       const dangerous = /\.(exe|sh|bat|js|html?|svg|php|jsp|py)$/.test(lowerName);
-      if (dangerous || !UPLOAD_EXTENSIONS.has(extension) || !UPLOAD_MIME_TYPES.has(file.mimetype)) {
+      if (dangerous || lowerName.includes('.exe') || lowerName.includes('.sh')) {
+        const error = new Error('unsupported-file-type');
+        error.status = 415;
+        return callback(error);
+      }
+      if (!UPLOAD_EXTENSIONS.has(extension)) {
+        const error = new Error('unsupported-file-type');
+        error.status = 415;
+        return callback(error);
+      }
+      // Pasted/screenshot images sometimes report a generic mime.
+      const mime = String(file.mimetype || '').toLowerCase();
+      const imageExt = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif'].includes(extension);
+      if (!UPLOAD_MIME_TYPES.has(mime) && !(imageExt && mime.startsWith('image/'))) {
         const error = new Error('unsupported-file-type');
         error.status = 415;
         return callback(error);
@@ -353,17 +536,62 @@ export async function createHushServer({
     }
   });
 
+  // N4/A9/H4: per-server upload quota + session. Quota prevents disk DoS.
+  // Cache dir sizes briefly so every upload does not re-walk the tree.
+  const UPLOAD_QUOTA_BYTES = Number(process.env.UPLOAD_QUOTA_BYTES) || 512 * 1024 * 1024;
+  const quotaCache = new Map(); // dir -> { at, bytes }
+  async function dirSizeBytes(dir) {
+    const cached = quotaCache.get(dir);
+    if (cached && Date.now() - cached.at < 5000) return cached.bytes;
+    try {
+      const entries = await fs.readdir(dir, { withFileTypes: true });
+      let total = 0;
+      for (const e of entries) {
+        const p = path.join(dir, e.name);
+        if (e.isDirectory()) total += await dirSizeBytes(p);
+        else if (e.isFile()) { try { total += (await fs.stat(p)).size; } catch { /* ignore */ } }
+      }
+      quotaCache.set(dir, { at: Date.now(), bytes: total });
+      return total;
+    } catch { return 0; }
+  }
+
   app.post('/api/servers/:id/upload', serverUploadLimit, async (req, res, next) => {
-    const server = servers.get(req.params.id);
+    const serverId = String(req.params.id || '');
+    if (!isValidServerId(serverId)) { req.resume(); return res.status(404).json({ error: 'server-not-found' }); }
+    const server = servers.get(serverId);
     if (!server) { req.resume(); return res.status(404).json({ error: 'server-not-found' }); }
-    const channelId = String(req.body?.channelId || req.query?.channelId || '');
-    const channel = server.channels.find((c) => c.id === channelId && c.type === 'text');
-    if (!channel) { req.resume(); return res.status(404).json({ error: 'channel-not-found' }); }
+    // Auth from the query (deviceId is in the query so it is available
+    // BEFORE multer parses the multipart body). channelId is read AFTER
+    // multer — req.body is empty before that, so reading it here always
+    // failed (the "upload fails" bug).
+    const deviceId = reqDeviceId(req, req.query?.deviceId, serverId) || cleanDeviceId(req.query?.deviceId);
+    if (!deviceId || !servers.isMember(server, deviceId) || servers.isBanned(server, deviceId)) {
+      req.resume();
+      return res.status(403).json({ error: 'not-member' });
+    }
     req.serverId = req.params.id;
-    req.channelId = channelId;
-    serverUpload.single('file')(req, res, (error) => {
+    // Destination needs a channel dir: multer runs before we can read the
+    // multipart channelId, so use the query channelId for the directory.
+    req.channelId = String(req.query?.channelId || '');
+    serverUpload.single('file')(req, res, async (error) => {
       if (error) return next(error);
+      const cleanup = async () => { try { if (req.file) await fs.unlink(req.file.path); } catch { /* ignore */ } };
+      const channelId = String(req.query?.channelId || req.body?.channelId || '');
+      const bodyChannelId = String(req.body?.channelId || '');
+      // Query and body must agree (client sends both); a mismatch means the
+      // file landed in a different channel directory than claimed.
+      if (bodyChannelId && req.query?.channelId && bodyChannelId !== req.query.channelId) {
+        await cleanup();
+        return res.status(404).json({ error: 'channel-not-found' });
+      }
+      if (!isValidChannelId(channelId)) { await cleanup(); return res.status(404).json({ error: 'channel-not-found' }); }
+      const channel = server.channels.find((c) => c.id === channelId && c.type === 'text');
+      if (!channel) { await cleanup(); return res.status(404).json({ error: 'channel-not-found' }); }
       if (!req.file) return res.status(400).json({ error: 'missing-file' });
+      // Quota: refuse if this server already exceeds its storage budget.
+      const used = await dirSizeBytes(path.join(uploadsDir, `server-${serverId}`));
+      if (used >= UPLOAD_QUOTA_BYTES) { await cleanup(); return res.status(413).json({ error: 'upload-quota-exceeded' }); }
       res.status(201).json({
         url: `/uploads/server-${req.params.id}/${channelId}/${req.file.filename}`,
         name: cleanUploadName(req.file.originalname),
@@ -482,6 +710,12 @@ export async function createHushServer({
           return res.status(409).json({ error: 'board-full' });
         }
         const emojiId = CUSTOM_EMOJI_SET.has(String(req.body?.emojiId)) ? String(req.body.emojiId) : 'star';
+        // A25: addedById is display/permission data — only accept it if it
+        // is a live participant id, otherwise the upload is anonymous
+        // (delete permission then falls back to host-only).
+        const claimedId = String(req.body?.addedById || '');
+        const claimedBy = cleanUploadName(req.body?.addedBy || '').slice(0, 32);
+        const live = room.participants?.get(claimedId);
         const sound = normalizeCustomSound({
           id: randomUUID(),
           name: cleanUploadName(req.body?.name || req.file.originalname).slice(0, 40),
@@ -489,8 +723,8 @@ export async function createHushServer({
           url: `/uploads/${code}/board/${req.file.filename}`,
           size: req.file.size,
           mime: req.file.mimetype,
-          addedById: String(req.body?.addedById || ''),
-          addedBy: cleanUploadName(req.body?.addedBy || '').slice(0, 32),
+          addedById: live ? claimedId : '',
+          addedBy: live ? (live.name || claimedBy) : '',
           createdAt: Date.now()
         }, code);
         if (!sound) {

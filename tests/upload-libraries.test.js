@@ -1,0 +1,88 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { createHushServer } from '../src/app.js';
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const PUBLIC = path.join(ROOT, 'public');
+
+test('emoji picker: fixed position, unified sizes, no overlap', async () => {
+  const roomCss = await readFile(path.join(PUBLIC, 'css', 'room.css'), 'utf8');
+  assert.match(roomCss, /\.emoji-menu \{\s*position: fixed;/, 'menu is fixed (not clipped by overflow:hidden)');
+  assert.match(roomCss, /\.emoji-grid \{[^}]*grid-template-columns: repeat\(6/, 'grid lives on .emoji-grid');
+  assert.doesNotMatch(roomCss, /\.emoji-menu \{\s*position: absolute;\s*inset-inline-start/, 'old absolute menu removed');
+  // Sizes: picker 26, message 22, emoji-only 34, chip 16.
+  assert.match(roomCss, /\.custom-emoji \{[^}]*width: 26px;/);
+  assert.match(roomCss, /\.message-emoji \{[^}]*width: 22px;/);
+  assert.match(roomCss, /\.message\.is-emoji-only \.message-emoji \{[^}]*width: 34px;/);
+  assert.match(roomCss, /\.reaction-chip \.custom-emoji \{[^}]*width: 16px;/);
+
+  const serverJs = await readFile(path.join(PUBLIC, 'js', 'server.js'), 'utf8');
+  assert.match(serverJs, /positionEmojiMenu/);
+  assert.ok(serverJs.includes('closeEmojiMenu()'), 'outside click closes emoji menu');
+  const roomJs = await readFile(path.join(PUBLIC, 'js', 'room.js'), 'utf8');
+  assert.match(roomJs, /rect\.right - menuW/, 'RTL-aware positioning');
+  // No focus steal on open.
+  assert.doesNotMatch(roomJs, /search\?\.focus\(\{ preventScroll: true \}\)/, 'focus stays in composer');
+});
+
+test('server upload: multipart channelId read after multer (was always 404)', async () => {
+  const fs = await import('node:fs/promises');
+  const os = await import('node:os');
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'hush-upload-'));
+  const hush = await createHushServer({ port: 0, host: '127.0.0.1', dataDir: path.join(dir, 'data'), uploadsDir: path.join(dir, 'uploads') });
+  const address = await hush.start();
+  const url = `http://127.0.0.1:${address.port}`;
+  try {
+    const created = await fetch(`${url}/api/servers`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'UploadTest', ownerName: 'A', ownerDeviceId: 'device-upload-1', iconEmojiId: 'star' })
+    });
+    const server = (await created.json()).server;
+    const channel = server.channels.find((c) => c.type === 'text');
+    const fd = new FormData();
+    fd.append('file', new File(['hello'], 'image.png', { type: 'image/png' }));
+    fd.append('channelId', channel.id);
+    const up = await fetch(`${url}/api/servers/${server.id}/upload?deviceId=device-upload-1&channelId=${channel.id}`, { method: 'POST', body: fd });
+    assert.equal(up.status, 201, 'image upload succeeds with channelId in query+body');
+    const body = await up.json();
+    assert.match(body.url, new RegExp(`^/uploads/server-${server.id}/${channel.id}/`));
+    assert.equal(body.name, 'image.png');
+    // Bad channel is rejected and the file is cleaned up.
+    const fd2 = new FormData();
+    fd2.append('file', new File(['hello'], 'image.png', { type: 'image/png' }));
+    fd2.append('channelId', channel.id);
+    const bad = await fetch(`${url}/api/servers/${server.id}/upload?deviceId=device-upload-1&channelId=00000000-0000-0000-0000-000000000000`, { method: 'POST', body: fd2 });
+    assert.equal(bad.status, 404);
+  } finally {
+    await hush.stop();
+  }
+});
+
+test('libraries changelog: dedicated bilingual log + header button', async () => {
+  const data = JSON.parse(await readFile(path.join(PUBLIC, 'libraries-changelog.json'), 'utf8'));
+  assert.ok(data.entries.length >= 3);
+  for (const e of data.entries) {
+    assert.ok(e.titleEn && e.titleAr, 'both languages');
+    assert.ok(Array.isArray(e.pointsEn) && e.pointsEn.length);
+    assert.ok(Array.isArray(e.pointsAr) && e.pointsAr.length);
+    assert.ok(['mic', 'ping-op'].includes(e.library));
+  }
+  assert.ok(data.entries.some((e) => e.library === 'ping-op' && e.titleAr.includes('تحسين البنق')));
+  assert.ok(data.entries.some((e) => e.library === 'mic'));
+
+  for (const page of ['room.html', 'server.html', 'index.html']) {
+    const html = await readFile(path.join(PUBLIC, page), 'utf8');
+    assert.match(html, /data-open-libraries-log/, `${page} has libraries button`);
+    assert.match(html, /ping-op-badge/, `${page} shows PING OP badge`);
+  }
+  const js = await readFile(path.join(PUBLIC, 'js', 'libraries-log.js'), 'utf8');
+  assert.match(js, /\/api\/libraries-changelog/);
+  assert.match(js, /data-open-libraries-log/);
+  const ui = await readFile(path.join(PUBLIC, 'js', 'i18n', 'ui.js'), 'utf8');
+  assert.match(ui, /libraries\.title/);
+  assert.match(ui, /libraries\.open/);
+});

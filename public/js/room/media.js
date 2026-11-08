@@ -1,4 +1,5 @@
 import { MicFx, loadMicSettings, saveMicSettings } from './mic-fx.js';
+import { createMicEnhancer } from './mic-enhancer.js';
 
 const ICE_SERVERS = [
   {
@@ -94,6 +95,7 @@ export class MediaMesh {
     this._monitorStreams = new Map(); // monitor key -> stream
     this.micSettings = loadMicSettings();
     this.micFx = null;
+    this.micEnhancer = null; // mic_ev1 second stage (spectral suppressor) — fail-safe
     this.rawAudioTrack = null;
     this.processedAudioTrack = null;
     this._switchingMic = false;
@@ -330,9 +332,37 @@ export class MediaMesh {
 
   async #attachAudioTrack(rawTrack) {
     const previousFx = this.micFx;
+    const previousEnhancer = this.micEnhancer;
     const previousRaw = this.rawAudioTrack;
     const fx = new MicFx(this.micSettings);
-    const processed = await fx.process(rawTrack);
+    const fxTrack = await fx.process(rawTrack);
+    // mic_ev1 second stage: spectral suppression on top of MicFx. Fail-safe —
+    // any failure returns the MicFx track (never breaks a call).
+    // Shares MediaMesh's AudioContext (one context, not three) for purity
+    // without extra CPU/latency. User chose max purity: gate stays on,
+    // strength defaults 0.8, no bypass.
+    let processed = fxTrack;
+    if (this.micSettings.enhance !== false && fxTrack && fxTrack !== rawTrack && window.AudioContext) {
+      try {
+        const sharedCtx = this.#ensureAudioContext();
+        const enhancer = createMicEnhancer({
+          strength: this.micSettings.enhanceStrength ?? 0.8,
+          ...(sharedCtx ? { audioContext: sharedCtx } : {})
+        });
+        const result = await enhancer.attach(new MediaStream([fxTrack]));
+        if (result?.enhanced && result.stream) {
+          const enhancedTrack = result.stream.getAudioTracks?.()[0];
+          if (enhancedTrack) {
+            processed = enhancedTrack;
+            this.micEnhancer = enhancer;
+          } else {
+            enhancer.dispose();
+          }
+        } else {
+          enhancer.dispose();
+        }
+      } catch { /* keep fxTrack */ }
+    }
     this.micFx = fx;
     this.rawAudioTrack = rawTrack;
     this.processedAudioTrack = processed;
@@ -350,6 +380,7 @@ export class MediaMesh {
     // Swap the sent track, then retire the previous pipeline.
     this.#setTrack('audio', processed);
     if (previousFx && previousFx !== fx) previousFx.teardown(false);
+    if (previousEnhancer && previousEnhancer !== this.micEnhancer) { try { previousEnhancer.dispose(); } catch { /* ignore */ } }
     if (previousRaw && previousRaw !== rawTrack) {
       try { previousRaw.stop(); } catch { /* ignore */ }
     }
@@ -361,9 +392,20 @@ export class MediaMesh {
     this._switchingMic = true;
     const previousRaw = this.rawAudioTrack;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: audioConstraintsFrom(this.micSettings)
-      });
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: audioConstraintsFrom(this.micSettings)
+        });
+      } catch (error) {
+        // Unplugged / permission-changed device: retry with the default
+        // input instead of failing the whole call.
+        if (error?.name === 'OverconstrainedError' && this.micSettings.deviceId) {
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: audioConstraintsFrom({ ...this.micSettings, deviceId: '' })
+          });
+        } else throw error;
+      }
       const track = stream.getAudioTracks()[0];
       if (!track) throw new Error('no-audio-track');
       await this.#attachAudioTrack(track);
@@ -379,6 +421,10 @@ export class MediaMesh {
   }
 
   #stopAudioPipeline() {
+    if (this.micEnhancer) {
+      try { this.micEnhancer.dispose(); } catch { /* ignore */ }
+      this.micEnhancer = null;
+    }
     if (this.micFx) {
       this.micFx.teardown(false);
       this.micFx = null;
@@ -530,11 +576,12 @@ export class MediaMesh {
     if (!peer) return;
     const channel = peer.channels[channelName];
     if (!channel) {
-      peer.iceQueue[channelName].push(candidate);
+      // Cap the pre-channel queue (DoS: flood ICE before offer).
+      if (peer.iceQueue[channelName].length < 100) peer.iceQueue[channelName].push(candidate);
       return;
     }
     if (!channel.pc.remoteDescription) {
-      channel.pendingCandidates.push(candidate);
+      if (channel.pendingCandidates.length < 100) channel.pendingCandidates.push(candidate);
       return;
     }
     try {
@@ -604,7 +651,7 @@ export class MediaMesh {
         camera: new MediaStream(),
         screen: new MediaStream()
       },
-      pendingCandidates: [...peer.iceQueue[name]],
+      pendingCandidates: [...peer.iceQueue[name]].slice(0, 100),
       hasRemoteDescription: false
     };
     peer.iceQueue[name] = [];

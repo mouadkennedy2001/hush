@@ -1,0 +1,19 @@
+{
+  "name": "ping-op",
+  "version": "1.0.0",
+  "description": "PING OP v1.0 — from-scratch latency library: adaptive probing, jitter/loss scoring, and server hardening for Hush rooms and servers.",
+  "type": "module",
+  "main": "src/server.js",
+  "exports": {
+    ".": "./src/server.js",
+    "./core": "./src/ping-op.js",
+    "./client": "./src/client.js"
+  },
+  "scripts": {
+    "test": "node --test tests/"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "private": true
+}

@@ -1,0 +1,5 @@
+{
+  "version": "mic_ev1",
+  "status": "active",
+  "entrypoint": "src/mic-enhancer.js"
+}

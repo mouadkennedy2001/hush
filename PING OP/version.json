@@ -1,0 +1,8 @@
+{
+  "name": "ping-op",
+  "version": "1.0.0",
+  "status": "active",
+  "description": "PING OP v1.0 — adaptive ping library written from scratch (server statistics + client probing).",
+  "writtenFromScratch": true,
+  "entrypoints": ["src/ping-op.js", "src/server.js", "src/client.js"]
+}

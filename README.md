@@ -62,6 +62,9 @@ Built by **Zerouki Ahmed Mouad** (زروقي احمد معاذ).
 - **Message helpers** — copy message text, click links, and highlight `@mentions` (your own name is emphasized).
 - **Small-room features** — participant list, typing indicators, unread badge, raise hand, join preferences, reconnect/rejoin, and keyboard shortcuts.
 - **Responsive layout** — the room stacks cleanly on phones and tablets.
+- **Mic enhancement (`mic_ev1`)** — see [`mic/README.md`](./mic/README.md): WebAudio chain (high-pass/low-pass, smart gate, spectral suppressor, limiter, AGC + optional AudioWorklet), wired fail-safe after `MicFx` in rooms and server voice. Settings live in `hush:mic-settings` (`enhance`, `enhanceStrength`, `micVersion: 'ev1'`). The evolutionary plan is `mic_ev1 → mic_ev1.9 → mic_ev2` (full docs in `mic/` + `mic/CHANGELOG.md`).
+- **Server sessions (A1)** — every create/join issues an opaque session token bound to device+server (`X-Session-Token` header or `sessionToken` payload, stored in `sessionStorage` as `hush:session:<serverId>`). A valid token wins over the raw `deviceId` on privileged calls; `deviceId`-only calls still work during migration.
+- **Server policies (N1–N4)** — owner-only channels, 10 servers per device (plus 100 global), ownership transfer (`POST /api/servers/:id/transfer { toDeviceId }`), per-server upload quota (512 MB, `UPLOAD_QUOTA_BYTES`), crypto invites (10-char).
 
 ## Quick start
 
@@ -92,6 +95,8 @@ Environment variables (all optional):
 | `HOST` | `0.0.0.0` | Bind address |
 | `DATA_DIR` | `./data` | Chat history JSON files |
 | `UPLOADS_DIR` | `./uploads` | Uploaded files |
+| `HUSH_TRUST_PROXY` | `0` | Set to `1` ONLY behind a known reverse proxy (else `X-Forwarded-For` is spoofable) |
+| `UPLOAD_QUOTA_BYTES` | `536870912` (512 MB) | Per-server upload storage budget |
 
 Example:
 
