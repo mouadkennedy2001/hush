@@ -18,7 +18,9 @@
 .server-group-kicker { margin: 10px 0 4px; font-size: .625rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--color-text-2); flex: none; }
 .server-channel-list { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; flex: none; }
 /* Channel rows are real <button>s now (A43) — reset button chrome, keep the look. */
-.server-channel { display: flex; align-items: center; gap: 7px; width: 100%; padding: 6px 8px; border: 0; border-radius: var(--radius-buttons, 8px); background: transparent; color: var(--color-text-2); font: inherit; font-size: .75rem; font-weight: 600; text-align: start; text-decoration: none; min-width: 0; cursor: pointer; }
+.server-channel { display: flex; align-items: center; gap: 7px; width: 100%; padding: 6px 8px; border: 0; border-radius: var(--radius-buttons, 8px); background: transparent; color: var(--color-text-2); font: inherit; font-size: .75rem; font-weight: 600; text-align: start; text-decoration: none; min-width: 0; cursor: pointer; min-height: 32px; }
+.server-channel-row { display: flex; align-items: center; gap: 2px; width: 100%; }
+.server-channel-row .server-channel { flex: 1; min-width: 0; }
 .server-channel:hover { background: var(--wash-sky); color: var(--color-accent-2); }
 .server-channel.is-current { background: var(--wash-sky-strong); color: var(--color-accent-2); }
 .server-channel-glyph { display: inline-flex; flex: none; width: 16px; height: 16px; align-items: center; justify-content: center; }
@@ -54,6 +56,7 @@
 .control-icon { flex: none; }
 .control { flex: none; }
 .tile-badges { flex: none; }
+.tile-badge { display: inline-flex; align-items: center; padding: 2px 6px; border-radius: 999px; background: rgba(10,13,20,.72); color: #fff; font-size: .625rem; font-weight: 600; }
 .person-status { flex: none; }
 .soundboard-grid { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); }
 .emoji-menu { display: flex; flex-direction: column; gap: 6px; width: min(272px, calc(100vw - 24px)); max-width: calc(100vw - 24px); max-height: min(420px, calc(100dvh - 120px)); padding: 10px; box-sizing: border-box; overflow: hidden; }

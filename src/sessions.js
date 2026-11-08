@@ -63,19 +63,12 @@ export class SessionStore {
   verify(token, expectedServerId = null) {
     const t = cleanSessionToken(token);
     if (!t) return null;
-    // Constant-time lookup over stored tokens would be O(n); the token is
-    // high-entropy (256-bit), so direct lookup + timing-safe compare of the
-    // presented string length is acceptable. We still compare in a way that
-    // does not short-circuit on a prefix match.
     const rec = this.#tokens.get(t);
     if (!rec) return null;
-    if (expectedServerId && rec.serverId && rec.serverId !== String(expectedServerId)) return null;
-    // Timing-safe equality check of the stored key vs presented key.
-    try {
-      const a = Buffer.from(t);
-      const b = Buffer.from(Array.from(this.#tokens.keys()).find((k) => k === t) ?? '');
-      if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
-    } catch { /* fall through if Buffer path unavailable */ }
+    // Empty serverId never bypasses: a token bound to a server can only
+    // be used for that server when an expectedServerId is given.
+    if (expectedServerId && rec.serverId !== String(expectedServerId)) return null;
+    if (!expectedServerId && rec.serverId) { /* server-bound tokens need expectedServerId to be fully trusted; still return for global checks */ }
     if (this.now() - rec.lastUsedAt > this.ttlMs) {
       this.#tokens.delete(t);
       return null;

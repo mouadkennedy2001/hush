@@ -35,6 +35,8 @@
   border-bottom: 1px solid var(--color-border);
   background: color-mix(in srgb, var(--color-surface) 86%, transparent);
   backdrop-filter: blur(14px);
+  flex-wrap: wrap;
+  row-gap: 6px;
 }
 
 html[data-theme="dark"] .room-bar {
@@ -648,6 +650,10 @@ html[data-theme="dark"] .control[aria-pressed="true"] {
   background: var(--color-white);
   box-shadow: var(--shadow-md);
   transform: translateX(-50%);
+  max-height: min(280px, 60dvh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
 }
 
 .reaction-menu[hidden] {
@@ -2405,8 +2411,8 @@ html[data-theme="dark"] .control[aria-pressed="true"] {
 }
 
 .toast.is-error {
-  border-color: var(--color-signal-blue);
-  background: var(--wash-sky);
+  border-color: color-mix(in srgb, var(--color-danger, #c0392b) 45%, transparent);
+  background: color-mix(in srgb, var(--color-danger, #c0392b) 12%, var(--color-white));
   color: var(--color-ink);
 }
 
@@ -2494,7 +2500,13 @@ html[dir="rtl"] .gate-code code {
 .soundboard-sound { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 9px 4px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-surface-2); color: var(--color-text); cursor: pointer; transition: transform 90ms ease, background 120ms ease; }
 .soundboard-sound:hover { background: var(--wash-sky); transform: translateY(-1px); }
 .soundboard-sound:active { transform: scale(.96); }
-/* ---------- Emoji system v10 (categorized picker + rich render) ---------- */
+/* ---------- Emoji system v11 (polished picker + rich render, no overlap) ---------- */
+.emoji-menu {
+  animation: emoji-menu-in 160ms cubic-bezier(.2,.9,.3,1.1);
+  border-radius: 14px;
+}
+@keyframes emoji-menu-in { from { opacity: 0; transform: translateY(6px) scale(.98); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .emoji-menu, .message-emoji, .floating-reaction .custom-emoji { animation: none; transition: none; } }
 .custom-emoji { width: 26px; height: 26px; object-fit: contain; border-radius: 8px; filter: drop-shadow(0 2px 4px rgba(27,27,27,.2)); transition: transform 150ms cubic-bezier(.34,1.56,.64,1), background-color 120ms ease; flex: none; }
 .emoji-choice .custom-emoji { width: 26px; height: 26px; }
 .message-emoji { animation: emoji-pop 280ms cubic-bezier(.34,1.56,.64,1); }
@@ -2511,6 +2523,10 @@ html[dir="rtl"] .gate-code code {
 .soundboard-emoji { font-size: 1.35rem; line-height: 1; display:inline-flex; }
 .soundboard-sound { position: relative; }
 .soundboard-sound .custom-btn-delete { position: absolute; top: 2px; inset-inline-end: 2px; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 50%; background: color-mix(in srgb, #b42318 14%, transparent); color: #b42318; font-size: .625rem; line-height: 1; opacity: 0; }
+.soundboard-sound-wrap { position: relative; display: inline-flex; }
+.soundboard-sound-wrap > .custom-btn-delete { position: absolute; top: 2px; inset-inline-end: 2px; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 50%; background: color-mix(in srgb, #b42318 14%, transparent); color: #b42318; font-size: .625rem; line-height: 1; opacity: 0; z-index: 2; }
+.soundboard-sound-wrap:hover > .custom-btn-delete, .soundboard-sound-wrap > .custom-btn-delete:focus-visible { opacity: 1; }
+@media (pointer: coarse) { .soundboard-sound-wrap > .custom-btn-delete { opacity: 1; } }
 .soundboard-sound:hover .custom-btn-delete, .custom-btn-delete:focus-visible { opacity: 1; }
 .board-add { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--color-border); }
 .board-add-title { font-size: .6875rem; font-weight: 700; color: var(--color-text-2); }
@@ -2528,6 +2544,9 @@ html[dir="rtl"] .gate-code code {
 .message.is-emoji-only .message-bubble { padding: 6px 8px; background: transparent; border-color: transparent; }
 .reaction-choice .custom-emoji { width: 24px; height: 24px; }
 .emoji-choice .custom-emoji { width: 26px; height: 26px; }
+.reaction-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 7px; border: 1px solid var(--color-border); border-radius: 999px; background: var(--color-surface-2); font-size: .6875rem; min-height: 26px; }
+.reaction-chip.is-mine { border-color: var(--color-accent); background: var(--wash-sky); color: var(--color-accent-2); font-weight: 700; }
+.reaction-chip:hover { border-color: var(--color-accent); background: var(--wash-sky); }
 .reaction-chip .custom-emoji { width: 16px; height: 16px; }
 .mock-bubble .custom-emoji, .demo-bubble .custom-emoji { vertical-align: -3px; }
 .soundboard-name { font-size: .5625rem; font-weight: 600; color: var(--color-text-2); text-align: center; line-height: 1.15; }

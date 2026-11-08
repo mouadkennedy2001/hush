@@ -219,7 +219,7 @@
           <svg class="icon" aria-hidden="true"><use href="#i-globe"></use></svg>
           <span data-lang-label>العربية</span>
         </button>
-        <button class="btn btn-quiet btn-sm" id="invite-btn" type="button">
+        <button class="btn btn-quiet btn-sm" id="invite-btn" type="button" aria-label="Invite">
           <svg class="icon" aria-hidden="true"><use href="#i-copy"></use></svg>
           <span class="bar-action-label">Invite</span>
         </button>
@@ -229,7 +229,7 @@
         <button class="btn btn-quiet btn-sm" type="button" data-open-libraries-log title="Libraries" aria-label="Libraries">
           <span data-libraries-label>Libraries</span><span class="log-dot" data-libraries-badge hidden aria-hidden="true"></span>
         </button>
-        <button class="btn btn-ink btn-sm" id="leave-btn-top" type="button">
+        <button class="btn btn-ink btn-sm" id="leave-btn-top" type="button" aria-label="Leave">
           <svg class="icon" aria-hidden="true"><use href="#i-phone-off"></use></svg>
           <span class="bar-action-label">Leave</span>
         </button>
@@ -395,12 +395,12 @@
 
           <form class="composer" id="composer">
             <div class="emoji-wrap">
-              <button class="icon-button composer-attach" id="emoji-btn" type="button" title="Insert emoji" aria-label="Insert emoji" aria-haspopup="true" aria-expanded="false">
+              <button class="icon-button composer-attach" id="emoji-btn" type="button" title="Insert emoji" aria-label="Insert emoji" aria-haspopup="dialog" aria-expanded="false" aria-controls="emoji-menu">
                 <svg class="icon" aria-hidden="true"><use href="#i-smile"></use></svg>
               </button>
               <div class="emoji-menu" id="emoji-menu" hidden></div>
             </div>
-            <button class="icon-button composer-attach" id="attach-btn" type="button" title="Attach a file">
+            <button class="icon-button composer-attach" id="attach-btn" type="button" title="Attach a file" aria-label="Attach a file">
               <svg class="icon" aria-hidden="true"><use href="#i-paperclip"></use></svg>
             </button>
             <input type="file" id="file-input" hidden accept=".png,.jpg,.jpeg,.gif,.webp,.avif,.pdf,.txt,.md,.csv,.zip" />

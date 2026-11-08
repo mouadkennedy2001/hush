@@ -280,6 +280,7 @@ try {
 /* ---------------- Boot & join ---------------- */
 
 function init() {
+  try { document.querySelector('#room-shell')?.setAttribute('inert', ''); } catch { /* ignore */ }
   state.soundsOn = getSoundsEnabled();
   if (els.soundVolume) els.soundVolume.value = String(Math.round(getSoundVolume() * 100));
   if (els.soundboardVolume) els.soundboardVolume.value = String(Math.round(getSoundboardVolume() * 100));
@@ -906,6 +907,7 @@ function applyJoinError() {
 function hideGate() {
   els.gate.hidden = true;
   els.joinError.hidden = true;
+  try { document.querySelector('#room-shell')?.removeAttribute('inert'); } catch { /* ignore */ }
 }
 
 function joinErrorKey(code) {
@@ -2245,7 +2247,8 @@ function buildRoomEmojiMenu() {
       const button = el('button', 'emoji-choice');
       button.type = 'button';
       button.dataset.emoji = emoji;
-      button.setAttribute('aria-label', `:${emoji}:`);
+      button.setAttribute('aria-label', `${emojiLabel(emoji, locale())} :${emoji}:`);
+      button.setAttribute('role', 'option');
       button.title = `:${emoji}: — ${emojiLabel(emoji, locale())}`;
       button.append(customEmojiImage(emoji, 'custom-emoji custom-emoji-sm'));
       button.addEventListener('click', () => {
@@ -2270,6 +2273,9 @@ function buildRoomEmojiMenu() {
   }
   const grid = el('div', 'emoji-grid');
   grid.id = 'emoji-grid';
+  els.emojiMenu.setAttribute('role', 'dialog');
+  els.emojiMenu.setAttribute('aria-label', t('chat.insertEmoji'));
+  grid.setAttribute('role', 'listbox');
   els.emojiMenu.append(search, tabs, grid);
   search.addEventListener('input', () => renderGrid(search.value));
   search.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeEmojiMenu(); e.stopPropagation(); });
@@ -2503,9 +2509,11 @@ function handlePasteImage(event) {
 
 /* ---------------- In-page image lightbox ---------------- */
 
+let lightboxReturnFocus = null;
 function openImageLightbox(url, name) {
   const safe = safeAttachmentUrl(url);
   if (!safe || !els.imageLightbox || !els.imageLightboxImg) return;
+  lightboxReturnFocus = document.activeElement;
   els.imageLightboxImg.src = safe;
   els.imageLightboxImg.alt = name || '';
   if (els.imageLightboxCaption) els.imageLightboxCaption.textContent = name || '';
@@ -2521,6 +2529,10 @@ function closeImageLightbox() {
   if (!els.imageLightbox || els.imageLightbox.hidden) return;
   els.imageLightbox.hidden = true;
   if (els.imageLightboxImg) els.imageLightboxImg.src = '';
+  if (lightboxReturnFocus && document.contains(lightboxReturnFocus)) {
+    try { lightboxReturnFocus.focus({ preventScroll: true }); } catch { /* ignore */ }
+  }
+  lightboxReturnFocus = null;
 }
 
 /* ---------------- Uploads ---------------- */
@@ -2965,7 +2977,9 @@ function applyStatusLabel() {
 
 function toast(message, variant = 'info', timeout = 3200) {
   if (!els.toasts || !message) return;
+  while (els.toasts.children.length >= 3) els.toasts.firstChild?.remove();
   const node = el('div', `toast${variant === 'error' ? ' is-error' : ''}`, message);
+  if (variant === 'error') node.setAttribute('role', 'alert');
   els.toasts.append(node);
 
   setTimeout(() => {
@@ -3142,6 +3156,7 @@ function renderSoundboardGrid() {
   }
   // This room's custom sounds (uploaded audio).
   for (const sound of state.customSounds) {
+    const wrap = el('span', 'soundboard-sound-wrap');
     const button = el('button', 'soundboard-sound is-custom');
     button.type = 'button';
     button.dataset.sound = sound.id;
@@ -3151,6 +3166,7 @@ function renderSoundboardGrid() {
     button.append(el('span', 'soundboard-name', sound.name || t('soundboard.custom')));
     button.title = sound.name || '';
     button.addEventListener('click', () => playBoardSound(sound.id));
+    wrap.append(button);
     const mine = sound.addedById === state.selfId;
     if (mine || state.isHost) {
       const del = el('button', 'custom-btn-delete', '×');
@@ -3158,9 +3174,9 @@ function renderSoundboardGrid() {
       del.title = t('soundboard.delete');
       del.setAttribute('aria-label', t('soundboard.delete'));
       del.addEventListener('click', (event) => { event.stopPropagation(); deleteCustomSound(sound.id); });
-      button.append(del);
+      wrap.append(del);
     }
-    els.soundboardGrid.append(button);
+    els.soundboardGrid.append(wrap);
   }
   if (els.boardClearBtn) els.boardClearBtn.hidden = !(state.isHost && state.customSounds.length);
 }
@@ -3169,7 +3185,14 @@ async function addCustomSound() {
   const file = els.boardFile?.files?.[0];
   if (!file) { toast(t('soundboard.invalidFile'), 'error', 3600); return; }
   if (state.customSounds.length >= 12) { toast(t('soundboard.boardFull'), 'error', 3600); return; }
+  if (file.size > 2 * 1024 * 1024) { toast(t('soundboard.invalidFile'), 'error', 3600); return; }
+  if (!/audio\//.test(file.type) && !/\.(mp3|wav|ogg|oga|m4a|webm|opus)$/i.test(file.name)) {
+    toast(t('soundboard.invalidFile'), 'error', 3600);
+    return;
+  }
   if (els.boardAddBtn) els.boardAddBtn.disabled = true;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20000);
   try {
     const body = new FormData();
     body.append('file', file);
@@ -3177,7 +3200,7 @@ async function addCustomSound() {
     body.append('emojiId', els.boardEmoji?.value || 'star');
     body.append('addedById', state.selfId || '');
     body.append('addedBy', state.selfName || '');
-    const response = await fetch(`/api/rooms/${encodeURIComponent(state.code)}/soundboard`, { method: 'POST', body });
+    const response = await fetch(`/api/rooms/${encodeURIComponent(state.code)}/soundboard`, { method: 'POST', body, signal: controller.signal });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
       const key = data.error === 'board-full' ? 'soundboard.boardFull'
@@ -3190,6 +3213,8 @@ async function addCustomSound() {
   } catch (error) {
     toast(errorText(error, 'error.generic'), 'error', 4200);
   } finally {
+    clearTimeout(timeout);
+    if (els.boardFile) els.boardFile.value = '';
     if (els.boardAddBtn) els.boardAddBtn.disabled = false;
   }
 }

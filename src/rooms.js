@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID, randomInt } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import {
@@ -26,10 +26,16 @@ export function formatCode(code) {
   return code.length === 6 ? `${code.slice(0, 3)}-${code.slice(3)}` : code;
 }
 
-export function generateCode(length = 6, random = Math.random) {
+export function generateCode(length = 6, random) {
   let code = '';
+  if (typeof random === 'function') {
+    for (let i = 0; i < length; i += 1) {
+      code += CODE_ALPHABET[Math.floor(random() * CODE_ALPHABET.length)];
+    }
+    return code;
+  }
   for (let i = 0; i < length; i += 1) {
-    code += CODE_ALPHABET[Math.floor(random() * CODE_ALPHABET.length)];
+    code += CODE_ALPHABET[randomInt(0, CODE_ALPHABET.length)];
   }
   return code;
 }
@@ -87,7 +93,7 @@ export function normalizeCustomSound(raw, code) {
   };
 }
 
-function normalizeStoredMessage(raw) {
+function normalizeStoredMessage(raw, code) {
   if (!raw || typeof raw !== 'object' || typeof raw.id !== 'string') return null;
   const reactions = {};
   if (raw.reactions && typeof raw.reactions === 'object') {
@@ -98,11 +104,28 @@ function normalizeStoredMessage(raw) {
       }
     }
   }
+  // Validate stored attachments like new sends (no arbitrary URLs).
+  let attachment = null;
+  if (raw.attachment && typeof raw.attachment === 'object' && code) {
+    const url = String(raw.attachment.url ?? '');
+    const prefix = `/uploads/${code}/`;
+    const size = Number(raw.attachment.size);
+    if (url.startsWith(prefix) && !url.includes('..') && !url.includes('\\') && Number.isFinite(size) && size >= 0 && size <= 8 * 1024 * 1024) {
+      attachment = {
+        url,
+        name: String(raw.attachment.name ?? 'File').replace(/[\u0000-\u001f\u007f]/g, '').slice(0, 120) || 'File',
+        size,
+        mime: String(raw.attachment.mime ?? 'application/octet-stream').slice(0, 100)
+      };
+    }
+  } else if (raw.attachment && typeof raw.attachment.url === 'string' && !code) {
+    attachment = raw.attachment;
+  }
   return {
     id: raw.id,
     type: 'text',
     text: typeof raw.text === 'string' ? raw.text.slice(0, MAX_MESSAGE_LENGTH) : '',
-    attachment: raw.attachment && typeof raw.attachment.url === 'string' ? raw.attachment : null,
+    attachment,
     authorId: typeof raw.authorId === 'string' ? raw.authorId : '',
     authorName: typeof raw.authorName === 'string' ? raw.authorName.slice(0, MAX_NAME_LENGTH) : 'Guest',
     createdAt: Number.isFinite(raw.createdAt) ? raw.createdAt : Date.now(),
@@ -275,8 +298,15 @@ export class RoomManager {
   }
 
   async addBan(room, ban) {
-    room.banned = [...(room.banned || []), ban].slice(-200);
-    room.lastActivity = this.now();
+    const now = this.now();
+    const filtered = (room.banned || []).filter((b) => {
+      if (!b) return false;
+      const same = (ban.deviceHash && b.deviceHash === ban.deviceHash) || (ban.ipHash && b.ipHash === ban.ipHash);
+      if (same) return false;
+      return (b.until ?? Infinity) > now;
+    });
+    room.banned = [...filtered, ban].slice(-200);
+    room.lastActivity = now;
     await this.#queueSave(room);
     return ban;
   }
@@ -302,7 +332,8 @@ export class RoomManager {
     message.reactions ||= {};
     const ids = new Set(message.reactions[emoji] || []);
     if (ids.has(participantId)) ids.delete(participantId);
-    else ids.add(participantId);
+    else if (ids.size < 50) ids.add(participantId);
+    else return message.reactions;
 
     if (ids.size) message.reactions[emoji] = [...ids];
     else delete message.reactions[emoji];
@@ -396,11 +427,14 @@ export class RoomManager {
       if (typeof data.pinnedMessageId === 'string') room.pinnedMessageId = data.pinnedMessageId;
       if (typeof data.hostId === 'string') room.hostId = data.hostId;
       if (Array.isArray(data.banned)) {
-        room.banned = data.banned.filter((b) => b && (b.deviceHash || b.ipHash)).slice(0, 200);
+        const now = Date.now();
+        room.banned = data.banned
+          .filter((b) => b && (b.deviceHash || b.ipHash) && ((b.until ?? Infinity) > now))
+          .slice(-200);
       }
       if (Array.isArray(data.messages)) {
         room.messages = data.messages
-          .map(normalizeStoredMessage)
+          .map((m) => normalizeStoredMessage(m, room.code))
           .filter(Boolean)
           .slice(-this.maxMessages);
       }

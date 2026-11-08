@@ -47,7 +47,7 @@ const els = {
 const state = {
   serverId: parseServerId(),
   inviteCode: new URLSearchParams(window.location.search).get('invite') || '',
-  socket: null, mesh: null, selfId: null, selfName: '',
+  socket: null, mesh: null, selfId: null, selfName: '', selfMemberId: '',
   server: null, channelId: null, messages: [],
   online: new Map(), speaking: new Set(), typingMap: new Map(),
   deviceId: getDeviceId(), inVoice: false, voiceChannelId: null, tempRoomId: null, tempRooms: [], typingTimer: null,
@@ -95,6 +95,7 @@ function init() {
   loadSession();
   // A32: draft restores after channel is known (join -> selectChannel),
   // not at init before channelId exists. Initial restore is a no-op keeper.
+  document.querySelector('#server-shell')?.setAttribute('inert', '');
   bindEvents();
   renderSoundboardGrid();
   buildEmojiMenu();
@@ -211,6 +212,7 @@ async function join(event) {
     }
     state.selfName = response.self.name;
     state.selfId = response.self.id;
+    state.selfMemberId = response.self?.memberId || '';
     state.server = response.server;
     saveSession(response.sessionToken || '');
     state.tempRooms = Array.isArray(response.tempRooms) ? response.tempRooms : [];
@@ -221,6 +223,7 @@ async function join(event) {
     for (const p of response.membersOnline || []) state.online.set(p.id, p);
     state.joined = true;
     els.gate.hidden = true;
+    try { document.querySelector('#server-shell')?.removeAttribute('inert'); } catch { /* ignore */ }
     document.title = `${state.server.name} — Hush`;
     applyServerUi();
     await loadChannel(state.channelId, response.messages || []);
@@ -370,6 +373,8 @@ function renderChannels() {
     }
     for (const ch of list) {
       const li = document.createElement('li');
+      const row = document.createElement('div');
+      row.className = 'server-channel-row';
       const link = document.createElement('button');
       link.type = 'button';
       const isCurrent = ch.type === 'voice'
@@ -394,6 +399,7 @@ function renderChannels() {
           link.append(count);
         }
       }
+      row.append(link);
       if (isOwner() && server.channels.length > 1) {
         const del = document.createElement('button');
         del.type = 'button';
@@ -402,10 +408,10 @@ function renderChannels() {
         del.setAttribute('aria-label', t('server.deleteChannel'));
         del.append(icon('i-trash'));
         del.addEventListener('click', (e) => { e.stopPropagation(); deleteChannel(ch.id); });
-        link.append(del);
+        row.append(del);
       }
       link.addEventListener('click', () => selectChannel(ch));
-      li.append(link);
+      li.append(row);
       if (ch.type === 'voice') {
         const occ = renderOccupantList(ch.id, 'voice');
         if (occ) li.append(occ);
@@ -440,6 +446,8 @@ function renderTempRooms() {
   }
   for (const room of rooms) {
     const li = document.createElement('li');
+    const row = document.createElement('div');
+    row.className = 'server-channel-row';
     const link = document.createElement('button');
     link.type = 'button';
     link.className = 'server-channel server-channel-temp' + (room.id === state.tempRoomId ? ' is-current' : '');
@@ -455,6 +463,7 @@ function renderTempRooms() {
     count.className = 'server-channel-count';
     count.textContent = String(room.memberCount ?? 0);
     link.append(glyph, label, count);
+    row.append(link);
     // A2: creatorDeviceId is no longer broadcast — the server still enforces
     // creator-only rename; the button is shown for all and errors if not creator.
     // (Older servers that still send creatorDeviceId keep the precise check.)
@@ -467,10 +476,10 @@ function renderTempRooms() {
       rename.setAttribute('aria-label', t('server.renameTempRoom'));
       rename.append(icon('i-pencil'));
       rename.addEventListener('click', (e) => { e.stopPropagation(); renameTempRoom(room); });
-      link.append(rename);
+      row.append(rename);
     }
     link.addEventListener('click', () => joinTempRoom(room));
-    li.append(link);
+    li.append(row);
     const occ = renderOccupantList(room.id, 'temp');
     if (occ) li.append(occ);
     else if (Array.isArray(room.members) && room.members.length) {
@@ -1083,6 +1092,9 @@ function buildEmojiMenu() {
   }
   const grid = el('div', 'emoji-grid');
   grid.id = 'emoji-grid';
+  els.emojiMenu.setAttribute('role', 'dialog');
+  els.emojiMenu.setAttribute('aria-label', t('chat.insertEmoji'));
+  grid.setAttribute('role', 'listbox');
   els.emojiMenu.append(search, tabs, grid);
   search.addEventListener('input', () => { state.emojiQuery = search.value; renderEmojiGrid(); });
   search.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeEmojiMenu(); e.stopPropagation(); });
@@ -1111,7 +1123,8 @@ function renderEmojiGrid(query = state.emojiQuery) {
     button.type = 'button';
     button.dataset.emoji = emoji.id;
     button.title = `:${emoji.id}: — ${emojiLabel(emoji.id, locale())}`;
-    button.setAttribute('aria-label', `:${emoji.id}:`);
+    button.setAttribute('aria-label', `${emojiLabel(emoji.id, locale())} :${emoji.id}:`);
+    button.setAttribute('role', 'option');
     button.append(customEmojiImage(emoji.id, 'custom-emoji custom-emoji-sm'));
     button.addEventListener('click', () => { insertEmoji(`:${emoji.id}:`); pushRecentEmoji(emoji.id); closeEmojiMenu(); });
     grid.append(button);
@@ -1364,9 +1377,12 @@ function renderTiles() {
   for (const id of ids) {
     const person = id === state.selfId ? { id, name: state.selfName } : { id, name: occupantNames.get(id) || state.online.get(id)?.name };
     const tile = document.createElement('div');
-    tile.className = 'tile';
+    tile.className = 'tile' + (id === state.selfId ? ' is-self' : '') + ` tone-${toneFor(id)}`;
     tile.dataset.participant = id;
     tile.classList.toggle('is-speaking', state.speaking.has(id));
+    const onlineState = state.online.get(id);
+    const micOn = id === state.selfId ? state.mesh?.isOn('audio') : onlineState?.micOn;
+    const screenOn = id === state.selfId ? state.mesh?.isOn('screen') : onlineState?.screenOn;
     const video = document.createElement('video');
     video.className = 'tile-video';
     video.autoplay = true; video.playsInline = true; video.muted = true;
@@ -1380,7 +1396,21 @@ function renderTiles() {
     const foot = document.createElement('div');
     foot.className = 'tile-foot';
     foot.append(el('span', 'tile-name', person?.name || ''));
+    const badges = document.createElement('span');
+    badges.className = 'tile-badges';
+    badges.setAttribute('aria-hidden', 'false');
+    if (micOn === false) {
+      const b = el('span', 'tile-badge', t('chat.muted'));
+      b.setAttribute('aria-label', t('chat.muted'));
+      badges.append(b);
+    }
+    if (screenOn) {
+      const b = el('span', 'tile-badge', t('chat.sharingScreen'));
+      b.setAttribute('aria-label', t('chat.sharingScreen'));
+      badges.append(b);
+    }
     tile.append(video, avatar, foot);
+    if (badges.childNodes.length) tile.append(badges);
     els.tileGrid.append(tile);
   }
 }
@@ -1406,7 +1436,8 @@ function renderMembers() {
   for (const member of sorted) {
     const li = document.createElement('li');
     li.className = 'person';
-    const isSelf = member.isYou || (member.deviceId && member.deviceId === state.deviceId);
+    const isSelf = (state.selfMemberId && member.memberId === state.selfMemberId)
+      || member.isYou || (member.deviceId && member.deviceId === state.deviceId);
     const isOwnerMember = member.isOwner;
     const isOnline = isSelf || (member.deviceId && onlineDeviceIds.has(member.deviceId));
     li.classList.toggle('is-online', isOnline);
@@ -1693,7 +1724,9 @@ function showError(key) {
 function setBusy(busy) { els.joinBtn.disabled = busy; }
 function toast(message, variant = 'info', timeout = 3200) {
   if (!els.toasts || !message) return;
+  while (els.toasts.children.length >= 3) els.toasts.firstChild?.remove();
   const node = el('div', `toast${variant === 'error' ? ' is-error' : ''}`, message);
+  if (variant === 'error') node.setAttribute('role', 'alert');
   els.toasts.append(node);
   setTimeout(() => { node.style.opacity = '0'; node.style.transition = 'opacity 180ms ease'; setTimeout(() => node.remove(), 220); }, timeout);
 }

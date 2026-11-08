@@ -1,19 +1,17 @@
 /**
  * PING OP v1.0 — Node server adapter.
  *
- * attachPing(io, { pingOp }) registers:
- * - `ping:request` socket handler (echo + server clock + seq, rate-limited)
- *   echoing { ok, t, seq, serverTime, op, version }
+ * attach(io) registers `ping:request` (echo + server clock + seq,
+ * rate-limited to 5/s per socket) echoing { ok, t, seq, serverTime, op, version }.
+ * The measurement itself (RTT) is computed by the CLIENT with a monotonic
+ * clock; the server only echoes, so the shared `pingOp` instance stays
+ * offline until clients report samples (e.g. via a stats POST — planned
+ * v1.1). /api/health exposes the current engine state honestly as empty.
  *
- * pingHttpHandler() returns an Express/Connect-style (req, res) handler for
- * GET /api/ping: { ok:true, time, op, version } with no-store headers and
- * Cache-Control. The handler feeds a shared PingOp instance so the server
- * keeps a global latency picture (useful for /api/health).
- *
- * Server hardening lives here (applyPingHardening(server)):
+ * Server hardening (applyHardening):
  * - TCP_NODELAY on every accepted socket (kills Nagle 40ms stall)
  * - short keep-alive timeouts (recycle fast, less buffer-bloat)
- * - CORS disabled (same-origin only)
+ * - CORS disabled (same-origin only) — see src/app.js
  *
  * Zero dependencies. Written from scratch for Hush.
  */

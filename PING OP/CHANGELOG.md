@@ -1,5 +1,13 @@
 # PING OP Changelog — سجل إصدارات المكتبة
 
+## [ping v1.0.1] — 2026-11-08 — توثيق صادق + شارة عربية (Hz)
+
+- **توثيق:** `src/server.js` header corrected — the server echoes time,
+  the client measures RTT; /api/health honestly reflects that (no fake
+  "global picture" claim).
+- **واجهة:** badge `PING OP` (تحسين البنق) on index, room and server
+  headers via `arabicLabel()`;` timings unchanged.
+
 ## [ping v1.0.0] — 2026-11-08 — الإصدار الأول من الصفر (Hz)
 
 - **إضافة:** محرك أساسي `src/ping-op.js` (createPingOp + PingOp):

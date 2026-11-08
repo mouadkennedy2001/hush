@@ -22,4 +22,4 @@
 ## الإدماج
 
 يوجد نسخة تشغيلية في `public/js/room/mic-enhancer.js` (مشتقة من هذا المصدر — تُعرض على المتصفح مباشرة).
-الواجهة في `src/mic-enhancer.js`: `createMicEnhancer(config) → { attach(stream), detach(), setEnabled(bool), getStats(), dispose() }`.
+الواجهة في `src/mic-enhancer.js`: `createMicEnhancer(config) → { attach(stream), setEnabled(bool), setStrength(v), getStats(), dispose() }` — و`attach` يعيد `{ stream, bypass, enhanced, ctx, enhancer }` (ليس مسارًا مباشرًا).

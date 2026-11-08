@@ -1,4 +1,4 @@
-import { randomUUID, randomBytes, timingSafeEqual } from 'node:crypto';
+import { randomUUID, randomBytes, timingSafeEqual, createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { CUSTOM_EMOJI_SET } from './constants.js';
@@ -314,13 +314,8 @@ export class ServerManager {
     const isMember = Boolean(viewer && this.isMember(server, viewer));
     const isOwnerViewer = Boolean(viewer && this.isOwner(server, viewer));
     const showInvite = Boolean(isMember && !options.omitInvite);
-    // Pseudonym helper: stable per-device, not reversible without brute force over UUID space.
-    const pseudo = (d) => {
-      try {
-        const h = Buffer.from(d).toString('base64url').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 12) || d.slice(0, 12);
-        return `m_${h}`;
-      } catch { return `m_${d.slice(0, 12)}`; }
-    };
+    // Pseudonym helper: stable per-device hash (not reversible base64).
+    const pseudo = (d) => this.memberIdFor(d);
     let members = [];
     if (isMember) {
       members = server.members.map((m) => {
@@ -363,12 +358,25 @@ export class ServerManager {
    */
   broadcastSummary(server) {
     if (!server) return null;
-    // Reuse member redaction path by passing a synthetic member viewer:
-    // viewers that are members but not owner get channels/members(redacted).
-    // We call publicSummary with the owner as viewer but omit invite, then
-    // strip ownerDeviceId for the broadcast copy.
-    const view = this.publicSummary(server, server.ownerDeviceId, { omitInvite: true });
-    return { ...view, ownerDeviceId: null };
+    // Redacted broadcast: never leak raw deviceIds (or invite) to everyone.
+    // Viewers who are members but NOT owner get memberId pseudonyms only.
+    // The owner fetches full ids via the private REST summary when moderating.
+    const nonOwner = server.members.find((m) => m.deviceId !== server.ownerDeviceId);
+    const viewer = nonOwner ? nonOwner.deviceId : server.ownerDeviceId;
+    const view = this.publicSummary(server, viewer, { omitInvite: true });
+    // isYou is per-viewer; strip it from the shared broadcast (clients
+    // recompute it from their own memberId after the join ack).
+    const members = (view.members || []).map((m) => ({ ...m, isYou: false }));
+    return { ...view, ownerDeviceId: null, members };
+  }
+
+  memberIdFor(deviceId) {
+    const d = cleanDeviceId(deviceId);
+    if (!d) return null;
+    try {
+      const h = createHash('sha256').update(d).digest('base64url').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 12);
+      return `m_${h || d.slice(0, 12)}`;
+    } catch { return `m_${d.slice(0, 12)}`; }
   }
 
   findByInvite(code) {
@@ -453,6 +461,8 @@ export class ServerManager {
     }
     // Joining a server you are not a member of requires the invite code.
     if (!inviteCodesEqual(inviteCode, server.inviteCode)) return null;
+    const memberIds = new Set([server.ownerDeviceId, ...server.members.map((m) => m.deviceId)].filter(Boolean));
+    if (memberIds.size >= 200) return null;
     server.members.push({
       deviceId: device,
       name: cleanDisplayName(name),
@@ -709,7 +719,7 @@ export class ServerManager {
     const prefix = `/uploads/server-${serverId}/${channelId}/`;
     if (!url.startsWith(prefix) || url.includes('..') || url.includes('\\')) return null;
     const size = Number(att.size);
-    if (!Number.isFinite(size)) return null;
+    if (!Number.isFinite(size) || size < 0 || size > 8 * 1024 * 1024) return null;
     return {
       url,
       name: String(att.name ?? 'File').replace(/[\u0000-\u001f\u007f]/g, '').slice(0, 120) || 'File',
@@ -757,8 +767,10 @@ export class ServerManager {
   async editMessage(serverId, channelId, messageId, authorId, text) {
     if (!isValidServerId(serverId) || !isValidChannelId(channelId)) return null;
     const key = `${serverId}/${channelId}`;
+    if (this.#channelTombstones.has(key)) return null;
     let result = null;
     await this.#queueChannelWrite(key, async () => {
+      if (this.#channelTombstones.has(key)) return;
       const messages = await this.loadMessages(serverId, channelId);
       const message = messages.find((m) => m.id === messageId);
       if (!this.#isAuthor(message, authorId)) return;
@@ -773,8 +785,10 @@ export class ServerManager {
   async deleteMessage(serverId, channelId, messageId, authorId) {
     if (!isValidServerId(serverId) || !isValidChannelId(channelId)) return false;
     const key = `${serverId}/${channelId}`;
+    if (this.#channelTombstones.has(key)) return false;
     let ok = false;
     await this.#queueChannelWrite(key, async () => {
+      if (this.#channelTombstones.has(key)) return;
       const messages = await this.loadMessages(serverId, channelId);
       const index = messages.findIndex((m) => m.id === messageId);
       if (index === -1 || !this.#isAuthor(messages[index], authorId)) return;
@@ -788,8 +802,10 @@ export class ServerManager {
   async deleteMessageAsAdmin(serverId, channelId, messageId) {
     if (!isValidServerId(serverId) || !isValidChannelId(channelId)) return false;
     const key = `${serverId}/${channelId}`;
+    if (this.#channelTombstones.has(key)) return false;
     let ok = false;
     await this.#queueChannelWrite(key, async () => {
+      if (this.#channelTombstones.has(key)) return;
       const messages = await this.loadMessages(serverId, channelId);
       const index = messages.findIndex((m) => m.id === messageId);
       if (index === -1) return;
@@ -803,8 +819,10 @@ export class ServerManager {
   async toggleReaction(serverId, channelId, messageId, emoji, participantId) {
     if (!isValidServerId(serverId) || !isValidChannelId(channelId)) return null;
     const key = `${serverId}/${channelId}`;
+    if (this.#channelTombstones.has(key)) return null;
     let result = null;
     await this.#queueChannelWrite(key, async () => {
+      if (this.#channelTombstones.has(key)) return;
       const messages = await this.loadMessages(serverId, channelId);
       const message = messages.find((m) => m.id === messageId);
       if (!message) return;

@@ -71,11 +71,21 @@ export function spamScore(text, history = []) {
   return { ok: score < 3, reason: reasons.join('+') || null, score, reasons };
 }
 
-export function isBanned(bannedList, { deviceHash, ipHash }) {
+export function isBanned(bannedList, { deviceHash, ipHash } = {}) {
   const now = Date.now();
-  return (bannedList || []).find((b) =>
-    (deviceHash && b.deviceHash === deviceHash) || (ipHash && b.ipHash === ipHash)
-  ) && ((bannedList || []).find((b) => (deviceHash && b.deviceHash === deviceHash) || (ipHash && b.ipHash === ipHash))?.until ?? Infinity) > now;
+  const list = bannedList || [];
+  return list.find((b) => {
+    if (!b) return false;
+    if (deviceHash && b.deviceHash !== deviceHash && ipHash && b.ipHash !== ipHash) return false;
+    if (deviceHash && b.deviceHash !== deviceHash && !ipHash) return false;
+    if (ipHash && b.ipHash !== ipHash && !deviceHash) return false;
+    if (!deviceHash && !ipHash) return false;
+    // Match only if the identifier that matches is still active.
+    if (deviceHash && b.deviceHash === deviceHash && ipHash && b.ipHash === ipHash) return (b.until ?? Infinity) > now;
+    if (deviceHash && b.deviceHash === deviceHash) return (b.until ?? Infinity) > now;
+    if (ipHash && b.ipHash === ipHash) return (b.until ?? Infinity) > now;
+    return false;
+  }) ?? null;
 }
 
 export function activeBans(bannedList) {

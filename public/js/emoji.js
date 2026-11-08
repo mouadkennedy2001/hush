@@ -109,7 +109,7 @@ export function searchEmojis(query, limit = 60) {
 export function customEmojiImage(id, className = 'custom-emoji') {
   const img = document.createElement('img');
   img.src = emojiUrl(id);
-  img.alt = `:${id}:`;
+  img.alt = emojiLabel(id, typeof document !== 'undefined' && document.documentElement?.lang === 'ar' ? 'ar' : 'en');
   img.title = `:${id}:`;
   img.className = className;
   img.draggable = false;

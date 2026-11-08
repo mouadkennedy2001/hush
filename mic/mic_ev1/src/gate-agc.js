@@ -38,6 +38,11 @@ export class NoiseGate {
       this.setClosed(false);
     }
   }
+  dispose() {
+    try { this.input.disconnect(); } catch { /* ignore */ }
+    try { this.output.disconnect(); } catch { /* ignore */ }
+    try { this._gateGain.disconnect(); } catch { /* ignore */ }
+  }
 }
 
 export class Clipper {

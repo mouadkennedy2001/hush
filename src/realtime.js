@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import {
   cleanMessageText,
   cleanName,
@@ -391,8 +391,8 @@ export function attachRealtime(io, { rooms, servers, sessions = null, maxPartici
         if (!allowIpJoin(ipHash)) {
           return safeAck(ack, { ok: false, error: 'rate-limited' });
         }
-        leave();
-
+        // Validate BEFORE leaving the current room (a failed join must not
+        // eject you — same pattern as server:join).
         const code = normalizeCode(payload.code);
         if (!isValidCode(code)) {
           return safeAck(ack, { ok: false, error: 'invalid-code' });
@@ -400,9 +400,11 @@ export function attachRealtime(io, { rooms, servers, sessions = null, maxPartici
 
         const room = await rooms.getOrCreate(code);
 
-        // Ban check (device + ip)
+        // Ban check (device + ip). deviceId is expected (real clients always
+        // send it); falling back to socket.id keeps old clients/tests working
+        // but those joins get a fresh identity — IP ban still applies.
         const rawDevice = cleanDeviceId(payload.deviceId);
-        const deviceHash = rawDevice ? hashValue(rawDevice, 'device') : hashValue(payload.deviceId || socket.id, 'device');
+        const deviceHash = rawDevice ? hashValue(rawDevice, 'device') : hashValue(socket.id, 'device');
         socket.data.deviceHash = deviceHash;
         const bans = activeBans(room.banned);
         const banned = bans.find((b) => b.deviceHash === deviceHash || b.ipHash === ipHash);
@@ -413,6 +415,9 @@ export function attachRealtime(io, { rooms, servers, sessions = null, maxPartici
         if (room.participants.size >= maxParticipants) {
           return safeAck(ack, { ok: false, error: 'room-full' });
         }
+
+        // Validated: now leave the previous room.
+        leave();
 
         // Anti multi-account from same device: one slot per device per room.
         // If same device already in room on another socket, disconnect the old one.
@@ -885,6 +890,20 @@ export function attachRealtime(io, { rooms, servers, sessions = null, maxPartici
           }
         }
       }
+      // Load history BEFORE joining the channel, so a history failure
+      // never leaves a ghost membership behind.
+      const requested = String(payload.channelId || '');
+      const requestedChannel = requested ? server.channels.find((c) => c.id === requested) : null;
+      const firstText = requestedChannel && requestedChannel.type === 'text'
+        ? requestedChannel
+        : server.channels.find((c) => c.type === 'text') || server.channels[0];
+      let messages = [];
+      try {
+        messages = firstText ? await servers.loadMessages(serverId, firstText.id) : [];
+      } catch (error) {
+        console.error('server:join loadMessages failed', error);
+        return safeAck(ack, { ok: false, error: 'history-failed' });
+      }
       const participant = {
         id: socket.id,
         name: cleanName(stripInvisible(payload.name)),
@@ -901,23 +920,11 @@ export function attachRealtime(io, { rooms, servers, sessions = null, maxPartici
       trackServerOnline(serverId, socket.id, { id: socket.id, name: participant.name, deviceId: deviceId || '' });
       socket.join(serverChannelFor(serverId));
       socket.to(serverChannelFor(serverId)).emit('server:peer:joined', { participant: { id: participant.id, name: participant.name } });
-      const requested = String(payload.channelId || '');
-      const requestedChannel = requested ? server.channels.find((c) => c.id === requested) : null;
-      const firstText = requestedChannel && requestedChannel.type === 'text'
-        ? requestedChannel
-        : server.channels.find((c) => c.type === 'text') || server.channels[0];
-      let messages = [];
-      try {
-        messages = firstText ? await servers.loadMessages(serverId, firstText.id) : [];
-      } catch (error) {
-        console.error('server:join loadMessages failed', error);
-        return safeAck(ack, { ok: false, error: 'history-failed' });
-      }
       // A1: issue a session token bound to this device+server for REST calls.
       const sessionToken = sessions && deviceId ? sessions.issue(deviceId, serverId) : '';
       safeAck(ack, {
         ok: true,
-        self: { id: socket.id, name: participant.name, deviceId: deviceId || '' },
+        self: { id: socket.id, name: participant.name, deviceId: deviceId || '', memberId: servers.memberIdFor(deviceId || '') },
         server: servers.publicSummary(server, deviceId || null),
         membersOnline: serverOnlineList(serverId, { includeDeviceIds: true }),
         tempRooms: listTempRooms(serverId),
@@ -1111,9 +1118,10 @@ export function attachRealtime(io, { rooms, servers, sessions = null, maxPartici
         // Accept either deviceId (owner UI) or memberId pseudonym (redacted view).
         let targetDeviceId = cleanDeviceId(payload.deviceId);
         if (!targetDeviceId && payload.memberId) {
+          const want = String(payload.memberId);
           const m = fresh.members.find((x) => {
-            const h = Buffer.from(x.deviceId).toString('base64url').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 12);
-            return `m_${h}` === String(payload.memberId);
+            const h = createHash('sha256').update(x.deviceId).digest('base64url').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 12);
+            return `m_${h}` === want;
           });
           if (m) targetDeviceId = m.deviceId;
         }

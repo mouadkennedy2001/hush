@@ -45,6 +45,7 @@ export function createMicEnhancer(config = {}) {
   let shaper = null;
   let gain = null;
   let workletNode = null;
+  let tapNode = null;
   let analyser = null;
   let analyserData = null;
   let levels = { level: 0, gated: false, cpu: 0 };
@@ -55,6 +56,7 @@ export function createMicEnhancer(config = {}) {
     if (!stream) return { stream, bypass: true, enhanced: false, error: 'no-stream' };
     const rawTrack = stream.getAudioTracks?.()[0];
     if (!rawTrack) return { stream, bypass: true, enhanced: false, error: 'no-audio-track' };
+    if (cfg.bypass) return { stream, bypass: true, enhanced: false, error: 'bypassed' };
     try {
       // Share the AudioContext with MicFx/media when the caller passes one:
       // three separate contexts cost ~3x CPU and add latency.
@@ -117,11 +119,11 @@ export function createMicEnhancer(config = {}) {
       shaper.connect(gain);
       gain.connect(dest);
       if (workletNode) {
-        const tap = ctx.createGain();
-        tap.gain.value = 0;
+        tapNode = ctx.createGain();
+        tapNode.gain.value = 0;
         source.connect(workletNode);
-        workletNode.connect(tap);
-        tap.connect(ctx.destination);
+        workletNode.connect(tapNode);
+        tapNode.connect(ctx.destination);
       }
       // Simple level/CPU meter: analyser RMS (works with or without Worklet).
       timer = setInterval(() => {
@@ -139,10 +141,14 @@ export function createMicEnhancer(config = {}) {
         }
         levels.level = level;
         // AGC: nudge gain toward target when weak (never push loud voices louder).
+        // Strength trims the gain slightly (stronger suppression = a touch
+        // softer) — applied AFTER the AGC calc so the timer can't clobber it.
         const targetDb = cfg.agcTargetDb ?? -14;
         const curDb = level <= 0 ? -80 : 20 * Math.log10(level);
         const need = Math.max(0, Math.min(cfg.agcMaxGainDb ?? 12, targetDb - curDb));
-        gain.gain.setTargetAtTime(Math.min(3, Math.pow(10, need / 20) * 0.5 + 0.5), ctx.currentTime, 0.05);
+        const agcGain = Math.min(3, Math.pow(10, need / 20) * 0.5 + 0.5);
+        const strengthTrim = 1 - cfg.strength * 0.15;
+        gain.gain.setTargetAtTime(agcGain * strengthTrim, ctx.currentTime, 0.05);
         // Gate: soft-close when very quiet for a while.
         if (curDb < (cfg.gateThresholdDb ?? -42) && !levels.gated) {
           levels.gated = true;
@@ -160,13 +166,14 @@ export function createMicEnhancer(config = {}) {
 
   function setEnabled(on) {
     cfg.bypass = !on;
+    if (cfg.bypass && timer) { clearInterval(timer); timer = null; }
     if (gateGain && ctx) gateGain.gain.setTargetAtTime(cfg.bypass ? 1 : levels.gated ? 0 : 1, ctx.currentTime, 0.005);
   }
 
   function setStrength(v) {
     cfg.strength = Math.max(0, Math.min(1, Number(v) || 0));
-    // Main-thread spectral gain mapping: stronger => higher gate floor + less gain.
-    if (gain && ctx) gain.gain.setTargetAtTime(1 - cfg.strength * 0.15, ctx.currentTime, 0.02);
+    // Strength is applied by the meter loop (agcGain * strengthTrim) —
+    // do not write gain.gain directly here or the next tick clobbers it.
   }
 
   function getStats() {
@@ -182,12 +189,13 @@ export function createMicEnhancer(config = {}) {
   function dispose() {
     if (timer) clearInterval(timer);
     timer = null;
-    for (const n of [source, highpass, lowpass, gateIn, gateGain, shaper, gain, workletNode, analyser]) {
+    try { if (workletNode?.port) workletNode.port.onmessage = null; } catch { /* ignore */ }
+    for (const n of [source, highpass, lowpass, gateIn, gateGain, shaper, gain, workletNode, tapNode, analyser, dest]) {
       try { n?.disconnect?.(); } catch { /* ignore */ }
     }
     // Only close a context we created — never the shared one from media.js.
     if (ownedCtx) { try { audioCtxRef?.close?.().catch(() => {}); } catch { /* ignore */ } }
-    source = highpass = lowpass = gateIn = gateGain = shaper = gain = workletNode = analyser = dest = null;
+    source = highpass = lowpass = gateIn = gateGain = shaper = gain = workletNode = tapNode = analyser = dest = null;
   }
 
   return { attach, setEnabled, setStrength, getStats, dispose };

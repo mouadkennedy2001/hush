@@ -1,7 +1,43 @@
 {
-  "version": "libraries-1.0.0",
+  "version": "libraries-1.1.0",
   "updated": "2026-11-08",
   "entries": [
+    {
+      "date": "2026-11-08",
+      "ts": 1763480200000,
+      "library": "mic",
+      "version": "ev1.1-fix",
+      "kind": "fix",
+      "titleEn": "mic: live DSP wiring + bypass + dispose + docs cleaned",
+      "titleAr": "mic: ربط DSP الحي + bypass + تنظيف + وثائق مصححة",
+      "pointsEn": [
+        "Gate + AGC are now wired to the meter loop (previously update() had zero callers — the chain was pass-through).",
+        "Bypass is honored in attach() (returns raw immediately); setStrength no longer clobbered by the AGC timer; dispose disconnects gate/clipper outputs, tap and dest, and clears the worklet port.",
+        "Docs: removed stale ScriptProcessor claim and phantom detach() API, fixed usage example (returns object, not track), fixed duplicate ev1.1 changelog heading and garbled ev1.9 line."
+      ],
+      "pointsAr": [
+        "البوابة + AGC مربوطتان الآن بحلقة القياس (قبلها update() بلا مستدعين — السلسلة كانت تمرر الصوت سليمًا).",
+        "Bypass يُحترم في attach() (يرجع الخام فورًا)؛ setStrength لا يُكسر بعد المؤقت؛ dispose يفصل أطراف البوابة/القص والصنبور والوجهة ويمسح منفذ المعالج.",
+        "وثائق: حُذف ادعاء ScriptProcessor القديم وواجهة detach الوهمية، وصُحح مثال الاستخدام (يرجع كائنًا)، وأُصلح تكرار عنوان ev1.1 وسطر ev1.9 المشوّه."
+      ]
+    },
+    {
+      "date": "2026-11-08",
+      "ts": 1763480200000,
+      "library": "ping-op",
+      "version": "1.0.1",
+      "kind": "fix",
+      "titleEn": "PING OP 1.0.1 — honest server stats + Arabic badge everywhere",
+      "titleAr": "PING OP 1.0.1 — إحصاءات خادم صادقة + شارة عربية في كل مكان",
+      "pointsEn": [
+        "Server adapter docs fixed: the server echoes time (RTT is measured client-side), so /api/health honestly reports empty/offline until clients report samples.",
+        "Badge PING OP (تحسين البنق) added to index, room and server headers; timings remain identical."
+      ],
+      "pointsAr": [
+        "صُححت وثائق محول الخادم: الخادم يعيد الوقت (القياس لحظة العميل)، فـ /api/health يعرض بصدق حالة فارغة/منقطعة حتى يبلغ العملاء عينات.",
+        "أُضيفت شارة PING OP (تحسين البنق) إلى ترويسات index و room و server؛ التوقيتات لم تتغير."
+      ]
+    },
     {
       "date": "2026-11-08",
       "ts": 1763480100000,

@@ -112,6 +112,12 @@ export function createMicEnhancer(config = {}) {
       } else {
         level = suppressor ? suppressor.getLevel() : 0;
       }
+      // Wire the live DSP (was inert: update() had zero callers).
+      try { gate?.update?.(level); } catch { /* ignore */ }
+      try {
+        const linear = agc ? agc.update(level) : 1;
+        if (gain && ctx) gain.gain.setTargetAtTime(linear * (1 - cfg.strength * 0.15), ctx.currentTime, 0.05);
+      } catch { /* ignore */ }
       gated = gate ? gate.isClosed?.() ?? false : false;
       cpu = suppressor ? suppressor.getCpu() : 0;
     }, 100);
@@ -119,6 +125,7 @@ export function createMicEnhancer(config = {}) {
 
   async function attach(stream) {
     if (!stream) return { stream, bypass: true, enhanced: false, error: 'no-stream' };
+    if (cfg.bypass) return { stream, bypass: true, enhanced: false, error: 'bypassed' };
     try {
       if (config.audioContext && typeof config.audioContext.createMediaStreamSource === 'function') {
         ctx = config.audioContext;
@@ -155,7 +162,10 @@ export function createMicEnhancer(config = {}) {
     }
   }
 
-  function setEnabled(on) { cfg.bypass = !on; }
+  function setEnabled(on) {
+    cfg.bypass = !on;
+    if (cfg.bypass && meterInterval) { clearInterval(meterInterval); meterInterval = null; }
+  }
   function setStrength(v) { cfg.strength = Math.max(0, Math.min(1, Number(v) || 0)); }
   function getStats() { return { level, gated, cpu, enabled: enabled(), cfg: { strength: cfg.strength, hpHz: cfg.hpHz, lpHz: cfg.lpHz, agcTargetDb: cfg.agcTargetDb } }; }
 
@@ -166,8 +176,11 @@ export function createMicEnhancer(config = {}) {
     try { highpass?.disconnect?.(); } catch { /* ignore */ }
     try { lowpass?.disconnect?.(); } catch { /* ignore */ }
     try { gate?.input?.disconnect?.(); } catch { /* ignore */ }
+    try { gate?.output?.disconnect?.(); } catch { /* ignore */ }
     try { suppressor?.dispose?.(); } catch { /* ignore */ }
+    try { suppressor?.output?.disconnect?.(); } catch { /* ignore */ }
     try { clipper?.input?.disconnect?.(); } catch { /* ignore */ }
+    try { clipper?.output?.disconnect?.(); } catch { /* ignore */ }
     try { gain?.disconnect?.(); } catch { /* ignore */ }
     try { workletNode?.disconnect?.(); } catch { /* ignore */ }
     try { analyser?.disconnect?.(); } catch { /* ignore */ }

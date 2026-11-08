@@ -1,6 +1,33 @@
 {
-  "version": "10.1.0",
+  "version": "10.2.0",
   "entries": [
+    {
+      "date": "2026-11-08",
+      "ts": 1763480200000,
+      "kind": "update",
+      "kindEn": "Update",
+      "kindAr": "تحديث",
+      "titleEn": "Emoji v11, libraries overhaul, server hardening, and site-wide bug fixes",
+      "titleAr": "إيموجي v11 وتطوير المكتبات وتقوية الخوادم وإصلاحات شاملة للموقع",
+      "pointsEn": [
+        "EMOJI v11: fixed-position picker (no clipping), unified sizes (26 picker / 22 message / 34 emoji-only / 16 chips), min(420px) + slide-in animation + reduced-motion, dialog roles, human aria labels, RTL positioning, and ghost-state close on channel switch.",
+        "VOICE/TILES: invalid nested buttons removed (channel / temp-room / soundboard delete are siblings now), server tiles diff safely with self-mirror, tone colors, and mute/screen badges; room tiles already differed.",
+        "UPLOAD: fixed the always-404 server upload (channelId read after multer), hint always clears, 20s abort, channel captured at start, specific error toasts, soundboard size/type checks client-side.",
+        "SECURITY: ban matching fixed (expiry per identifier), room codes use crypto RNG, stored attachments revalidated, channel tombstones on edit/react/delete, 200-member cap on join, ban dedup/prune, memberId is now a SHA-256 hash (not reversible base64) — kick-by-memberId updated.",
+        "PRIVACY: broadcast members summary is redacted (memberId only, isYou recomputed client-side); join no longer leaves a ghost on history failure; failed room joins no longer eject you.",
+        "MIC + PING OP: mic DSP live (gate/AGC wired), bypass honored, setStrength no longer clobbered, dispose full; PING OP server docs fixed, Arabic badge on all pages, dedicated Libraries log bilingual with filters.",
+        "UI: toasts capped at 3 with alert role + distinct red errors, headers wrap on mobile, icon buttons have aria-labels, join gates are inert, lightbox focus restores."
+      ],
+      "pointsAr": [
+        "إيموجي v11: منتقٍ بموضع ثابت (بدون قص)، أحجام موحدة (26 في المنتقي / 22 في الرسالة / 34 وحدها / 16 رقائق)، حد 420px + حركة دخول + احترام تقليل الحركة، أدوار حوار، تسميات بشرية لقارئ الشاشة، تموضع RTL، وإغلاق عند تبديل القناة.",
+        "صوت/بلاطات: أُزيلت الأزرار المتداخلة غير الصالحة (القناة/الغرفة المؤقتة/حذف لوحة الصوت أصبحت أخوة الآن)، بلاطات الخادم بأمان مع عكس الذات وألوان النبرة وشارات الكتم/الشاشة.",
+        "رفع: أُصلح خطأ 404 الدائم في رفع الخادم (قراءة channelId بعد multer)، التلميح يُمسح دائمًا، إلغاء 20s، التقاط القناة عند البدء، تنبيهات خطأ محددة، وفحص الحجم/النوع للوحة الصوت في العميل.",
+        "أمن: أُصلح تطابق الحظر (الانتهاء لكل معرف)، رموز الغرف بـ RNG آمن، التحقق من المرفقات المخزنة، شواهد القنوات المحذوفة عند التعديل/التفاعل، حد 200 عضو عند الانضمام، منع تكرار الحظر، memberId أصبح hash SHA-256 (غير قابل للعكس) — حُدّث الطرد به.",
+        "خصوصية: ملخص الأعضاء المبثّ مخفّض (memberId فقط، isYou يُعاد حسابه في العميل)؛ الانضمام لا يترك شبحًا عند فشل السجل؛ فشل انضمام الغرفة لا يطردك.",
+        "mic + PING OP: سلسلة mic حية (بوابة/AGC مربوطة)، bypass محترم، setStrength لا يُكسر، dispose كامل؛ وُثّق خادم PING OP، شارة عربية في كل الصفحات، وسجل مكتبات منفصل ثنائي اللغة بمرشحات.",
+        "واجهة: تنبيهات محددة بـ 3 ودور alert وأخطاء حمراء مميزة، ترويسات تلتف على الجوال، أزرار أيقونات بتسميات aria، بوابات دخول inert، واستعادة التركيز في عارض الصور."
+      ]
+    },
     {
       "date": "2026-11-08",
       "ts": 1763480100000,
