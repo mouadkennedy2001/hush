@@ -123,7 +123,7 @@ test('PING OP 1.1: trend/health and sanitized client reports', () => {
   assert.equal(op.getTrend(), 'stable');
   for (let i = 0; i < 5; i += 1) op.sample(50 + i * 2);
   const health = op.getHealth();
-  assert.equal(health.version, '1.1.0');
+  assert.equal(health.version, '1.2.0');
   assert.ok(['improving', 'worsening', 'stable'].includes(health.trend));
   assert.equal(typeof health.healthy, 'boolean');
   const clean = sanitizeStatsReport({ current: '42', avg: 50, median: 40, jitter: 5, lossRate: 2, score: 90, quality: 'good', samplesCount: 10 });
@@ -140,11 +140,12 @@ test('PING OP 1.1: trend/health and sanitized client reports', () => {
 
 test('v12 changelog + libraries log document giphy, mic ev1.2, ping 1.1', async () => {
   const pkg = JSON.parse(await readFile(path.join(ROOT, 'package.json'), 'utf8'));
-  assert.equal(pkg.version, '12.3.0');
+  assert.equal(pkg.version, '14.0.0');
   const changelog = JSON.parse(await readFile(path.join(PUBLIC, 'changelog.json'), 'utf8'));
-  assert.equal(changelog.version, '12.3.0');
+  assert.equal(changelog.version, '14.0.0');
   const top = changelog.entries[0];
-  assert.match(top.titleEn, /Emojis now actually update/, 'v12.3 entry on top');
+  assert.match(top.titleEn, /v14/, 'v13 entry on top');
+  assert.ok(changelog.entries.some((e) => /Emojis now actually update/.test(e.titleEn)), 'v12.3 entry still present');
   assert.ok(changelog.entries.some((e) => /GIF \+ Sticker buttons/.test(e.titleEn)), 'v12.1 entry still present');
   assert.ok(changelog.entries.some((e) => /Giphy/.test(e.titleEn)), 'a changelog entry documents Giphy');
   assert.ok(changelog.entries.some((e) => /sticker/i.test(e.titleEn)), 'a changelog entry documents stickers');

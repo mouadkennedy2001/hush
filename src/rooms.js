@@ -8,7 +8,8 @@ import {
   REACTION_EMOJIS,
   CUSTOM_EMOJI_SET,
   MAX_CUSTOM_SOUNDS_PER_ROOM,
-  MAX_BOARD_AUDIO_BYTES
+  MAX_BOARD_AUDIO_BYTES,
+  MAX_BOARD_IMAGE_BYTES
 } from './constants.js';
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -80,11 +81,14 @@ export function normalizeCustomSound(raw, code) {
   const emojiId = CUSTOM_EMOJI_SET.has(String(raw.emojiId)) ? String(raw.emojiId) : 'star';
   const size = Number(raw.size);
   if (!Number.isFinite(size) || size < 0 || size > MAX_BOARD_AUDIO_BYTES) return null;
+  const imageUrl = String(raw.imageUrl ?? '');
+  const imagePrefix = `/uploads/${code}/board/`;
   return {
     id: raw.id,
     name: String(raw.name ?? 'Sound').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 40) || 'Sound',
     emojiId,
     url,
+    imageUrl: imageUrl.startsWith(imagePrefix) && !imageUrl.includes('..') && !imageUrl.includes('\\') && /\.(png|jpe?g|webp|gif|avif)$/i.test(imageUrl) ? imageUrl : '',
     size,
     mime: String(raw.mime ?? 'audio/mpeg').slice(0, 60),
     addedById: typeof raw.addedById === 'string' ? raw.addedById : '',
@@ -389,10 +393,14 @@ export class RoomManager {
   }
 
   async #deleteSoundFile(code, sound) {
-    if (!this.uploadsDir || !sound?.url) return;
-    const file = String(sound.url).split('/').pop();
-    if (!file || file.includes('..') || file.includes('\\') || file.includes('/')) return;
-    try { await fs.unlink(path.join(this.uploadsDir, code, 'board', file)); } catch { /* already gone */ }
+    if (!this.uploadsDir) return;
+    const remove = async (url) => {
+      const file = String(url || '').split('/').pop();
+      if (!file || file.includes('..') || file.includes('\\') || file.includes('/')) return;
+      try { await fs.unlink(path.join(this.uploadsDir, code, 'board', file)); } catch { /* already gone */ }
+    };
+    await remove(sound?.url);
+    await remove(sound?.imageUrl);
   }
 
   async cleanup() {

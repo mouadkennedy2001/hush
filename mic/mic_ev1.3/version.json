@@ -1,6 +1,6 @@
 {
-  "version": "",
-  "status": "planned",
+  "version": "ev1.3",
+  "status": "active",
   "basedOn": "1.3",
   "entrypoint": "src/mic-enhancer.js"
 }

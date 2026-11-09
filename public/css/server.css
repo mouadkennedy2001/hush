@@ -58,7 +58,8 @@
 .tile-badges { flex: none; }
 .tile-badge { display: inline-flex; align-items: center; padding: 2px 6px; border-radius: 999px; background: rgba(10,13,20,.72); color: #fff; font-size: .625rem; font-weight: 600; }
 .person-status { flex: none; }
-.soundboard-grid { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); }
+/* Container only — category grids inside own the button columns. */
+.soundboard-grid { display: block; }
 .emoji-menu { display: flex; flex-direction: column; gap: 6px; width: min(272px, calc(100vw - 24px)); max-width: calc(100vw - 24px); max-height: min(420px, calc(100dvh - 120px)); padding: 10px; box-sizing: border-box; overflow: hidden; }
 .emoji-menu[hidden] { display: none; }
 .emoji-grid { flex: 1; min-height: 120px; max-height: 240px; overflow-y: auto; overscroll-behavior: contain; }
@@ -68,8 +69,13 @@
 
 /* Server v9: online presence, kick, voice counts, polished emoji picker */
 .person { position: relative; }
-.online-dot { position: absolute; inset-inline-end: -1px; bottom: -1px; width: 10px; height: 10px; border-radius: 50%; background: var(--color-text-2, #98a2b3); border: 2px solid var(--color-white, #fff); flex: none; }
-.online-dot.is-on { background: var(--color-online, #16a34a); }
+/* Green = online, red = offline (never gray). */
+.online-dot { position: absolute; inset-inline-end: -1px; bottom: -1px; width: 11px; height: 11px; border-radius: 50%; background: var(--color-offline, #ef4444); border: 2px solid var(--color-surface, #fff); flex: none; }
+.online-dot.is-on { background: var(--color-online, #22c55e); }
+.server-settings { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--color-border); flex: none; }
+.server-settings .field { margin-bottom: 8px; }
+.server-icon-preview { width: 44px; height: 44px; object-fit: cover; border-radius: 10px; border: 1px solid var(--color-border); }
+.server-screen-stage video { background: var(--color-video-bg, #05070c); }
 .person-avatar { position: relative; }
 .person.is-online .person-name { color: var(--color-text); font-weight: 600; }
 .member-kick { flex: none; margin-inline-start: auto; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: 0; border-radius: var(--radius-buttons, 8px); background: transparent; color: var(--color-text-2); opacity: 0; }

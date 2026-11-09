@@ -1,461 +1,527 @@
 {
-  "version": "2.0.0",
+  "version": "4.0.0",
   "count": 65,
   "stickers": [
     {
       "id": "sticker-01",
       "cat": "faces",
-      "en": "Smiley",
-      "ar": "مبتسم",
-      "url": "/sticker/sticker-01.svg"
+      "en": "Smile",
+      "ar": "ابتسامة",
+      "url": "/sticker/sticker-01.svg",
+      "emojiId": "smile"
     },
     {
       "id": "sticker-02",
       "cat": "faces",
-      "en": "Laughing",
-      "ar": "يضحك",
-      "url": "/sticker/sticker-02.svg"
+      "en": "Laugh",
+      "ar": "ضحك",
+      "url": "/sticker/sticker-02.svg",
+      "emojiId": "laugh"
     },
     {
       "id": "sticker-03",
       "cat": "faces",
-      "en": "Loved",
-      "ar": "يحب",
-      "url": "/sticker/sticker-03.svg"
+      "en": "Love eyes",
+      "ar": "عيون قلب",
+      "url": "/sticker/sticker-03.svg",
+      "emojiId": "love"
     },
     {
       "id": "sticker-04",
       "cat": "faces",
-      "en": "Surprised",
-      "ar": "مندهش",
-      "url": "/sticker/sticker-04.svg"
+      "en": "Cool",
+      "ar": "بارد",
+      "url": "/sticker/sticker-04.svg",
+      "emojiId": "cool"
     },
     {
       "id": "sticker-05",
       "cat": "faces",
-      "en": "Sleepy",
-      "ar": "نعسان",
-      "url": "/sticker/sticker-05.svg"
+      "en": "Thinking",
+      "ar": "تفكير",
+      "url": "/sticker/sticker-05.svg",
+      "emojiId": "think"
     },
     {
       "id": "sticker-06",
       "cat": "faces",
-      "en": "Angry",
-      "ar": "غاضب",
-      "url": "/sticker/sticker-06.svg"
+      "en": "Sad",
+      "ar": "حزن",
+      "url": "/sticker/sticker-06.svg",
+      "emojiId": "sad"
     },
     {
       "id": "sticker-07",
       "cat": "faces",
-      "en": "Happy",
-      "ar": "سعيد",
-      "url": "/sticker/sticker-07.svg"
+      "en": "Angry",
+      "ar": "غضب",
+      "url": "/sticker/sticker-07.svg",
+      "emojiId": "angry"
     },
     {
       "id": "sticker-08",
       "cat": "faces",
-      "en": "Shy",
-      "ar": "خجل",
-      "url": "/sticker/sticker-08.svg"
+      "en": "Party",
+      "ar": "احتفال",
+      "url": "/sticker/sticker-08.svg",
+      "emojiId": "party"
     },
     {
       "id": "sticker-09",
       "cat": "faces",
-      "en": "Confident",
-      "ar": "واثق",
-      "url": "/sticker/sticker-09.svg"
+      "en": "Sleep",
+      "ar": "نوم",
+      "url": "/sticker/sticker-09.svg",
+      "emojiId": "sleep"
     },
     {
       "id": "sticker-10",
       "cat": "faces",
-      "en": "Wow",
-      "ar": "مستغرب",
-      "url": "/sticker/sticker-10.svg"
+      "en": "Mind blown",
+      "ar": "مذهول",
+      "url": "/sticker/sticker-10.svg",
+      "emojiId": "mindblown"
     },
     {
       "id": "sticker-11",
       "cat": "faces",
-      "en": "Friendly",
-      "ar": "ودود",
-      "url": "/sticker/sticker-11.svg"
+      "en": "Hush",
+      "ar": "همس",
+      "url": "/sticker/sticker-11.svg",
+      "emojiId": "hush"
     },
     {
       "id": "sticker-12",
       "cat": "faces",
-      "en": "Calm",
-      "ar": "مثبت",
-      "url": "/sticker/sticker-12.svg"
+      "en": "Wink",
+      "ar": "غمزة",
+      "url": "/sticker/sticker-12.svg",
+      "emojiId": "wink"
     },
     {
       "id": "sticker-13",
       "cat": "faces",
-      "en": "Cheerful",
-      "ar": "مرح",
-      "url": "/sticker/sticker-13.svg"
+      "en": "Surprised",
+      "ar": "مندهش",
+      "url": "/sticker/sticker-13.svg",
+      "emojiId": "surprised"
     },
     {
       "id": "sticker-14",
       "cat": "animals",
-      "en": "Cat",
-      "ar": "قط",
-      "url": "/sticker/sticker-14.svg"
+      "en": "Meow",
+      "ar": "مواء",
+      "url": "/sticker/sticker-14.svg",
+      "emojiId": "cat"
     },
     {
       "id": "sticker-15",
       "cat": "animals",
-      "en": "Dog",
-      "ar": "كلب",
-      "url": "/sticker/sticker-15.svg"
+      "en": "Cat face",
+      "ar": "وجه قطة",
+      "url": "/sticker/sticker-15.svg",
+      "emojiId": "cat2"
     },
     {
       "id": "sticker-16",
       "cat": "animals",
-      "en": "Fox",
-      "ar": "ثعلب",
-      "url": "/sticker/sticker-16.svg"
+      "en": "Dog",
+      "ar": "كلب",
+      "url": "/sticker/sticker-16.svg",
+      "emojiId": "dog"
     },
     {
       "id": "sticker-17",
       "cat": "animals",
-      "en": "Bunny",
-      "ar": "أرنب",
-      "url": "/sticker/sticker-17.svg"
+      "en": "Fox",
+      "ar": "ثعلب",
+      "url": "/sticker/sticker-17.svg",
+      "emojiId": "fox"
     },
     {
       "id": "sticker-18",
       "cat": "animals",
-      "en": "Panda",
-      "ar": "باندا",
-      "url": "/sticker/sticker-18.svg"
+      "en": "Frog",
+      "ar": "ضفدع",
+      "url": "/sticker/sticker-18.svg",
+      "emojiId": "frog"
     },
     {
       "id": "sticker-19",
       "cat": "animals",
-      "en": "Owl",
-      "ar": "بومة",
-      "url": "/sticker/sticker-19.svg"
+      "en": "Alien",
+      "ar": "فضائي",
+      "url": "/sticker/sticker-19.svg",
+      "emojiId": "alien"
     },
     {
       "id": "sticker-20",
       "cat": "animals",
-      "en": "Penguin",
-      "ar": "بطريق",
-      "url": "/sticker/sticker-20.svg"
+      "en": "Ghost",
+      "ar": "شبح",
+      "url": "/sticker/sticker-20.svg",
+      "emojiId": "ghost"
     },
     {
       "id": "sticker-21",
       "cat": "animals",
-      "en": "Tiger",
-      "ar": "نمر",
-      "url": "/sticker/sticker-21.svg"
+      "en": "Robot",
+      "ar": "روبوت",
+      "url": "/sticker/sticker-21.svg",
+      "emojiId": "robot"
     },
     {
       "id": "sticker-22",
       "cat": "animals",
-      "en": "Elephant",
-      "ar": "فيل",
-      "url": "/sticker/sticker-22.svg"
+      "en": "See no evil",
+      "ar": "لا أرى شرًا",
+      "url": "/sticker/sticker-22.svg",
+      "emojiId": "see_no_evil"
     },
     {
       "id": "sticker-23",
       "cat": "animals",
-      "en": "Wolf",
-      "ar": "ذئب",
-      "url": "/sticker/sticker-23.svg"
+      "en": "Cry",
+      "ar": "بكاء",
+      "url": "/sticker/sticker-23.svg",
+      "emojiId": "cry"
     },
     {
       "id": "sticker-24",
       "cat": "animals",
-      "en": "Turtle",
-      "ar": "سلحفاة",
-      "url": "/sticker/sticker-24.svg"
+      "en": "Dizzy",
+      "ar": "دوخة",
+      "url": "/sticker/sticker-24.svg",
+      "emojiId": "dizzy"
     },
     {
       "id": "sticker-25",
       "cat": "animals",
-      "en": "Fish",
-      "ar": "سمكة",
-      "url": "/sticker/sticker-25.svg"
+      "en": "Starstruck",
+      "ar": "نجوم",
+      "url": "/sticker/sticker-25.svg",
+      "emojiId": "starstruck"
     },
     {
       "id": "sticker-26",
       "cat": "animals",
-      "en": "Butterfly",
-      "ar": "فراشة",
-      "url": "/sticker/sticker-26.svg"
+      "en": "Kiss",
+      "ar": "قبلة",
+      "url": "/sticker/sticker-26.svg",
+      "emojiId": "kiss"
     },
     {
       "id": "sticker-27",
       "cat": "objects",
       "en": "Coffee",
       "ar": "قهوة",
-      "url": "/sticker/sticker-27.svg"
+      "url": "/sticker/sticker-27.svg",
+      "emojiId": "coffee"
     },
     {
       "id": "sticker-28",
       "cat": "objects",
       "en": "Pizza",
       "ar": "بيتزا",
-      "url": "/sticker/sticker-28.svg"
+      "url": "/sticker/sticker-28.svg",
+      "emojiId": "pizza"
     },
     {
       "id": "sticker-29",
       "cat": "objects",
-      "en": "Rocket",
-      "ar": "صاروخ",
-      "url": "/sticker/sticker-29.svg"
+      "en": "Ball",
+      "ar": "كرة",
+      "url": "/sticker/sticker-29.svg",
+      "emojiId": "ball"
     },
     {
       "id": "sticker-30",
       "cat": "objects",
-      "en": "Book",
-      "ar": "كتاب",
-      "url": "/sticker/sticker-30.svg"
+      "en": "Game",
+      "ar": "لعبة",
+      "url": "/sticker/sticker-30.svg",
+      "emojiId": "game"
     },
     {
       "id": "sticker-31",
       "cat": "objects",
-      "en": "Music",
-      "ar": "موسيقى",
-      "url": "/sticker/sticker-31.svg"
+      "en": "Rocket",
+      "ar": "صاروخ",
+      "url": "/sticker/sticker-31.svg",
+      "emojiId": "rocket"
     },
     {
       "id": "sticker-32",
       "cat": "objects",
-      "en": "Game",
-      "ar": "لعبة",
-      "url": "/sticker/sticker-32.svg"
+      "en": "Book",
+      "ar": "كتاب",
+      "url": "/sticker/sticker-32.svg",
+      "emojiId": "book"
     },
     {
       "id": "sticker-33",
       "cat": "objects",
-      "en": "Ball",
-      "ar": "كرة",
-      "url": "/sticker/sticker-33.svg"
+      "en": "Music",
+      "ar": "موسيقى",
+      "url": "/sticker/sticker-33.svg",
+      "emojiId": "music"
     },
     {
       "id": "sticker-34",
       "cat": "objects",
-      "en": "Crown",
-      "ar": "تاج",
-      "url": "/sticker/sticker-34.svg"
+      "en": "Flower",
+      "ar": "زهرة",
+      "url": "/sticker/sticker-34.svg",
+      "emojiId": "flower"
     },
     {
       "id": "sticker-35",
       "cat": "objects",
-      "en": "Key",
-      "ar": "مفتاح",
-      "url": "/sticker/sticker-35.svg"
+      "en": "Burger",
+      "ar": "برجر",
+      "url": "/sticker/sticker-35.svg",
+      "emojiId": "burger"
     },
     {
       "id": "sticker-36",
       "cat": "objects",
-      "en": "Star",
-      "ar": "نجمة",
-      "url": "/sticker/sticker-36.svg"
+      "en": "Cake",
+      "ar": "كعكة",
+      "url": "/sticker/sticker-36.svg",
+      "emojiId": "cake"
     },
     {
       "id": "sticker-37",
       "cat": "objects",
-      "en": "Heart",
-      "ar": "قلب",
-      "url": "/sticker/sticker-37.svg"
+      "en": "Ice cream",
+      "ar": "آيس كريم",
+      "url": "/sticker/sticker-37.svg",
+      "emojiId": "ice_cream"
     },
     {
       "id": "sticker-38",
       "cat": "objects",
-      "en": "Moon",
-      "ar": "قمر",
-      "url": "/sticker/sticker-38.svg"
+      "en": "Gift",
+      "ar": "هدية",
+      "url": "/sticker/sticker-38.svg",
+      "emojiId": "gift"
     },
     {
       "id": "sticker-39",
       "cat": "objects",
-      "en": "Sun",
-      "ar": "شمس",
-      "url": "/sticker/sticker-39.svg"
+      "en": "Balloon",
+      "ar": "بالون",
+      "url": "/sticker/sticker-39.svg",
+      "emojiId": "balloon"
     },
     {
       "id": "sticker-40",
       "cat": "emblems",
-      "en": "Crescent",
-      "ar": "هلال",
-      "url": "/sticker/sticker-40.svg"
+      "en": "Crown",
+      "ar": "تاج",
+      "url": "/sticker/sticker-40.svg",
+      "emojiId": "crown"
     },
     {
       "id": "sticker-41",
       "cat": "emblems",
-      "en": "Dates",
-      "ar": "تمر",
-      "url": "/sticker/sticker-41.svg"
+      "en": "Gem",
+      "ar": "جوهرة",
+      "url": "/sticker/sticker-41.svg",
+      "emojiId": "gem"
     },
     {
       "id": "sticker-42",
       "cat": "emblems",
-      "en": "Dallah",
-      "ar": "دلة",
-      "url": "/sticker/sticker-42.svg"
+      "en": "Trophy",
+      "ar": "كأس",
+      "url": "/sticker/sticker-42.svg",
+      "emojiId": "trophy"
     },
     {
       "id": "sticker-43",
       "cat": "emblems",
-      "en": "Falcon",
-      "ar": "فهد",
-      "url": "/sticker/sticker-43.svg"
+      "en": "Heart",
+      "ar": "قلب",
+      "url": "/sticker/sticker-43.svg",
+      "emojiId": "heart"
     },
     {
       "id": "sticker-44",
       "cat": "emblems",
-      "en": "Sword",
-      "ar": "خنجر",
-      "url": "/sticker/sticker-44.svg"
+      "en": "Fire",
+      "ar": "نار",
+      "url": "/sticker/sticker-44.svg",
+      "emojiId": "fire"
     },
     {
       "id": "sticker-45",
       "cat": "emblems",
-      "en": "Tower",
-      "ar": "برج",
-      "url": "/sticker/sticker-45.svg"
+      "en": "Star",
+      "ar": "نجمة",
+      "url": "/sticker/sticker-45.svg",
+      "emojiId": "star"
     },
     {
       "id": "sticker-46",
       "cat": "emblems",
-      "en": "Ship",
-      "ar": "سفينة",
-      "url": "/sticker/sticker-46.svg"
+      "en": "Sparkles",
+      "ar": "بريق",
+      "url": "/sticker/sticker-46.svg",
+      "emojiId": "sparkles"
     },
     {
       "id": "sticker-47",
       "cat": "emblems",
-      "en": "Camel",
-      "ar": "جمل",
-      "url": "/sticker/sticker-47.svg"
+      "en": "Moon",
+      "ar": "قمر",
+      "url": "/sticker/sticker-47.svg",
+      "emojiId": "moon"
     },
     {
       "id": "sticker-48",
       "cat": "emblems",
-      "en": "Desert Oasis",
-      "ar": "واحة",
-      "url": "/sticker/sticker-48.svg"
+      "en": "Sun",
+      "ar": "شمس",
+      "url": "/sticker/sticker-48.svg",
+      "emojiId": "sun"
     },
     {
       "id": "sticker-49",
       "cat": "emblems",
-      "en": "Throne",
-      "ar": "عرش",
-      "url": "/sticker/sticker-49.svg"
+      "en": "Rainbow",
+      "ar": "قوس قزح",
+      "url": "/sticker/sticker-49.svg",
+      "emojiId": "rainbow"
     },
     {
       "id": "sticker-50",
       "cat": "emblems",
-      "en": "Flag",
-      "ar": "علم",
-      "url": "/sticker/sticker-50.svg"
+      "en": "Earth",
+      "ar": "أرض",
+      "url": "/sticker/sticker-50.svg",
+      "emojiId": "earth"
     },
     {
       "id": "sticker-51",
       "cat": "emblems",
-      "en": "Shield",
-      "ar": "درع",
-      "url": "/sticker/sticker-51.svg"
+      "en": "Skull",
+      "ar": "جمجمة",
+      "url": "/sticker/sticker-51.svg",
+      "emojiId": "skull"
     },
     {
       "id": "sticker-52",
       "cat": "emblems",
-      "en": "Treasure",
-      "ar": "كنز",
-      "url": "/sticker/sticker-52.svg"
+      "en": "Pumpkin",
+      "ar": "يقطين",
+      "url": "/sticker/sticker-52.svg",
+      "emojiId": "pumpkin"
     },
     {
       "id": "sticker-53",
       "cat": "notes",
-      "en": "Note",
-      "ar": "مذكرة",
-      "url": "/sticker/sticker-53.svg"
+      "en": "Check",
+      "ar": "صح",
+      "url": "/sticker/sticker-53.svg",
+      "emojiId": "check"
     },
     {
       "id": "sticker-54",
       "cat": "notes",
-      "en": "Reminder",
-      "ar": "تذكير",
-      "url": "/sticker/sticker-54.svg"
+      "en": "Cross",
+      "ar": "خطأ",
+      "url": "/sticker/sticker-54.svg",
+      "emojiId": "cross"
     },
     {
       "id": "sticker-55",
       "cat": "notes",
-      "en": "List",
-      "ar": "قائمة",
-      "url": "/sticker/sticker-55.svg"
+      "en": "Wave",
+      "ar": "تلويح",
+      "url": "/sticker/sticker-55.svg",
+      "emojiId": "wave"
     },
     {
       "id": "sticker-56",
       "cat": "notes",
-      "en": "Bookmark",
-      "ar": "علامة",
-      "url": "/sticker/sticker-56.svg"
+      "en": "OK",
+      "ar": "تمام",
+      "url": "/sticker/sticker-56.svg",
+      "emojiId": "ok"
     },
     {
       "id": "sticker-57",
       "cat": "notes",
-      "en": "Gift",
-      "ar": "هدية",
-      "url": "/sticker/sticker-57.svg"
+      "en": "Thumbs up",
+      "ar": "إبهام أعلى",
+      "url": "/sticker/sticker-57.svg",
+      "emojiId": "thumbsup"
     },
     {
       "id": "sticker-58",
       "cat": "notes",
-      "en": "Letter",
-      "ar": "رسالة",
-      "url": "/sticker/sticker-58.svg"
+      "en": "Thumbs down",
+      "ar": "إبهام أسفل",
+      "url": "/sticker/sticker-58.svg",
+      "emojiId": "thumbsdown"
     },
     {
       "id": "sticker-59",
       "cat": "notes",
-      "en": "Spark",
-      "ar": "شرارة",
-      "url": "/sticker/sticker-59.svg"
+      "en": "Pray",
+      "ar": "دعاء",
+      "url": "/sticker/sticker-59.svg",
+      "emojiId": "pray"
     },
     {
       "id": "sticker-60",
       "cat": "notes",
-      "en": "Fire",
-      "ar": "نار",
-      "url": "/sticker/sticker-60.svg"
+      "en": "Strong",
+      "ar": "قوة",
+      "url": "/sticker/sticker-60.svg",
+      "emojiId": "strong"
     },
     {
       "id": "sticker-61",
       "cat": "notes",
-      "en": "Water",
-      "ar": "ماء",
-      "url": "/sticker/sticker-61.svg"
+      "en": "Hundred",
+      "ar": "مئة",
+      "url": "/sticker/sticker-61.svg",
+      "emojiId": "hundred"
     },
     {
       "id": "sticker-62",
       "cat": "notes",
-      "en": "Tree",
-      "ar": "شجرة",
-      "url": "/sticker/sticker-62.svg"
+      "en": "Idea",
+      "ar": "فكرة",
+      "url": "/sticker/sticker-62.svg",
+      "emojiId": "idea"
     },
     {
       "id": "sticker-63",
       "cat": "notes",
-      "en": "Flower",
-      "ar": "زهرة",
-      "url": "/sticker/sticker-63.svg"
+      "en": "Key",
+      "ar": "مفتاح",
+      "url": "/sticker/sticker-63.svg",
+      "emojiId": "key"
     },
     {
       "id": "sticker-64",
       "cat": "notes",
-      "en": "Rain",
-      "ar": "مطر",
-      "url": "/sticker/sticker-64.svg"
+      "en": "Headphones",
+      "ar": "سماعات",
+      "url": "/sticker/sticker-64.svg",
+      "emojiId": "headphones"
     },
     {
       "id": "sticker-65",
       "cat": "notes",
-      "en": "Snow",
-      "ar": "ثلج",
-      "url": "/sticker/sticker-65.svg"
+      "en": "Car",
+      "ar": "سيارة",
+      "url": "/sticker/sticker-65.svg",
+      "emojiId": "car"
     }
-  ]
+  ],
+  "source": "OpenMoji (CC BY-SA 4.0, https://github.com/hfg-gmuend/openmoji)"
 }

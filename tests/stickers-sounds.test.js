@@ -48,7 +48,9 @@ test('12 new UI sounds are real WAVs and wired', async () => {
   const sounds = await readFile(path.join(PUBLIC, 'js', 'sounds.js'), 'utf8');
   for (const name of names) assert.match(sounds, new RegExp(`'${name}'|${name}:`), `sounds.js knows ${name}`);
   const app = await readFile(path.join(ROOT, 'src', 'app.js'), 'utf8');
-  assert.match(app, /welcome/, '/api/sounds lists new names');
+  assert.match(app, /UI_SOUND_IDS/, '/api/sounds lists UI sounds');
+  const constants = await readFile(path.join(ROOT, 'src', 'constants.js'), 'utf8');
+  assert.match(constants, /'welcome'/, 'UI_SOUND_IDS includes welcome');
 });
 
 test('GIF links render inline; Giphy via server proxy; stickers wired in both pickers', async () => {

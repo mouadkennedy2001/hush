@@ -449,7 +449,7 @@ html[data-theme="dark"] .theme-toggle .icon-sun {
 .ping-badge[data-quality="good"] .ping-dot { background: #22a866; }
 .ping-badge[data-quality="fair"] .ping-dot { background: #d9a400; }
 .ping-badge[data-quality="poor"] .ping-dot { background: #e05252; }
-.ping-badge[data-quality="offline"] .ping-dot { background: var(--color-slate); opacity: 0.5; }
+.ping-badge[data-quality="offline"] .ping-dot { background: var(--color-offline, #ef4444); }
 
 .ping-badge[data-quality="good"] { color: var(--color-ink); }
 .ping-badge[data-quality="poor"] { color: var(--color-ink); }

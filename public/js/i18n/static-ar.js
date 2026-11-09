@@ -207,6 +207,10 @@ export const staticAr = {
 
   // Room tools and search
   'Search messages': 'ابحث في الرسائل',
+  'Search sounds': 'ابحث في الأصوات',
+  'Search sounds…': 'ابحث في الأصوات…',
+  'Cover image (optional)': 'صورة غلاف (اختياري)',
+  'Enlarge screen': 'تكبير الشاشة',
   'Clear search': 'مسح البحث',
   'No messages yet. Say hello.': 'لا توجد رسائل بعد. ألقِ تحية.',
   'Room tools': 'أدوات الغرفة',

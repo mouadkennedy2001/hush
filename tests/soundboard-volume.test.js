@@ -12,7 +12,8 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PUBLIC = path.join(ROOT, 'public');
 
 test('soundboard allow-list matches the client board', async () => {
-  assert.equal(SOUNDBOARD_IDS.length, 16);
+  // v13: Sound Forge pack — 87 WAV sounds (was 16 synth sounds).
+  assert.equal(SOUNDBOARD_IDS.length, 87);
   const board = await readFile(path.join(PUBLIC, 'js', 'soundboard.js'), 'utf8');
   for (const id of SOUNDBOARD_IDS) {
     assert.ok(board.includes(`'${id}'`), `client board is missing ${id}`);

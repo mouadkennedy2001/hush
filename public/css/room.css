@@ -152,25 +152,30 @@ html[data-theme="dark"] .control[aria-pressed="true"] {
 }
 
 .room-status .status-dot {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  background: var(--color-signal-blue);
+  background: var(--color-connecting, #f59e0b);
+  box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 12%, transparent);
+}
+
+/* Green = connected, red = disconnected (never blue/gray). */
+.room-status[data-state="online"] .status-dot {
+  background: var(--color-online, #22c55e);
 }
 
 .room-status[data-state="connecting"] .status-dot {
-  background: var(--color-slate);
+  background: var(--color-connecting, #f59e0b);
   animation: status-pulse 1.2s ease-in-out infinite;
 }
 
 .room-status[data-state="reconnecting"] .status-dot {
-  background: var(--color-signal-mist);
+  background: var(--color-connecting, #f59e0b);
   animation: status-pulse 1s ease-in-out infinite;
 }
 
 .room-status[data-state="offline"] .status-dot {
-  background: var(--color-slate);
-  opacity: 0.4;
+  background: var(--color-offline, #ef4444);
 }
 
 @keyframes status-pulse {
@@ -284,7 +289,9 @@ html[data-theme="dark"] .control[aria-pressed="true"] {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  background: var(--color-ink);
+  /* Fixed dark — --color-ink flips to near-white in dark theme and made
+     frame-less tracks render as a white tile (error/ screenshot). */
+  background: var(--color-video-bg, #05070c);
 }
 
 .tile.is-self .tile-video {
@@ -317,7 +324,10 @@ html[data-theme="dark"] .control[aria-pressed="true"] {
 .tile-avatar.tone-1 span { background: var(--color-signal-sky); }
 .tile-avatar.tone-2 span { background: var(--color-signal-mist); }
 .tile-avatar.tone-3 span { background: var(--wash-sky-strong); }
-.tile-avatar.tone-4 span { background: var(--color-white); border: 1px solid var(--color-fog); }
+/* tone-4 used to be white-on-white (light) / dark-on-dark (dark) — an
+   invisible "white profile". Deep blue with theme-flipping text stays
+   readable in both themes. */
+.tile-avatar.tone-4 span { background: var(--color-deep-signal); color: var(--color-white); }
 
 .tile.has-video .tile-avatar {
   display: none;
@@ -419,7 +429,7 @@ html[data-theme="dark"] .control[aria-pressed="true"] {
   width: 100%;
   height: 100%;
   object-fit: contain;
-  background: var(--color-twilight);
+  background: var(--color-video-bg, #05070c);
 }
 
 .screen-placeholder {
@@ -487,9 +497,105 @@ html[data-theme="dark"] .control[aria-pressed="true"] {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--color-signal-sky);
+  background: var(--color-online, #22c55e);
   animation: status-pulse 1.6s ease-in-out infinite;
 }
+
+/* Discord-style red "stop watching" button, floating bottom-center of the
+   shared screen. It only hides the screen for you — the sharer keeps
+   sharing (test: botton/Discord_76NDI3NeKv.png). */
+.screen-stop-btn {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 16px;
+  border: 0;
+  border-radius: 999px;
+  background: #f23f43;
+  color: #fff;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+}
+.screen-stop-btn:hover { background: #da373c; }
+.screen-stop-btn .icon { width: 16px; height: 16px; }
+.screen-stop-btn[hidden] { display: none; }
+
+/* Enlarge (diagonal-arrows) button — top-right of the shared screen. */
+.screen-enlarge-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(10, 13, 20, 0.66);
+  color: #fff;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+}
+.screen-enlarge-btn:hover { background: rgba(10, 13, 20, 0.85); }
+.screen-enlarge-btn .icon { width: 17px; height: 17px; }
+.screen-enlarge-btn .icon-when-on { display: none; }
+.screen-stage.is-enlarged .screen-enlarge-btn .icon-when-on,
+.screen-stage:fullscreen .screen-enlarge-btn .icon-when-on { display: block; }
+.screen-stage.is-enlarged .screen-enlarge-btn .icon-when-off,
+.screen-stage:fullscreen .screen-enlarge-btn .icon-when-off { display: none; }
+
+/* Enlarged = fixed overlay filling the viewport (always visible, no
+   Fullscreen-API dependency). Tiles/controls stay underneath. */
+.screen-stage.is-enlarged, .server-screen-stage.is-enlarged {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  border-radius: 0;
+  margin: 0;
+  background: var(--color-video-bg, #05070c);
+}
+.screen-stage.is-enlarged video, .server-screen-stage.is-enlarged video {
+  object-fit: contain;
+  background: var(--color-video-bg, #05070c);
+}
+
+.screen-watch-chip { flex: none; }
+.screen-watch-chip[hidden] { display: none; }
+
+/* Presence dot on people avatars: green online / red offline. */
+.person-avatar { position: relative; }
+.presence-dot {
+  position: absolute;
+  inset-inline-end: -2px;
+  bottom: -2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--color-surface, #fff);
+  background: var(--color-offline, #ef4444);
+}
+.presence-dot.is-on { background: var(--color-online, #22c55e); }
+.person.is-online .person-name { color: var(--color-text); font-weight: 600; }
+
+/* Soundboard v13: search + category groups + personal (IndexedDB) board. */
+.soundboard-search { width: 100%; margin: 0 0 8px; padding: 7px 10px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface); color: var(--color-text); font: inherit; font-size: 0.8125rem; }
+.soundboard-cat-title { margin: 12px 0 6px; font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-text-2); }
+.soundboard-cat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); gap: 4px; }
+.soundboard-sound .soundboard-thumb { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; display: block; }
+.soundboard-personal-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 14px; }
+.soundboard-personal-note { font-size: 0.6875rem; color: var(--color-text-2); margin: 4px 0 8px; }
+.board-add-row .board-image-preview { width: 36px; height: 36px; object-fit: cover; border-radius: 8px; border: 1px solid var(--color-border); }
+.soundboard-sound .soundboard-share { margin-top: 4px; font-size: 0.625rem; padding: 2px 6px; }
 
 .stage.is-sharing .screen-stage {
   display: block;
@@ -950,7 +1056,7 @@ html[data-theme="dark"] .control[aria-pressed="true"] {
 
 .message-avatar.tone-2 { background: var(--color-signal-mist); }
 .message-avatar.tone-3 { background: var(--wash-sky-strong); }
-.message-avatar.tone-4 { background: var(--color-white); border: 1px solid var(--color-fog); }
+.message-avatar.tone-4 { background: var(--color-deep-signal); color: var(--color-white); }
 
 .message-body {
   min-width: 0;
@@ -1694,7 +1800,7 @@ html[data-theme="dark"] .control[aria-pressed="true"] {
 
 .person-avatar.tone-2 { background: var(--color-signal-mist); }
 .person-avatar.tone-3 { background: var(--wash-sky-strong); }
-.person-avatar.tone-4 { background: var(--color-white); border: 1px solid var(--color-fog); }
+.person-avatar.tone-4 { background: var(--color-deep-signal); color: var(--color-white); }
 
 .person.is-speaking .person-avatar {
   outline: 2px solid var(--color-signal-blue);
@@ -2511,8 +2617,8 @@ html[dir="rtl"] .gate-code code {
 .sound-volume-row { margin-top: 10px; }
 .sound-volume-row input { flex: 1; accent-color: var(--color-accent); }
 
-/* ---------- Soundboard ---------- */
-.soundboard-panel { flex: none; margin-top: 10px; padding: 10px; border: 1px solid var(--color-border-strong); border-radius: 12px; background: var(--color-surface); box-shadow: var(--shadow-md); }
+/* ---------- Soundboard (compact: the old layout was gigantic) ---------- */
+.soundboard-panel { flex: none; margin-top: 10px; padding: 10px; border: 1px solid var(--color-border-strong); border-radius: 12px; background: var(--color-surface); box-shadow: var(--shadow-md); max-height: 42vh; overflow-y: auto; scrollbar-width: thin; }
 .soundboard-panel[hidden] { display: none; }
 .soundboard-head { display: flex; align-items: center; gap: 10px; }
 .soundboard-title { font-size: .8125rem; font-weight: 700; color: var(--color-text); }
@@ -2520,8 +2626,14 @@ html[dir="rtl"] .gate-code code {
 .soundboard-volume .icon { width: 16px; height: 16px; }
 .soundboard-volume input { width: 110px; accent-color: var(--color-accent); }
 .soundboard-close { width: 28px; height: 28px; }
-.soundboard-grid { display: grid; grid-template-columns: repeat(6, minmax(0,1fr)); gap: 6px; margin-top: 8px; }
-.soundboard-sound { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 9px 4px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-surface-2); color: var(--color-text); cursor: pointer; transition: transform 90ms ease, background 120ms ease; }
+/* Section container (category titles + grids) — NOT a button grid itself.
+   The old `repeat(6, 1fr)` here nested the category grids inside grid
+   cells and blew every button up to ~150px (error/ screenshot). */
+.soundboard-grid { display: block; margin-top: 6px; }
+.soundboard-sound { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 5px 2px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface-2); color: var(--color-text); cursor: pointer; transition: transform 90ms ease, background 120ms ease; min-width: 0; }
+.soundboard-sound .custom-emoji { width: 22px; height: 22px; }
+.soundboard-emoji { font-size: 1rem; line-height: 1; display: inline-flex; }
+.soundboard-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .soundboard-sound:hover { background: var(--wash-sky); transform: translateY(-1px); }
 .soundboard-sound:active { transform: scale(.96); }
 /* ---------- Emoji system v12.3 (larger, cleaner picker) ---------- */

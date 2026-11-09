@@ -1,6 +1,106 @@
 {
-  "version": "12.3.0",
+  "version": "14.0.0",
   "entries": [
+    {
+      "date": "2026-11-09",
+      "ts": 1763800800000,
+      "kind": "fix",
+      "kindEn": "Fix",
+      "kindAr": "إصلاح",
+      "titleEn": "v14: nobody could hear anybody (rooms + servers) — suspended audio contexts fixed",
+      "titleAr": "v14: لا أحد يسمع أحدًا (غرف + خوادم) — إصلاح سياقات الصوت المعلقة",
+      "pointsEn": [
+        "FIX no voice either way in rooms and servers (even after refresh): the mesh AudioContext is created outside the Join click (after socket awaits), so autoplay policy left it SUSPENDED — remote audio ran through a gain node on a dead context while the <audio> element stayed muted, and the mic processor context had the same problem for sending. Now remote audio routes via WebAudio ONLY when the context is running, otherwise it plays through the plain element; every pointer/key gesture calls mesh.resumeAudio() (which also resumes the mic processor), so the first click makes voice audible.",
+        "NEW MicFx.resume() so MediaMesh can resume the processing context alongside its own.",
+        "Verified with two real headless browsers (Chrome + Brave): both connect, see 2 tiles, remote tracks arrive live/unmuted, gains at 1.0."
+      ],
+      "pointsAr": [
+        "إصلاح لا صوت في أي اتجاه في الغرف والخوادم (حتى مع التحديث): سياق صوت الشبكة يُنشأ خارج نقرة الانضمام (بعد انتظار المقبس)، فسياسة التشغيل التلقائي تركته SUSPENDED — صوت المنادى يمر بكسب على سياق ميت بينما عنصر <audio> يبقى مكتومًا، وسياق معالج المايك له نفس المشكلة في الإرسال. الآن صوت المنادى يُوجَّه عبر WebAudio فقط عندما يكون السياق running، وإلا يُشغَّل عبر العنصر مباشرة؛ وكل إيماءة (نقر/مفتاح) تنادي mesh.resumeAudio() (وتستأنف معالج المايك أيضًا)، فأول نقرة يجعل الصوت مسموعًا.",
+        "جديد MicFx.resume() حتى تستطيع الشبكة استئناف سياق المعالجة مع سياقها.",
+        "تحقق بمتصفحين حقيقيين (Chrome + Brave): كلاهما يتصل ويرى بلاطتين والمسارات البعيدة تصل حية وغير مكتومة والكسب 1.0."
+      ]
+    },
+    {
+      "date": "2026-11-09",
+      "ts": 1763800700000,
+      "kind": "update",
+      "kindEn": "Update",
+      "kindAr": "تحديث",
+      "titleEn": "v13.2: compact soundboard, fixed overlay enlarge, real OpenMoji stickers, libraries updated",
+      "titleAr": "v13.2: لوحة صوت مدمجة، تكبير بطبقة ثابتة، ستيكرز OpenMoji حقيقية، مكتبات محدّثة",
+      "pointsEn": [
+        "FIX soundboard was gigantic (error/ screenshots: buttons ~150px, panel covering the whole stage): it nested grouped grids inside a 6-column grid with no max-height. The panel is now compact — max-height 42vh with scroll, small buttons (22px emoji, 56px columns), section container no longer a button grid.",
+        "FIX screen enlarge was invisible/janky (error/ screenshot): it relied on the Fullscreen API. Enlarge is now an instant fixed overlay layer over everything (rooms + servers) — always visible, with shrink button and Esc. Ending a share shrinks it automatically.",
+        "NEW real stickers: the Twemoji copies are replaced by genuine OpenMoji drawings (CC BY-SA 4.0, 65 stickers downloaded to Sticker/ + public/sticker/, labeled in Sticker/stickers.json with emojiId + source) — a completely different, well-known style, not emoji clones. Asset version stickers-v4.",
+        "UPDATED libraries: mic ev1.3 (remote-audio gain ownership + deafen mute + muted-frame signal, live in public/js/room/media.js) and PING OP 1.2.0 (trend now rides in getStats for /api/health dashboards). npm deps verified latest (express 5.3.0, multer 2.5.0, socket.io 4.8.4).",
+        "FIX closing a share left a stale hiddenScreenId: the next share from the same person would have started hidden. It is now forgotten when the sharer stops."
+      ],
+      "pointsAr": [
+        "إصلاح لوحة الصوت الضخمة (صور error/: أزرار ~150px واللوحة تغطي المرحلة كلها): كانت الشبكات المجمّعة متداخلة داخل شبكة 6 أعمدة بلا ارتفاع أقصى. اللوحة الآن مدمجة — ارتفاع أقصى 42vh مع سكرول، أزرار صغيرة (إيموجي 22px، أعمدة 56px)، وحاوية الأقسام لم تعد شبكة أزرار.",
+        "إصلاح تكبير الشاشة غير المرئي/المتقطع (صورة error/): كان يعتمد على Fullscreen API. التكبير الآن طبقة ثابتة فورية فوق كل شيء (غرف + خوادم) — مرئية دائمًا، مع زر تصغير وEsc. إنهاء المشاركة يصغّرها تلقائيًا.",
+        "جديد ستيكرز حقيقية: نسخ Twemoji استُبدلت برسومات OpenMoji أصلية (CC BY-SA 4.0، 65 ستيكرًا نُزّلت إلى Sticker/ + public/sticker/، موسومة في Sticker/stickers.json بـ emojiId + المصدر) — أسلوب معروف مختلف تمامًا، لا نسخ إيموجي. إصدار الأصول stickers-v4.",
+        "مكتبات محدّثة: mic ev1.3 (ملكية كسب الصوت عن بُعد + كتم الـ deafen + إشارة الإطار المكتوم، حية في public/js/room/media.js) وPING OP 1.2.0 (الاتجاه الآن ضمن getStats للوحات /api/health). تحققنا أن اعتماديات npm آخر إصدار (express 5.3.0، multer 2.5.0، socket.io 4.8.4).",
+        "إصلاح إغلاق المشاركة ترك hiddenScreenId قديمًا: المشاركة التالية من الشخص نفسه كانت ستبدأ مخفية. يُنسى الآن عند توقّف المشارك."
+      ]
+    },
+    {
+      "date": "2026-11-09",
+      "ts": 1763800600000,
+      "kind": "fix",
+      "kindEn": "Fix",
+      "kindAr": "إصلاح",
+      "titleEn": "v13.1: room screen share + deafen fixed, screen enlarge, 48 new emojis, Twemoji stickers",
+      "titleAr": "v13.1: إصلاح مشاركة الشاشة والـ deafen في الغرف، تكبير الشاشة، 48 إيموجي جديدًا، ستيكرز Twemoji",
+      "pointsEn": [
+        "FIX screen share in rooms (error/ screenshot: stuck on Waiting for the shared screen): the room screen stage gated rendering on streamHasVideo (muted + videoWidth), while the working server path attached the stream directly. The gate is dropped — the room now attaches srcObject whenever a live track exists and hides the placeholder on playing/loadeddata, exactly like servers. Closing a share also exits fullscreen/enlarged cleanly instead of leaving a stuck stage.",
+        "FIX deafen in rooms (worked in servers, not rooms): settings.js applyVolume (room-only) rewrote every remote <audio> volume and un-muted fallback elements, undoing deafen, and syncMasterVolume clobbered masterVolume to 0 so undeafen stayed silent. The mesh now owns all remote-audio gains: settings forwards the master value via registerVolumeSink, setMasterVolume also mutes fallback elements at 0, and deafen mutes them directly.",
+        "NEW deafen indicator: your deafened state is now broadcast (presence), so everyone sees the deafen badge on your tile and your people-list state — in rooms and servers.",
+        "NEW enlarge screen button (diagonal arrows, botton/): fullscreen for the shared screen in rooms and servers (requestFullscreen with a fixed-position fallback), with shrink toggle and Esc support.",
+        "NEW emojis: 48 more well-known Twemoji (grinning, rolling_laugh, melting, cowboy, victory_hand, handshake, crown, trophy, moon, rainbow, cat2, dog, fox, frog, burger, cake, gift, ...) — 108 total (new emoji/new_emojis.json -> hush_emoji_pro -> public/emoji), asset version twemoji-2.",
+        "NEW stickers: the 65 procedural stickers are replaced by well-known Twemoji drawings (same pack as the emojis, labeled in Sticker/stickers.json with emojiId) — old procedural ids keep working. Asset version stickers-v3.",
+        "SECURITY: HSTS header (max-age=31536000; includeSubDomains), rate limits on POST /api/servers/:id/leave and GET /api/servers/:id/history. Board/icon uploads keep ext+mime validation, size caps, membership/owner gates, and orphan cleanup."
+      ],
+      "pointsAr": [
+        "إصلاح مشاركة الشاشة في الغرف (صورة error/: عالقة على «بانتظار الشاشة المشتركة»): مرحلة شاشة الغرفة كانت تشترط streamHasVideo (مكتوم + videoWidth)، بينما مسار الخادم العامل يرفق المسار مباشرة. أُلغي الشرط — الغرفة ترفق srcObject الآن متى وُجد مسار حي وتخفي العنصر النائب عند التشغيل/التحميل، تمامًا مثل الخوادم. إغلاق المشاركة يغادر التكبير/الشاشة الكاملة نظيفًا بدل مرحلة عالقة.",
+        "إصلاح الـ deafen في الغرف (كان يعمل في الخوادم لا الغرف): دالة applyVolume في settings.js (خاصة بالغرفة) كانت تعيد كتابة مستوى كل صوت بعيد وتُلغي كتم العناصر الاحتياطية، فتلغي الـ deafen؛ وsyncMasterVolume كانت تصفّر masterVolume فلا يعود الصوت عند إلغاء الكتم. أصبحت الشبكة (mesh) تملك كل كسب الصوت عن بُعد: الإعدادات تمرر القيمة عبر registerVolumeSink، وsetMasterVolume تكتم العناصر الاحتياطية عند 0، والـ deafen يكتمها مباشرة.",
+        "جديد مؤشر الـ deafen: حالتك مكتومة السماعات تُبث الآن (presence)، فيرى الجميع شارة الـ deafen على بلاطتك وحالتك في الأعضاء — في الغرف والخوادم.",
+        "جديد زر تكبير الشاشة (أسهم قطرية، botton/): شاشة كاملة للمشاركة في الغرف والخوادم (requestFullscreen مع بديل ثابت الموضع)، مع زر تصغير ودعم Esc.",
+        "جديد إيموجيات: 48 إيموجي Twemoji معروفًا إضافيًا (grinning، rolling_laugh، melting، cowboy، victory_hand، handshake، crown، trophy، moon، rainbow، cat2، dog، fox، frog، burger، cake، gift…) — المجموع 108 (new emoji/new_emojis.json -> hush_emoji_pro -> public/emoji)، إصدار الأصول twemoji-2.",
+        "جديد ستيكرز: الـ 65 ستيكرًا المولّد برمجيًا استُبدلت برسومات Twemoji معروفة (نفس حزمة الإيموجي، موسومة في Sticker/stickers.json بـ emojiId) — المعرفات القديمة ما تزال تعمل. إصدار الأصول stickers-v3.",
+        "أمن: ترويسة HSTS، وحدود معدل على POST /api/servers/:id/leave وGET /api/servers/:id/history. رفع اللوحة/الأيقونة يحتفظ بتحقق الامتداد+النوع وحدود الحجم وبوابات العضوية/الملكية وتنظيف اليتيم."
+      ]
+    },
+    {
+      "date": "2026-11-09",
+      "ts": 1763800500000,
+      "kind": "update",
+      "kindEn": "Update",
+      "kindAr": "تحديث",
+      "titleEn": "v13: Forge soundboard (87 sounds), permanent IndexedDB board, server images, white-tile + presence fixes",
+      "titleAr": "v13: لوحة Sound Forge (87 صوتًا)، لوحة دائمة IndexedDB، صور الخوادم، إصلاح البلاطة البيضاء والحضور",
+      "pointsEn": [
+        "NEW soundboard: the old 16-synth board is replaced by the Sound Forge pack (new soundboard/sounds_out -> public/sounds/*.wav (manifest stays in the forge source folder — its unicode icons must not ship in public/)) — 87 studio WAVs in 9 categories (UI, Chat, Notifications, Presence & Calls, Status, Game, System, FX, Drums) with search + grouped grid in rooms and servers. Legacy ids (airhorn, rimshot…) still play the closest Forge wav.",
+        "NEW personal permanent board: save any audio (5MB, 30 sounds) + a cover image on THIS device in IndexedDB (localStorage keeps a tiny name/emoji/image index for instant render). Nothing is uploaded until you press Share to room/server — then it goes through the existing 2MB board endpoints, so unshared sounds cost the server 0 bytes. Server sounds are permanent (deleted with the server); room sounds still purge when the room empties.",
+        "NEW server image: pick an image when creating a server (landing dialog) or later from Server settings (owner only) — POST /api/servers/:id/icon (2MB, image only, owner + session). The image wins over the emoji icon everywhere; PATCH iconUrl:'' removes it. Custom sounds now also exist for servers: POST /api/servers/:id/soundboard + relay/delete.",
+        "FIX white tile (error/ screenshots): video elements used --color-ink as background, which is near-white in dark theme, so a frame-less WebRTC track rendered as a white tile. Video backgrounds are now a fixed dark (--color-video-bg), and tiles/screens only count as video when the track is unmuted with real dimensions (streamHasVideo) — muted placeholder receivers now show the avatar / Waiting placeholder. Server tiles also no longer show video for everyone (they ignored cameraOn).",
+        "FIX white profile + members showing offline: tone-4 avatars were white-on-white / dark-on-dark (invisible) — now deep blue with readable text in both themes. Server members showed offline because broadcast presence never carried a way to match members; presence now carries memberId (SHA-256 pseudonym, no deviceId leak) so the green dot is correct.",
+        "Connection dots: green = online/connected, red = offline/disconnected everywhere (top status dot, ping offline dot, room people dots, server member dots). Room people list now has presence dots at all; disconnect repaints them red.",
+        "NEW Discord-style Stop watching button (red, floating on the shared screen, rooms + servers): hides the screen for you only, with a Watch screen chip to bring it back. The sharer is unaffected.",
+        "NEW Deafen in server voice too (was rooms only): same D/button behaviour — mutes everyone for you only via MediaMesh.setDeafened.",
+        "SECURITY: board/icon uploads validate extension + mime, block double/script extensions, cap sizes, require membership (server board) / owner (icon), and clean up orphan files on failure; stored custom-sound imageUrls are revalidated on load; presence memberId is a hash, never a raw deviceId."
+      ],
+      "pointsAr": [
+        "جديد لوحة الصوت: استُبدلت اللوحة القديمة (16 صوت synth) بحزمة Sound Forge (new soundboard/sounds_out -> public/sounds/*.wav (manifest stays in the forge source folder — its unicode icons must not ship in public/)) — 87 WAV استوديو في 9 فئات (واجهة، دردشة، إشعارات، حضور ومكالمات، حالة، ألعاب، نظام، مؤثرات، إيقاع) مع بحث وشبكة مجمّعة في الغرف والخوادم. المعرفات القديمة (airhorn, rimshot…) ما تزال تُشغّل أقرب صوت Forge.",
+        "جديد لوحة شخصية دائمة: احفظ أي صوت (5MB، 30 صوتًا) + صورة غلاف على هذا الجهاز في IndexedDB (localStorage يحمل فهرسًا صغيرًا بالاسم/الإيموجي/الصورة لعرض فوري). لا يُرفع شيء حتى تضغط مشاركة إلى الغرفة/الخادم — حينها يمر بصوتيات اللوحة الحالية (2MB) فالأصوات غير المشاركة لا تكلّف الخادم شيئًا. أصوات الخادم دائمة (تُحذف مع الخادم)؛ أصوات الغرفة ما تزال تُمسح عند فراغها.",
+        "جديد صورة الخادم: اختر صورة عند إنشاء الخادم (حوار الصفحة الرئيسية) أو لاحقًا من إعدادات الخادم (للمالك فقط) — POST /api/servers/:id/icon (2MB، صور فقط، مالك + جلسة). الصورة تتغلب على أيقونة الإيموجي في كل مكان؛ PATCH iconUrl:'' يزيلها. أصبحت للخوادم أيضًا أصوات مخصصة: POST /api/servers/:id/soundboard + بث/حذف.",
+        "إصلاح البلاطة البيضاء (صور error/): عناصر الفيديو كانت تستخدم --color-ink كخلفية وهو شبه أبيض في الثيم الداكن، فالمسار بلا إطارات كان يظهر بلاطة بيضاء. الخلفيات الآن داكنة ثابتة (--color-video-bg)، والبلاطات/الشاشات تُحسب فيديو فقط عندما يكون المسار غير مكتوم بأبعاد حقيقية (streamHasVideo) — مسارات الاستقبال الصامتة تعرض الآن الصورة الرمزية / «جارٍ الانتظار». بلاطات الخادم لم تعد تعرض فيديو للجميع (كانت تتجاهل cameraOn).",
+        "إصلاح البروفايل الأبيض + الأعضاء يظهرون غير متصل: صور tone-4 كانت بيضاء على أبيض / داكنة على داكن (غير مرئية) — الآن أزرق داكن بنص مقروء في الثيمين. الأعضاء ظهروا غير متصل لأن حضور البث لم يحمل وسيلة لمطابقة الأعضاء؛ الحضور يحمل الآن memberId (اسم مستعار SHA-256 بلا تسريب deviceId) فالنقطة الخضراء صحيحة.",
+        "نقاط الاتصال: أخضر = متصل، أحمر = غير متصل في كل مكان (نقطة الحالة العلوية، نقطة البنغ المنقطع، نقاط أعضاء الغرفة، نقاط أعضاء الخادم). قائمة أعضاء الغرفة أصبحت بنقاط حضور؛ الانقطاع يعيد رسمها حمراء.",
+        "جديد زر إيقاف المشاهدة بأسلوب ديسكورد (أحمر، عائم على الشاشة المشتركة، في الغرف والخوادم): يخفي الشاشة لك وحدك، مع زر مشاهدة الشاشة لإعادتها. المشارك لا يتأثر.",
+        "جديد كتم السماعات (Deafen) في صوت الخادم أيضًا (كانت في الغرف فقط): نفس سلوك الزر/D — كتم الجميع لك وحدك عبر MediaMesh.setDeafened.",
+        "أمن: رفع اللوحة/الأيقونة يتحقق من الامتداد + النوع، يمنع الامتدادات المزدوجة/السكربتية، يحدد الأحجام، يشترط العضوية (لوحة الخادم) / الملكية (الأيقونة)، وينظّف الملفات اليتيمة عند الفشل؛ صور الأصوات المخزنة تُعاد التحقق عند التحميل؛ memberId الحضوري hash لا deviceId خام."
+      ]
+    },
     {
       "date": "2026-11-09",
       "ts": 1763800400000,

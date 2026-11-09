@@ -8,20 +8,20 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PUBLIC = path.join(ROOT, 'public');
 const EMOJI_DIR = path.join(PUBLIC, 'emoji');
 
-test('v12.2: all 60 emojis are the Twemoji pack (hush_emoji_pro), ids match code', async () => {
+test('v12.2: all 108 emojis are the Twemoji pack (hush_emoji_pro), ids match code', async () => {
   const ids = JSON.parse(await readFile(path.join(EMOJI_DIR, 'ids.json'), 'utf8'));
-  assert.equal(ids.length, 60);
+  assert.equal(ids.length, 108);
   const manifest = JSON.parse(await readFile(path.join(EMOJI_DIR, 'manifest.json'), 'utf8'));
-  assert.equal(manifest.length, 60);
+  assert.equal(manifest.length, 108);
   for (const entry of manifest) {
     assert.equal(entry.source, 'twemoji', `${entry.id} comes from Twemoji`);
     assert.ok(entry.svg, `${entry.id} has svg`);
   }
   const files = (await readdir(EMOJI_DIR)).filter((f) => f.endsWith('.svg')).sort();
-  assert.equal(files.length, 60, '60 svg files');
+  assert.equal(files.length, 108, '108 svg files');
   assert.deepEqual(files.map((f) => f.replace('.svg', '')).sort(), [...ids].sort(), 'files match ids.json');
   const pngs = await readdir(path.join(EMOJI_DIR, 'png'));
-  assert.equal(pngs.length, 60, '60 png files');
+  assert.equal(pngs.length, 108, '108 png files');
   const preview = await readFile(path.join(EMOJI_DIR, 'preview.png'));
   assert.ok(preview.length > 10000, 'preview.png exists');
 
@@ -41,7 +41,7 @@ test('v12.2: all 60 emojis are the Twemoji pack (hush_emoji_pro), ids match code
   }
   // Code ids still match the pack exactly (shortcodes keep working).
   const emojiJs = await readFile(path.join(PUBLIC, 'js', 'emoji.js'), 'utf8');
-  const jsIds = [...emojiJs.matchAll(/\{ id: '([a-z0-9]+)', url: '\/emoji\//g)].map((m) => m[1]);
+  const jsIds = [...emojiJs.matchAll(/\{ id: '([a-z0-9_]+)', url: '\/emoji\//g)].map((m) => m[1]);
   assert.deepEqual([...jsIds].sort(), [...ids].sort(), 'CUSTOM_EMOJIS ids match the pack');
   const constants = await readFile(path.join(ROOT, 'src', 'constants.js'), 'utf8');
   for (const id of ids) assert.match(constants, new RegExp(`'${id}'`), `server allow-list knows ${id}`);
@@ -67,7 +67,8 @@ test('v12.2: Twemoji attribution is visible (CC-BY 4.0) and forge source is giti
 
 test('v12.2 changelog documents the emoji replacement', async () => {
   const changelog = JSON.parse(await readFile(path.join(PUBLIC, 'changelog.json'), 'utf8'));
-  assert.equal(changelog.version, '12.3.0');
-  assert.match(changelog.entries[0].titleEn, /Emojis now actually update/);
+  assert.equal(changelog.version, '14.0.0');
+  assert.match(changelog.entries[0].titleEn, /v14/);
+  assert.ok(changelog.entries.some((e) => /Twemoji pack/.test(e.titleEn)), 'v12.2 entry still present');
   assert.ok(changelog.entries[0].pointsEn.length >= 3 && changelog.entries[0].pointsAr.length >= 3);
 });

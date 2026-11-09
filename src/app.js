@@ -9,7 +9,7 @@ import multer from 'multer';
 import { Server as SocketServer } from 'socket.io';
 
 import { RoomManager, formatCode, isValidCode, normalizeCode } from './rooms.js';
-import { ServerManager, cleanServerName, cleanChannelName, cleanChannelType, cleanEmojiId, cleanDeviceId, cleanInviteCode, isValidServerId, isValidChannelId } from './servers.js';
+import { ServerManager, cleanServerName, cleanChannelName, cleanChannelType, cleanEmojiId, cleanDeviceId, cleanInviteCode, isValidServerId, isValidChannelId, normalizeServerCustomSound } from './servers.js';
 import { attachRealtime } from './realtime.js';
 import { SessionStore, sessions as defaultSessionsStore } from './sessions.js';
 import { createPingServer } from '../PING OP/src/server.js';
@@ -24,7 +24,13 @@ import {
   MAX_CUSTOM_SOUNDS_PER_ROOM,
   MAX_BOARD_AUDIO_BYTES,
   BOARD_AUDIO_EXTENSIONS,
-  BOARD_AUDIO_MIME_TYPES
+  BOARD_AUDIO_MIME_TYPES,
+  MAX_BOARD_IMAGE_BYTES,
+  BOARD_IMAGE_EXTENSIONS,
+  BOARD_IMAGE_MIME_TYPES,
+  MAX_SERVER_ICON_BYTES,
+  MAX_CUSTOM_SOUNDS_PER_SERVER,
+  UI_SOUND_IDS
 } from './constants.js';
 import { normalizeCustomSound } from './rooms.js';
 
@@ -124,6 +130,9 @@ export async function createHushServer({
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
     res.setHeader('X-Frame-Options', 'DENY');
+    // HSTS: browsers ignore it on plain-http localhost, but behind HTTPS
+    // (reverse proxy / direct TLS) it pins the origin to HTTPS for a year.
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
     res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
     res.setHeader('Origin-Agent-Cluster', '?1');
     res.setHeader('X-DNS-Prefetch-Control', 'off');
@@ -247,14 +256,12 @@ export async function createHushServer({
 
   app.get('/api/sounds', (req, res) => {
     res.setHeader('Cache-Control', 'public, max-age=3600');
-    res.json({
-      sounds: ['message', 'mention', 'join', 'leave', 'error', 'kick', 'ban', 'success', 'click', 'blip', 'hand', 'knock', 'camera', 'share', 'reaction', 'pop', 'welcome', 'goodbye', 'coin', 'levelup', 'warning', 'achievement', 'whoosh', 'chime', 'bubble', 'slide', 'dingdong', 'echo']
-    });
+    res.json({ sounds: UI_SOUND_IDS });
   });
 
   app.get('/api/soundboard', (req, res) => {
     res.setHeader('Cache-Control', 'public, max-age=3600');
-    res.json({ sounds: SOUNDBOARD_IDS, emojis: CUSTOM_EMOJI_IDS });
+    res.json({ sounds: SOUNDBOARD_IDS, emojis: CUSTOM_EMOJI_IDS, version: 'forge-v13' });
   });
 
   app.get('/api/health', async (req, res, next) => {
@@ -365,7 +372,8 @@ export async function createHushServer({
     res.json({ server: { ...preview, inviteCode: server.inviteCode } });
   });
 
-  app.post('/api/servers/:id/leave', async (req, res) => {
+  const leaveLimit = rateLimiter({ windowMs: 60_000, max: 20 });
+  app.post('/api/servers/:id/leave', leaveLimit, async (req, res) => {
     // A7/H2: leave must evict live sockets, not just mutate the DB.
     const actor = reqDeviceId(req, req.body?.deviceId, req.params.id);
     const ok = await servers.leave(req.params.id, actor || req.body?.deviceId);
@@ -391,7 +399,8 @@ export async function createHushServer({
   app.patch('/api/servers/:id', serverLimit, async (req, res) => {
     const actor = reqDeviceId(req, req.body?.deviceId, req.params.id);
     const updated = await servers.updateSettings(req.params.id, actor || req.body?.deviceId, {
-      name: req.body?.name, description: req.body?.description, iconEmojiId: req.body?.iconEmojiId
+      name: req.body?.name, description: req.body?.description, iconEmojiId: req.body?.iconEmojiId,
+      iconUrl: req.body?.iconUrl
     });
     if (!updated) {
       const server = servers.get(req.params.id);
@@ -458,7 +467,8 @@ export async function createHushServer({
     res.json({ ok: true });
   });
 
-  app.get('/api/servers/:id/history', async (req, res) => {
+  const historyLimit = rateLimiter({ windowMs: 60_000, max: 60 });
+  app.get('/api/servers/:id/history', historyLimit, async (req, res) => {
     const server = servers.get(req.params.id);
     if (!server) return res.status(404).json({ error: 'server-not-found' });
     const viewer = reqDeviceId(req, req.query?.deviceId, server.id) || cleanDeviceId(req.query?.deviceId);
@@ -718,11 +728,12 @@ export async function createHushServer({
   // The file lives in uploads/<code>/board/ and is deleted completely
   // when the last person leaves the room (see realtime leave()) or when
   // the idle room is cleaned up. Cap: 12 sounds, 2 MB each, audio only.
-  const boardUpload = multer({
+  // Shared board upload: audio `file` (required) + optional cover `image`.
+  const boardUploadFields = (dirFor) => multer({
     storage: multer.diskStorage({
       destination(req, file, callback) {
         try {
-          const directory = path.join(uploadsDir, req.roomCode, 'board');
+          const directory = dirFor(req);
           mkdirSync(directory, { recursive: true });
           callback(null, directory);
         } catch (error) { callback(error); }
@@ -731,11 +742,19 @@ export async function createHushServer({
         callback(null, `${randomUUID()}${path.extname(file.originalname).toLowerCase()}`);
       }
     }),
-    limits: { fileSize: MAX_BOARD_AUDIO_BYTES, files: 1 },
+    limits: { fileSize: MAX_BOARD_AUDIO_BYTES, files: 2 },
     fileFilter(req, file, callback) {
       const extension = path.extname(file.originalname).toLowerCase();
       const lowerName = String(file.originalname || '').toLowerCase();
       const dangerous = /\.(exe|sh|bat|js|html?|svg|php|jsp|py)$/.test(lowerName);
+      if (file.fieldname === 'image') {
+        if (dangerous || !BOARD_IMAGE_EXTENSIONS.has(extension) || !BOARD_IMAGE_MIME_TYPES.has(file.mimetype)) {
+          const error = new Error('unsupported-file-type');
+          error.status = 415;
+          return callback(error);
+        }
+        return callback(null, true);
+      }
       const mimeOk = BOARD_AUDIO_MIME_TYPES.has(file.mimetype) || String(file.mimetype || '').startsWith('audio/')
         || String(file.mimetype || '').startsWith('video/webm');
       if (dangerous || !BOARD_AUDIO_EXTENSIONS.has(extension) || !mimeOk) {
@@ -745,20 +764,33 @@ export async function createHushServer({
       }
       callback(null, true);
     }
-  });
+  }).fields([{ name: 'file', maxCount: 1 }, { name: 'image', maxCount: 1 }]);
+
+  const boardUploadRoom = boardUploadFields((req) => path.join(uploadsDir, req.roomCode, 'board'));
 
   app.post('/api/rooms/:code/soundboard', uploadLimit, async (req, res, next) => {
     const code = normalizeCode(req.params.code);
     if (!isValidCode(code)) { req.resume(); return res.status(400).json({ error: 'invalid-code' }); }
     if (!(await rooms.codeExists(code))) { req.resume(); return res.status(404).json({ error: 'room-not-found' }); }
     req.roomCode = code;
-    boardUpload.single('file')(req, res, async (error) => {
+    boardUploadRoom(req, res, async (error) => {
       if (error) return next(error);
-      if (!req.file) return res.status(400).json({ error: 'missing-file' });
+      req.file = req.files?.file?.[0] || null;
+      const imageFile = req.files?.image?.[0] || null;
+      if (imageFile && imageFile.size > MAX_BOARD_IMAGE_BYTES) {
+        try { await fs.unlink(imageFile.path); } catch {}
+        try { if (req.file) await fs.unlink(req.file.path); } catch {}
+        return res.status(413).json({ error: 'limit_file_size' });
+      }
+      if (!req.file) {
+        try { if (imageFile) await fs.unlink(imageFile.path); } catch {}
+        return res.status(400).json({ error: 'missing-file' });
+      }
       try {
         const room = await rooms.getOrCreate(code);
         if ((room.customSounds || []).length >= MAX_CUSTOM_SOUNDS_PER_ROOM) {
           try { await fs.unlink(req.file.path); } catch { /* ignore */ }
+          try { if (imageFile) await fs.unlink(imageFile.path); } catch { /* ignore */ }
           return res.status(409).json({ error: 'board-full' });
         }
         const emojiId = CUSTOM_EMOJI_SET.has(String(req.body?.emojiId)) ? String(req.body.emojiId) : 'star';
@@ -773,6 +805,7 @@ export async function createHushServer({
           name: cleanUploadName(req.body?.name || req.file.originalname).slice(0, 40),
           emojiId,
           url: `/uploads/${code}/board/${req.file.filename}`,
+          imageUrl: imageFile ? `/uploads/${code}/board/${imageFile.filename}` : '',
           size: req.file.size,
           mime: req.file.mimetype,
           addedById: live ? claimedId : '',
@@ -781,16 +814,121 @@ export async function createHushServer({
         }, code);
         if (!sound) {
           try { await fs.unlink(req.file.path); } catch { /* ignore */ }
+          try { if (imageFile) await fs.unlink(imageFile.path); } catch { /* ignore */ }
           return res.status(400).json({ error: 'invalid-sound' });
         }
         const saved = await rooms.addCustomSound(room, sound);
         if (!saved) {
           try { await fs.unlink(req.file.path); } catch { /* ignore */ }
+          try { if (imageFile) await fs.unlink(imageFile.path); } catch { /* ignore */ }
           return res.status(409).json({ error: 'board-full' });
         }
         io.to(`room:${code}`).emit('soundboard:added', { sound: saved });
         res.status(201).json({ sound: saved });
       } catch (err) { next(err); }
+    });
+  });
+
+  /* -------- Server icon image (owner only, at creation or later) -------- */
+  const serverIconUpload = multer({
+    storage: multer.diskStorage({
+      destination(req, file, callback) {
+        try {
+          const directory = path.join(uploadsDir, `server-${req.serverId}`);
+          mkdirSync(directory, { recursive: true });
+          callback(null, directory);
+        } catch (error) { callback(error); }
+      },
+      filename(req, file, callback) {
+        // Fixed name: a new icon replaces the old one, no orphans accumulate.
+        callback(null, `icon${path.extname(file.originalname).toLowerCase()}`);
+      }
+    }),
+    limits: { fileSize: MAX_SERVER_ICON_BYTES, files: 1 },
+    fileFilter(req, file, callback) {
+      const extension = path.extname(file.originalname).toLowerCase();
+      const lowerName = String(file.originalname || '').toLowerCase();
+      const dangerous = /\.(exe|sh|bat|js|html?|svg|php|jsp|py)$/.test(lowerName);
+      if (dangerous || !BOARD_IMAGE_EXTENSIONS.has(extension) || !BOARD_IMAGE_MIME_TYPES.has(file.mimetype)) {
+        const error = new Error('unsupported-file-type');
+        error.status = 415;
+        return callback(error);
+      }
+      callback(null, true);
+    }
+  });
+
+  app.post('/api/servers/:id/icon', serverLimit, async (req, res, next) => {
+    const serverId = String(req.params.id || '');
+    if (!isValidServerId(serverId)) { req.resume(); return res.status(404).json({ error: 'server-not-found' }); }
+    const server = servers.get(serverId);
+    if (!server) { req.resume(); return res.status(404).json({ error: 'server-not-found' }); }
+    const actor = reqDeviceId(req, req.query?.deviceId, serverId) || cleanDeviceId(req.query?.deviceId);
+    if (!actor || !servers.isOwner(server, actor)) { req.resume(); return res.status(403).json({ error: 'not-admin' }); }
+    req.serverId = serverId;
+    serverIconUpload.single('file')(req, res, async (error) => {
+      if (error) return next(error);
+      if (!req.file) return res.status(400).json({ error: 'missing-file' });
+      // Remove a previous icon with a different extension.
+      try {
+        const dir = path.join(uploadsDir, `server-${serverId}`);
+        for (const old of await fs.readdir(dir)) {
+          if (/^icon\./i.test(old) && old !== req.file.filename) {
+            try { await fs.unlink(path.join(dir, old)); } catch { /* ignore */ }
+          }
+        }
+      } catch { /* ignore */ }
+      const iconUrl = `/uploads/server-${serverId}/${req.file.filename}`;
+      const updated = await servers.updateSettings(serverId, actor, { iconUrl });
+      if (!updated) {
+        try { await fs.unlink(req.file.path); } catch { /* ignore */ }
+        return res.status(403).json({ error: 'not-admin' });
+      }
+      io.to(`server:${serverId}`).emit('server:channels:updated', { server: servers.broadcastSummary(updated) });
+      res.status(201).json({ server: servers.publicSummary(updated, actor), iconUrl });
+    });
+  });
+
+  /* -------- Permanent server custom sounds (audio + optional cover) -------- */
+  const serverBoardUpload = boardUploadFields((req) => path.join(uploadsDir, `server-${req.serverId}`, 'board'));
+
+  app.post('/api/servers/:id/soundboard', serverLimit, async (req, res, next) => {
+    const serverId = String(req.params.id || '');
+    if (!isValidServerId(serverId)) { req.resume(); return res.status(404).json({ error: 'server-not-found' }); }
+    const server = servers.get(serverId);
+    if (!server) { req.resume(); return res.status(404).json({ error: 'server-not-found' }); }
+    const actor = reqDeviceId(req, req.query?.deviceId, serverId) || cleanDeviceId(req.query?.deviceId);
+    if (!actor || !servers.isMember(server, actor) || servers.isBanned(server, actor)) {
+      req.resume();
+      return res.status(403).json({ error: 'not-member' });
+    }
+    req.serverId = serverId;
+    serverBoardUpload(req, res, async (error) => {
+      if (error) return next(error);
+      req.file = req.files?.file?.[0] || null;
+      const imageFile = req.files?.image?.[0] || null;
+      const cleanup = async () => {
+        try { if (req.file) await fs.unlink(req.file.path); } catch { /* ignore */ }
+        try { if (imageFile) await fs.unlink(imageFile.path); } catch { /* ignore */ }
+      };
+      if (imageFile && imageFile.size > MAX_BOARD_IMAGE_BYTES) { await cleanup(); return res.status(413).json({ error: 'limit_file_size' }); }
+      if (!req.file) { await cleanup(); return res.status(400).json({ error: 'missing-file' }); }
+      if ((server.customSounds || []).length >= MAX_CUSTOM_SOUNDS_PER_SERVER) { await cleanup(); return res.status(409).json({ error: 'board-full' }); }
+      const sound = await servers.addCustomSound(serverId, {
+        id: randomUUID(),
+        name: cleanUploadName(req.body?.name || req.file.originalname).slice(0, 40),
+        emojiId: cleanEmojiId(req.body?.emojiId),
+        url: `/uploads/server-${serverId}/board/${req.file.filename}`,
+        imageUrl: imageFile ? `/uploads/server-${serverId}/board/${imageFile.filename}` : '',
+        size: req.file.size,
+        mime: req.file.mimetype,
+        addedById: actor,
+        addedBy: String(req.body?.addedBy || '').slice(0, 32),
+        createdAt: Date.now()
+      });
+      if (!sound) { await cleanup(); return res.status(400).json({ error: 'invalid-sound' }); }
+      io.to(`server:${serverId}`).emit('server:soundboard:added', { sound });
+      res.status(201).json({ sound });
     });
   });
 

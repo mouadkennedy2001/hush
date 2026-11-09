@@ -4,7 +4,7 @@ import { startPing } from './ping.js';
 import { initChangelog } from './changelog.js';
 import { initLibraries } from './libraries-log.js';
 import { CUSTOM_EMOJIS, customEmojiImage } from './emoji.js';
-import { fetchServers, createServer, serverIconUrl, serverUrl, inviteUrl, lookupInvite } from './servers.js';
+import { fetchServers, createServer, serverIconUrl, serverUrl, inviteUrl, lookupInvite, uploadServerIcon, getDeviceId } from './servers.js';
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -61,7 +61,16 @@ const serverForm = $('#server-form');
 const serverNameInput = $('#server-name-input');
 const serverIconPicker = $('#server-icon-picker');
 const serverDialogError = $('#server-dialog-error');
+const serverImageInput = $('#server-image-input');
+const serverImagePreview = $('#server-image-preview');
 let selectedIcon = 'star';
+let selectedServerImage = null;
+serverImageInput?.addEventListener('change', () => {
+  const file = serverImageInput.files?.[0] || null;
+  selectedServerImage = file;
+  if (file && serverImagePreview) { serverImagePreview.src = URL.createObjectURL(file); serverImagePreview.hidden = false; }
+  else if (serverImagePreview) serverImagePreview.hidden = true;
+});
 
 function renderServers(servers, query = '') {
   if (!serverGrid) return;
@@ -195,6 +204,13 @@ if (serverForm) {
       let ownerName = '';
       try { ownerName = localStorage.getItem('hush:name') || ''; } catch {}
       const server = await createServer({ name, iconEmojiId: selectedIcon, ownerName });
+      // At-creation image: upload right after the server exists (owner-only).
+      if (selectedServerImage && server?.id) {
+        try { await uploadServerIcon(server.id, selectedServerImage, getDeviceId()); } catch { /* emoji icon stays */ }
+        selectedServerImage = null;
+        if (serverImageInput) serverImageInput.value = '';
+        if (serverImagePreview) serverImagePreview.hidden = true;
+      }
       toast(t('server.created'));
       closeServerDialog();
       window.location.href = serverUrl(server);

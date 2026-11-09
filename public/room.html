@@ -139,6 +139,12 @@
       <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/>
       <circle cx="12" cy="12" r="3"/>
     </symbol>
+    <symbol id="i-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+    </symbol>
+    <symbol id="i-shrink" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M8 3v6H2M16 21v-6h6M2 3l6 6M22 21l-6-6"/>
+    </symbol>
     <symbol id="i-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
       <path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
     </symbol>
@@ -250,6 +256,10 @@
         <div class="stage-topline">
           <span class="stage-title" id="stage-title">Room</span>
           <span style="display:inline-flex;align-items:center;gap:8px">
+            <button class="btn btn-quiet btn-sm screen-watch-chip" id="screen-watch-btn" type="button" hidden>
+              <svg class="icon" aria-hidden="true"><use href="#i-screen"></use></svg>
+              <span id="screen-watch-label">Watch screen</span>
+            </button>
             <span class="stage-count" id="stage-count">Connecting…</span>
             <button class="icon-button focus-toggle" id="focus-toggle" type="button" title="Toggle focus mode" aria-label="Toggle focus mode" aria-pressed="false">
               <svg class="icon" aria-hidden="true"><use href="#i-focus"></use></svg>
@@ -267,6 +277,14 @@
             <span class="screen-caption-dot" aria-hidden="true"></span>
             <span id="screen-label">Someone is sharing</span>
           </div>
+          <button class="screen-stop-btn" id="screen-stop-watching" type="button" hidden>
+            <svg class="icon" aria-hidden="true"><use href="#i-screen-off"></use></svg>
+            <span id="screen-stop-label">Stop watching</span>
+          </button>
+          <button class="screen-enlarge-btn" id="screen-enlarge" type="button" title="Enlarge screen" aria-label="Enlarge screen">
+            <svg class="icon icon-when-off" aria-hidden="true"><use href="#i-expand"></use></svg>
+            <svg class="icon icon-when-on" aria-hidden="true"><use href="#i-shrink"></use></svg>
+          </button>
         </div>
 
         <div class="tile-grid" id="tile-grid" aria-live="polite"></div>
@@ -345,17 +363,40 @@
               <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg>
             </button>
           </div>
+          <input type="search" class="soundboard-search" id="soundboard-search" placeholder="Search sounds…" aria-label="Search sounds" autocomplete="off" />
           <div class="soundboard-grid" id="soundboard-grid"></div>
+          <div class="soundboard-personal" id="soundboard-personal">
+            <div class="soundboard-personal-head">
+              <span class="board-add-title" id="soundboard-my-title">My sounds</span>
+              <button class="btn btn-quiet btn-sm" id="soundboard-my-clear" type="button" hidden>Clear</button>
+            </div>
+            <p class="soundboard-personal-note" id="soundboard-my-note">Saved on this device only (IndexedDB). Nothing is uploaded until you share it.</p>
+            <div class="soundboard-grid soundboard-my-grid" id="soundboard-my-grid"></div>
+          </div>
           <form class="board-add" id="board-add-form">
             <span class="board-add-title" id="board-add-title">Add a custom sound for this room</span>
             <div class="board-add-row">
               <input type="file" id="board-file" accept="audio/*,.mp3,.wav,.ogg,.m4a,.webm" aria-label="Audio file" />
               <input type="text" id="board-name" maxlength="40" placeholder="Sound name" aria-label="Sound name" />
+              <input type="file" id="board-image" accept="image/png,image/jpeg,image/webp,image/gif,image/avif" aria-label="Cover image (optional)" />
+              <img class="board-image-preview" id="board-image-preview" alt="" hidden />
               <select id="board-emoji" aria-label="Choose emoji"></select>
               <button class="btn btn-primary btn-sm" id="board-add-btn" type="submit">Add</button>
               <button class="btn btn-quiet btn-sm" id="board-clear-btn" type="button" hidden>Clear all</button>
             </div>
             <p class="board-add-note" id="board-add-note">Audio only, 2 MB max. Custom sounds are deleted completely when the last person leaves this room.</p>
+          </form>
+          <form class="board-add" id="board-my-form">
+            <span class="board-add-title" id="board-my-title">Save a sound on this device</span>
+            <div class="board-add-row">
+              <input type="file" id="board-my-file" accept="audio/*,.mp3,.wav,.ogg,.m4a,.webm,.opus" aria-label="Audio file" />
+              <input type="text" id="board-my-name" maxlength="40" placeholder="Sound name" aria-label="Sound name" />
+              <input type="file" id="board-my-image" accept="image/png,image/jpeg,image/webp,image/gif,image/avif" aria-label="Cover image (optional)" />
+              <img class="board-image-preview" id="board-my-image-preview" alt="" hidden />
+              <select id="board-my-emoji" aria-label="Choose emoji"></select>
+              <button class="btn btn-primary btn-sm" id="board-my-add-btn" type="submit">Save to my sounds</button>
+            </div>
+            <p class="board-add-note" id="board-my-note">Stored in IndexedDB on this device (5 MB max, 30 sounds). Use “Share to room” on a sound to upload it here — until then it costs the server nothing.</p>
           </form>
         </div>
 

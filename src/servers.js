@@ -1,7 +1,7 @@
 import { randomUUID, randomBytes, timingSafeEqual, createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { CUSTOM_EMOJI_SET } from './constants.js';
+import { CUSTOM_EMOJI_SET, MAX_CUSTOM_SOUNDS_PER_SERVER, MAX_BOARD_AUDIO_BYTES } from './constants.js';
 
 export const MAX_SERVERS = 100;
 export const MAX_SERVERS_PER_DEVICE = 10; // N2: per-user cap instead of only global 100 (A16)
@@ -47,6 +47,40 @@ export function cleanInviteCode(value) {
 }
 export function cleanDescription(value) {
   return String(value ?? '').replace(/[\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e]/g, '').trim().replace(/\s+/g, ' ').slice(0, 140);
+}
+export function cleanIconUrl(value, serverId = '') {
+  const url = String(value ?? '').trim();
+  if (!url) return '';
+  // Only our own uploaded icon path is valid — never arbitrary URLs.
+  const prefix = serverId ? `/uploads/server-${serverId}/icon` : '/uploads/server-';
+  if (!url.startsWith(prefix) || url.includes('..') || url.includes('\\')) return '';
+  return /\.(png|jpe?g|webp|gif|avif)$/i.test(url) ? url : '';
+}
+export function cleanImageUrl(value, prefix) {
+  const url = String(value ?? '').trim();
+  if (!url) return '';
+  if (!url.startsWith(prefix) || url.includes('..') || url.includes('\\')) return '';
+  return /\.(png|jpe?g|webp|gif|avif)$/i.test(url) ? url : '';
+}
+export function normalizeServerCustomSound(raw, serverId) {
+  if (!raw || typeof raw !== 'object' || typeof raw.id !== 'string') return null;
+  const url = String(raw.url ?? '');
+  const prefix = `/uploads/server-${serverId}/board/`;
+  if (!url.startsWith(prefix) || url.includes('..') || url.includes('\\')) return null;
+  const size = Number(raw.size);
+  if (!Number.isFinite(size) || size < 0 || size > MAX_BOARD_AUDIO_BYTES) return null;
+  return {
+    id: raw.id,
+    name: String(raw.name ?? 'Sound').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 40) || 'Sound',
+    emojiId: cleanEmojiId(raw.emojiId),
+    url,
+    imageUrl: cleanImageUrl(raw.imageUrl, prefix),
+    size,
+    mime: String(raw.mime ?? 'audio/mpeg').slice(0, 60),
+    addedById: typeof raw.addedById === 'string' ? raw.addedById : '',
+    addedBy: typeof raw.addedBy === 'string' ? raw.addedBy.slice(0, 32) : '',
+    createdAt: Number.isFinite(raw.createdAt) ? raw.createdAt : Date.now()
+  };
 }
 export function cleanDisplayName(value) {
   return String(value ?? 'Guest').replace(/[\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e]/g, '').trim().slice(0, 32) || 'Guest';
@@ -139,11 +173,20 @@ function normalizeServer(raw) {
       banned.push({ deviceId, name: cleanDisplayName(b.name), until: until || null, reason: String(b.reason ?? '').slice(0, 120) });
     }
   }
+  const customSounds = [];
+  if (Array.isArray(raw.customSounds)) {
+    for (const s of raw.customSounds.slice(0, MAX_CUSTOM_SOUNDS_PER_SERVER)) {
+      const clean = normalizeServerCustomSound(s, raw.id);
+      if (clean) customSounds.push(clean);
+    }
+  }
   return {
     id: raw.id,
     name,
     description: cleanDescription(raw.description),
     iconEmojiId: cleanEmojiId(raw.iconEmojiId),
+    iconUrl: cleanIconUrl(raw.iconUrl, raw.id),
+    customSounds,
     ownerName: cleanDisplayName(raw.ownerName),
     ownerDeviceId,
     inviteCode: cleanInviteCode(raw.inviteCode) || generateInviteCode(),
@@ -337,6 +380,8 @@ export class ServerManager {
       name: server.name,
       description: server.description,
       iconEmojiId: server.iconEmojiId,
+      iconUrl: server.iconUrl || '',
+      customSounds: isMember ? (server.customSounds || []) : [],
       ownerName: server.ownerName,
       // A2/C2: never broadcast raw ownerDeviceId to non-owners/members.
       ownerDeviceId: isOwnerViewer ? server.ownerDeviceId : null,
@@ -425,6 +470,8 @@ export class ServerManager {
       name: cleanName,
       description: cleanDescription(description),
       iconEmojiId: cleanEmojiId(iconEmojiId),
+      iconUrl: '',
+      customSounds: [],
       ownerName: cleanDisplayName(ownerName),
       ownerDeviceId: owner,
       inviteCode,
@@ -558,7 +605,7 @@ export class ServerManager {
     return server;
   }
 
-  async updateSettings(id, deviceId, { name, description, iconEmojiId } = {}) {
+  async updateSettings(id, deviceId, { name, description, iconEmojiId, iconUrl } = {}) {
     const server = this.get(id);
     if (!server || !this.isOwner(server, deviceId)) return null;
     if (name !== undefined) {
@@ -568,8 +615,34 @@ export class ServerManager {
     }
     if (description !== undefined) server.description = cleanDescription(description);
     if (iconEmojiId !== undefined) server.iconEmojiId = cleanEmojiId(iconEmojiId);
+    // Empty string clears the image; a non-empty value must be our own
+    // uploaded icon path (set via POST /:id/icon, which saves the file).
+    if (iconUrl !== undefined) server.iconUrl = iconUrl === '' ? '' : cleanIconUrl(iconUrl, server.id);
     await this.#queueSave();
     return server;
+  }
+
+  async addCustomSound(id, sound) {
+    const server = this.get(id);
+    if (!server) return null;
+    server.customSounds ||= [];
+    if (server.customSounds.length >= MAX_CUSTOM_SOUNDS_PER_SERVER) return null;
+    const clean = normalizeServerCustomSound(sound, id);
+    if (!clean) return null;
+    server.customSounds.push(clean);
+    await this.#queueSave();
+    return clean;
+  }
+
+  async removeCustomSound(id, soundId) {
+    const server = this.get(id);
+    if (!server) return null;
+    server.customSounds ||= [];
+    const index = server.customSounds.findIndex((s) => s.id === soundId);
+    if (index === -1) return null;
+    const [removed] = server.customSounds.splice(index, 1);
+    await this.#queueSave();
+    return removed;
   }
 
   async addChannel(id, { name, type } = {}, deviceId) {

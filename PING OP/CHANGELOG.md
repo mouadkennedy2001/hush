@@ -1,5 +1,11 @@
 # PING OP Changelog — سجل إصدارات المكتبة
 
+## [ping v1.2.0] — 2026-11-09 — trend في getStats
+
+- **إضافة:** `getStats()` تحمل الآن `trend` (improving/worsening/stable) — كانت في `getHealth()` فقط. لوحات /api/health تحصل على الاتجاه دون نداء منفصل.
+- **توافق:** كل الواجهات السابقة باقية؛ رقم الإصدار فقط ارتفع.
+
+
 ## [ping v1.0.1] — 2026-11-08 — توثيق صادق + شارة عربية (Hz)
 
 - **توثيق:** `src/server.js` header corrected — the server echoes time,

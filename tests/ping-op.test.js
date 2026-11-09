@@ -9,15 +9,15 @@ const PUBLIC = path.join(ROOT, 'public');
 
 test('PING OP v1.1 library exists from scratch and is wired', async () => {
   const pkg = JSON.parse(await readFile(path.join(ROOT, 'PING OP', 'package.json'), 'utf8'));
-  assert.equal(pkg.version, '1.1.0');
+  assert.equal(pkg.version, '1.2.0');
   const ver = JSON.parse(await readFile(path.join(ROOT, 'PING OP', 'version.json'), 'utf8'));
-  assert.equal(ver.version, '1.1.0');
+  assert.equal(ver.version, '1.2.0');
   assert.equal(ver.status, 'active');
   assert.equal(ver.writtenFromScratch, true);
 
   const core = await readFile(path.join(ROOT, 'PING OP', 'src', 'ping-op.js'), 'utf8');
   assert.match(core, /createPingOp/);
-  assert.match(core, /PING_OP_VERSION = '1\.1\.0'/);
+  assert.match(core, /PING_OP_VERSION = '1\.2\.0'/);
   assert.match(core, /qualityFor/);
   assert.match(core, /getTrend/, 'v1.1 trend');
   assert.match(core, /getHealth/, 'v1.1 health');

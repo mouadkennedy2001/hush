@@ -9,16 +9,16 @@ const PUBLIC = path.join(ROOT, 'public');
 
 test('v12.3: emoji asset URLs are versioned so updates show immediately', async () => {
   const emojiJs = await readFile(path.join(PUBLIC, 'js', 'emoji.js'), 'utf8');
-  assert.match(emojiJs, /EMOJI_ASSET_VERSION = 'twemoji-1'/, 'asset version constant');
-  const versioned = emojiJs.match(/\/emoji\/[a-z0-9]+\.svg\?v=twemoji-1/g) || [];
-  assert.ok(versioned.length >= 60, `every emoji url is versioned (${versioned.length})`);
-  assert.match(emojiJs, /stickers-v2/, 'sticker urls are versioned too');
+  assert.match(emojiJs, /EMOJI_ASSET_VERSION = 'twemoji-2'/, 'asset version constant');
+  const versioned = emojiJs.match(/\/emoji\/[a-z0-9_]+\.svg\?v=twemoji-2/g) || [];
+  assert.ok(versioned.length >= 108, `every emoji url is versioned (${versioned.length})`);
+  assert.match(emojiJs, /stickers-v4/, 'sticker urls are versioned too');
   assert.doesNotMatch(emojiJs, /url: '\/emoji\/[a-z0-9]+\.svg',/, 'no unversioned emoji urls left');
 
   const indexHtml = await readFile(path.join(PUBLIC, 'index.html'), 'utf8');
   const hardcoded = indexHtml.match(/\/emoji\/[a-z0-9]+\.svg(?:\?v=[a-z0-9-]+)?/g) || [];
   assert.ok(hardcoded.length > 0, 'landing uses emoji imgs');
-  assert.ok(hardcoded.every((u) => u.includes('?v=twemoji-1')), 'landing emoji imgs are versioned');
+  assert.ok(hardcoded.every((u) => u.includes('?v=twemoji-2')), 'landing emoji imgs are versioned');
 
   const app = await readFile(path.join(ROOT, 'src', 'app.js'), 'utf8');
   assert.match(app, /isVersionedAsset/, 'server distinguishes versioned assets');
@@ -42,7 +42,8 @@ test('v12.3: emojis are larger and the picker is wider/cleaner', async () => {
 
 test('v12.3 changelog documents the cache fix', async () => {
   const changelog = JSON.parse(await readFile(path.join(PUBLIC, 'changelog.json'), 'utf8'));
-  assert.equal(changelog.version, '12.3.0');
-  assert.match(changelog.entries[0].titleEn, /Emojis now actually update/);
-  assert.ok(changelog.entries[0].pointsEn.length >= 3 && changelog.entries[0].pointsAr.length >= 3);
+  assert.equal(changelog.version, '14.0.0');
+  const cacheFix = changelog.entries.find((e) => /Emojis now actually update/.test(e.titleEn));
+  assert.ok(cacheFix, 'v12.3 cache-fix entry still present');
+  assert.ok(cacheFix.pointsEn.length >= 3 && cacheFix.pointsAr.length >= 3);
 });

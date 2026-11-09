@@ -52,18 +52,19 @@ export function updateSettings(patch) {
   return { ...settings };
 }
 
+// The media mesh owns remote-audio gains (per-peer volume, master volume,
+// AND deafen). This module must never touch <audio> elements directly:
+// writing volume/muted here used to un-silence deafened peers in rooms
+// (settings.js is room-only, which is why deafen "worked in servers but
+// not rooms"). Rooms register a sink that forwards the master volume.
+let volumeSink = null;
+export function registerVolumeSink(fn) {
+  volumeSink = typeof fn === 'function' ? fn : null;
+}
+
 export function applyVolume() {
   const volume = Math.min(1, Math.max(0, Number(settings.volume) || 0));
-  for (const audio of document.querySelectorAll('#remote-audio audio')) {
-    // Respect per-peer volume (right-click menu): effective = master x peer.
-    const peerVol = Number(audio.dataset?.peerVolume ?? 1) || 0;
-    const effective = Math.min(1, volume * peerVol);
-    if (audio.volume !== effective) audio.volume = effective;
-    // When the mesh routes via WebAudio it mutes the element itself;
-    // only unmute the element if there is no gain routing active.
-    if (!audio.dataset?.gainRouted && peerVol === 0) audio.muted = true;
-    else if (!audio.dataset?.gainRouted && peerVol > 0 && volume > 0) audio.muted = false;
-  }
+  try { volumeSink?.(volume); } catch { /* mesh not ready yet */ }
   const output = document.querySelector('[data-volume-value]');
   const label = `${Math.round(volume * 100)}%`;
   // Only write when changed: writing unconditionally inside the observed

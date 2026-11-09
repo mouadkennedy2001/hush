@@ -1,1 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#ede7f6"/><rect x="20" y="22" width="24" height="32" fill="#b39ddb" stroke="#4527a0" stroke-width="3"/><path d="M20 22 l-4 -10 h8 l4 6 l4 -6 h8 l-4 10" fill="#9575cd" stroke="#4527a0" stroke-width="2.5" stroke-linejoin="round"/><rect x="28" y="38" width="8" height="16" rx="4" fill="#4527a0"/><rect x="26" y="26" width="12" height="6" fill="#fff" stroke="#4527a0" stroke-width="2"/></svg>
+<svg id="emoji" viewBox="0 0 72 72" xmlns="http://www.w3.org/2000/svg">
+  <g id="color">
+    <polygon fill="#FCEA2B" stroke="none" points="35.9928,10.7363 27.7913,27.3699 9.4394,30.0436 22.7245,42.9838 19.5962,61.2637 36.0084,52.6276 52.427,61.2515 49.2851,42.9739 62.5606,30.0239 44.2067,27.3638"/>
+  </g>
+  <g id="hair"/>
+  <g id="skin"/>
+  <g id="skin-shadow"/>
+  <g id="line">
+    <polygon fill="none" stroke="#000000" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" stroke-width="2" points="35.9928,10.7363 27.7913,27.3699 9.4394,30.0436 22.7245,42.9838 19.5962,61.2637 36.0084,52.6276 52.427,61.2515 49.2851,42.9739 62.5606,30.0239 44.2067,27.3638"/>
+  </g>
+</svg>

@@ -1,10 +1,11 @@
-import { MediaMesh } from './room/media.js';
+import { MediaMesh, streamHasVideo } from './room/media.js';
 import { MIC_PRESETS, DEFAULT_MIC_SETTINGS } from './room/mic-fx.js';
 import { initI18n, onLanguageChange, t, locale } from './i18n.js';
 import { initTheme, toggleTheme } from './theme.js';
 import { startPing, refreshPing } from './ping.js';
-import { initSettings, getSettings, updateSettings } from './settings.js';
-import { SOUNDBOARD_SOUNDS, playSoundboard, playCustomSound, getSoundboardVolume, setSoundboardVolume, isSoundboardId, soundboardEmojiId } from './soundboard.js';
+import { initSettings, getSettings, updateSettings, registerVolumeSink } from './settings.js';
+import { SOUNDBOARD_SOUNDS, SOUNDBOARD_CATEGORIES, playSoundboard, playCustomSound, playBlobSound, getSoundboardVolume, setSoundboardVolume, isSoundboardId, soundboardEmojiId } from './soundboard.js';
+import { listPersonalSounds, putPersonalSound, deletePersonalSound, clearPersonalSounds, readIndex, personalBlobUrl, imageFileToDataUrl, validatePersonalAudio, MAX_PERSONAL_SOUNDS } from './soundboard-store.js';
 import { CUSTOM_EMOJIS, CUSTOM_STICKERS, STICKER_CATEGORIES, EMOJI_CATEGORIES, customEmojiImage, customStickerImage, isCustomSticker, isGifUrl, gifImage, isCustomEmoji, emojiUrl, splitEmojiShortcodes, preloadCustomEmojis, pushRecentEmoji, getRecentEmojis, searchEmojis, searchStickers, isEmojiOnlyMessage, emojiLabel, stickerLabel } from './emoji.js';
 import { buildGifPanel, buildStickerMenu, setStickerMenuDeps, openStickerCreator } from './gif-panel.js';
 setStickerMenuDeps({ CUSTOM_STICKERS, STICKER_CATEGORIES, customStickerImage, searchStickers, stickerLabel });
@@ -214,6 +215,27 @@ const els = {
   boardAddBtn: $('#board-add-btn'),
   boardClearBtn: $('#board-clear-btn'),
   boardAddNote: $('#board-add-note'),
+  boardImage: $('#board-image'),
+  boardImagePreview: $('#board-image-preview'),
+  soundboardSearch: $('#soundboard-search'),
+  soundboardMyTitle: $('#soundboard-my-title'),
+  soundboardMyNote: $('#soundboard-my-note'),
+  soundboardMyGrid: $('#soundboard-my-grid'),
+  soundboardMyClear: $('#soundboard-my-clear'),
+  boardMyForm: $('#board-my-form'),
+  boardMyTitle: $('#board-my-title'),
+  boardMyFile: $('#board-my-file'),
+  boardMyName: $('#board-my-name'),
+  boardMyImage: $('#board-my-image'),
+  boardMyImagePreview: $('#board-my-image-preview'),
+  boardMyEmoji: $('#board-my-emoji'),
+  boardMyAddBtn: $('#board-my-add-btn'),
+  boardMyNote: $('#board-my-note'),
+  screenStopWatching: $('#screen-stop-watching'),
+  screenStopLabel: $('#screen-stop-label'),
+  screenEnlarge: $('#screen-enlarge'),
+  screenWatchBtn: $('#screen-watch-btn'),
+  screenWatchLabel: $('#screen-watch-label'),
   imageLightbox: $('#image-lightbox'),
   imageLightboxBackdrop: $('#image-lightbox-backdrop'),
   imageLightboxImg: $('#image-lightbox-img'),
@@ -266,11 +288,17 @@ const state = {
   soundboardOpen: false,
   boardCooldownUntil: 0,
   customSounds: [], // this room's uploaded sounds (deleted when room empties)
+  personalSounds: [], // IndexedDB sounds on this device only
+  boardQuery: '',
+  hiddenScreenId: null, // screen id the user stopped watching (Discord-style)
 };
 
 initI18n();
 initTheme();
 initSettings();
+// Settings owns the master-volume value; the mesh owns the actual gains
+// (including deafen). Forwarding here keeps deafen in sync with the slider.
+registerVolumeSink((volume) => state.mesh?.setMasterVolume(volume));
 initChangelog();
 initLibraries();
 startPing({ socketGetter: () => state.socket });
@@ -487,7 +515,39 @@ function bindEvents() {
   }
   els.boardAddForm?.addEventListener('submit', (event) => { event.preventDefault(); addCustomSound(); });
   els.boardClearBtn?.addEventListener('click', clearCustomSounds);
+  els.boardMyForm?.addEventListener('submit', (event) => { event.preventDefault(); addPersonalSound(); });
+  els.soundboardMyClear?.addEventListener('click', async () => { await clearPersonalSounds(); state.personalSounds = []; renderPersonalGrid(); });
+  els.soundboardSearch?.addEventListener('input', () => { state.boardQuery = els.soundboardSearch.value.trim().toLowerCase(); renderSoundboardGrid(); });
+  els.screenStopWatching?.addEventListener('click', (event) => { event.stopPropagation(); stopWatchingScreen(); });
+  els.screenEnlarge?.addEventListener('click', (event) => { event.stopPropagation(); toggleScreenEnlarge(); });
+  els.screenStage?.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && els.screenStage.classList.contains('is-enlarged')) {
+      event.preventDefault();
+      event.stopPropagation();
+      els.screenStage.classList.remove('is-enlarged');
+      syncScreenEnlarge();
+    }
+  });
+  // Autoplay policy: AudioContexts created outside a gesture stay
+  // suspended (silent remote audio + silent mic processing). Any pointer
+  // or key gesture resumes them — this is what makes voice audible.
+  const resumeMeshAudio = () => { try { state.mesh?.resumeAudio(); } catch { /* ignore */ } };
+  document.addEventListener('pointerdown', resumeMeshAudio, { passive: true });
+  document.addEventListener('keydown', resumeMeshAudio);
+  els.screenWatchBtn?.addEventListener('click', () => { state.hiddenScreenId = null; updateScreenStage(); });
+  els.boardImage?.addEventListener('change', () => previewBoardImage(els.boardImage, els.boardImagePreview));
+  els.boardMyImage?.addEventListener('change', () => previewBoardImage(els.boardMyImage, els.boardMyImagePreview));
+  if (els.boardMyEmoji) {
+    els.boardMyEmoji.replaceChildren();
+    for (const emoji of CUSTOM_EMOJIS) {
+      const option = document.createElement('option');
+      option.value = emoji.id;
+      option.textContent = emoji.id;
+      els.boardMyEmoji.append(option);
+    }
+  }
   renderSoundboardGrid();
+  loadPersonalSounds();
   // Right-click menu (people + tiles): per-peer volume for everyone,
   // admin actions additionally when you are the host.
   document.addEventListener('contextmenu', (event) => {
@@ -585,6 +645,8 @@ function bindEvents() {
   }
 
   els.screenStage.addEventListener('click', cycleScreenShare);
+  els.screenVideo?.addEventListener('playing', () => { els.screenPlaceholder.hidden = true; });
+  els.screenVideo?.addEventListener('loadeddata', () => { els.screenPlaceholder.hidden = true; });
 
   document.addEventListener('click', (event) => {
     if (!els.reactionMenu.hidden && !els.reactionMenu.contains(event.target) && event.target !== els.reactionBtn) {
@@ -725,6 +787,8 @@ function ensureSocket() {
     setStatus('reconnecting', 'status.reconnecting');
     state.mesh?.closeAll();
     renderTiles();
+    renderPeople();
+    updateScreenStage();
   });
 
   socket.on('connect_error', () => {
@@ -802,8 +866,11 @@ function applyJoinState(response) {
 }
 
 function syncMasterVolume() {
+  // Always pass the REAL master volume — MediaMesh zeroes it internally
+  // while deafened (via _effectiveVolume). Passing 0 here used to clobber
+  // masterVolume, so undeafening stayed silent forever.
   const master = getSettings().volume ?? 1;
-  state.mesh?.setMasterVolume(state.deafened ? 0 : master);
+  state.mesh?.setMasterVolume(master);
 }
 
 function toggleDeafen(force) {
@@ -815,6 +882,7 @@ function toggleDeafen(force) {
   }
   if (els.deafenLabel) els.deafenLabel.textContent = t(state.deafened ? 'deafen.on' : 'deafen.off');
   playSound(state.deafened ? 'click' : 'success');
+  updatePresence();
 }
 
 function renderPinned() {
@@ -1013,6 +1081,7 @@ function bindRoomEvents(socket) {
     state.mesh?.closePeer(id);
     removeTyping(id);
     if (state.activeScreenId === id) state.activeScreenId = null;
+    if (state.hiddenScreenId === id) state.hiddenScreenId = null;
     renderTiles();
     renderPeople();
     updateStageHeader();
@@ -1028,8 +1097,11 @@ function bindRoomEvents(socket) {
       state.media.screen = participant.screenOn;
       state.handRaised = participant.handRaised;
     }
-    if (!participant.screenOn && state.activeScreenId === participant.id) {
-      state.activeScreenId = null;
+    if (!participant.screenOn) {
+      if (state.activeScreenId === participant.id) state.activeScreenId = null;
+      // The sharer stopped — forget any "stop watching" for them, or their
+      // NEXT share would start hidden.
+      if (state.hiddenScreenId === participant.id) state.hiddenScreenId = null;
     }
     if (participant.handRaised && participant.id !== state.selfId) playSound('hand');
     queueRender();
@@ -1180,7 +1252,8 @@ function updatePresence() {
     micOn: state.media.mic,
     cameraOn: state.media.camera,
     screenOn: state.media.screen,
-    handRaised: state.handRaised
+    handRaised: state.handRaised,
+    deafened: state.deafened
   });
   renderTiles();
   renderPeople();
@@ -1319,7 +1392,9 @@ function updateTile(tile, participant) {
   const badges = $('.tile-badges', tile);
   if (badges) {
     badges.replaceChildren();
-    if (!participant.micOn) {
+    if (participant.deafened) {
+      badges.append(badge('i-deafen', t('deafen.on'), 'is-deafen'));
+    } else if (!participant.micOn) {
       badges.append(badge('i-mic-off', t('chat.muted')));
     }
     if (participant.handRaised) {
@@ -1356,8 +1431,7 @@ function syncTileMedia() {
 
     const hasVideo =
       Boolean(participant?.cameraOn) &&
-      Boolean(stream) &&
-      stream.getVideoTracks().some((track) => track.readyState !== 'ended');
+      streamHasVideo(stream);
 
     tile.classList.toggle('has-video', hasVideo);
 
@@ -1384,6 +1458,13 @@ function renderPeople() {
     const avatar = document.createElement('span');
     avatar.className = `person-avatar tone-${toneFor(participant.id)}`;
     avatar.textContent = initials(participant.name);
+    // Green = online, red = offline (socket down => everyone red).
+    const isOnline = Boolean(state.online && state.socket?.connected);
+    item.classList.toggle('is-online', isOnline);
+    const dot = document.createElement('span');
+    dot.className = `presence-dot${isOnline ? ' is-on' : ''}`;
+    dot.title = isOnline ? t('status.connected') : t('status.offline');
+    avatar.append(dot);
 
     const body = document.createElement('span');
     body.className = 'person-body';
@@ -1442,6 +1523,7 @@ function flag(iconName, label) {
 }
 
 function participantState(participant) {
+  if (participant.deafened) return t('deafen.on');
   if (participant.screenOn) return t('chat.sharingScreen');
   if (participant.handRaised) return t('chat.handRaised');
   if (participant.cameraOn) return t('chat.cameraOn');
@@ -1475,6 +1557,9 @@ function updateScreenStage() {
     els.stage.classList.remove('is-sharing');
     els.screenVideo.srcObject = null;
     state.activeScreenId = null;
+    // Sharing ended while enlarged: shrink back cleanly.
+    els.screenStage.classList.remove('is-enlarged');
+    syncScreenEnlarge();
     return;
   }
 
@@ -1483,24 +1568,43 @@ function updateScreenStage() {
   }
 
   const participant = state.participants.get(state.activeScreenId);
+  // Discord-style: the user stopped watching this screen — stay hidden
+  // until they press "Watch screen" again. The sharer is unaffected.
+  const stoppedWatching = state.hiddenScreenId === state.activeScreenId;
+  if (els.screenWatchBtn) els.screenWatchBtn.hidden = !stoppedWatching;
+  if (stoppedWatching) {
+    els.screenStage.hidden = true;
+    els.stage.classList.remove('is-sharing');
+    els.screenVideo.srcObject = null;
+    return;
+  }
   const stream =
     state.activeScreenId === state.selfId
       ? state.mesh?.getLocalStream('screen')
       : state.mesh?.getRemoteStream(state.activeScreenId, 'screen');
 
-  const hasVideo =
-    Boolean(stream) && stream.getVideoTracks().some((track) => track.readyState !== 'ended');
+  // Attach the stream whenever a live track exists — the <video> renders
+  // frames as they arrive (this is what the working server path does).
+  // The old streamHasVideo gate (muted + videoWidth) stuck rooms on
+  // "Waiting…" forever. Placeholder only when there is no stream at all.
+  const hasStream = Boolean(stream) && stream.getVideoTracks().some((tr) => tr.readyState === 'live');
 
   els.screenStage.hidden = false;
   els.stage.classList.add('is-sharing');
 
-  if (hasVideo) {
+  if (hasStream) {
     if (els.screenVideo.srcObject !== stream) els.screenVideo.srcObject = stream;
     els.screenVideo.play?.().catch(() => {});
-    els.screenPlaceholder.hidden = true;
+    // Hide the placeholder as soon as real frames play (covers the gap
+    // between attach and first frame without a timer).
+    els.screenPlaceholder.hidden = streamHasVideo(stream);
   } else {
     els.screenVideo.srcObject = null;
     els.screenPlaceholder.hidden = false;
+  }
+  if (els.screenStopWatching) {
+    // Only viewers get the red button — the sharer stops via Share toggle.
+    els.screenStopWatching.hidden = state.activeScreenId === state.selfId;
   }
 
   if (state.activeScreenId === state.selfId) {
@@ -3125,6 +3229,7 @@ function setStatus(mode, key) {
   state.statusKey = key;
   state.online = mode === 'online';
   applyStatusLabel();
+  renderPeople();
 }
 
 function applyStatusLabel() {
@@ -3200,6 +3305,11 @@ function handleLanguageChange() {
 
 function handleShortcut(event) {
   if (event.key === 'Escape') {
+    if (els.screenStage?.classList.contains('is-enlarged')) {
+      els.screenStage.classList.remove('is-enlarged');
+      syncScreenEnlarge();
+      return;
+    }
     closeShortcuts();
     closeMicSettings();
     closeReactionMenu();
@@ -3303,47 +3413,224 @@ function dayLabel(timestamp) {
 
 /* ---------------- Soundboard ---------------- */
 
-function renderSoundboardGrid() {
-  if (!els.soundboardGrid) return;
-  els.soundboardGrid.replaceChildren();
-  // Built-in sounds with custom Hush emojis (public/emoji/).
-  for (const sound of SOUNDBOARD_SOUNDS) {
-    const button = el('button', 'soundboard-sound');
-    button.type = 'button';
-    button.dataset.sound = sound.id;
-    const face = el('span', 'soundboard-emoji');
-    face.append(customEmojiImage(sound.emojiId));
-    button.append(face);
-    const name = el('span', 'soundboard-name');
-    name.dataset.boardName = sound.id;
-    name.textContent = t(`soundboard.${sound.id}`);
-    button.append(name);
-    button.addEventListener('click', () => playBoardSound(sound.id));
-    els.soundboardGrid.append(button);
-  }
-  // This room's custom sounds (uploaded audio).
-  for (const sound of state.customSounds) {
+let boardImageDataUrl = '';
+let boardMyImageDataUrl = '';
+
+function previewBoardImage(input, preview) {
+  const file = input?.files?.[0];
+  if (!file) { if (preview) { preview.hidden = true; preview.removeAttribute('src'); } return; }
+  imageFileToDataUrl(file).then((url) => {
+    if (input === els.boardImage) boardImageDataUrl = url; else boardMyImageDataUrl = url;
+    if (preview) { preview.src = url; preview.hidden = false; }
+  }).catch(() => toast(t('soundboard.invalidFile'), 'error', 3600));
+}
+
+async function loadPersonalSounds() {
+  state.personalSounds = readIndex();
+  renderPersonalGrid();
+  const all = await listPersonalSounds();
+  if (Array.isArray(all) && all.length) { state.personalSounds = all; renderPersonalGrid(); }
+}
+
+async function addPersonalSound() {
+  const file = els.boardMyFile?.files?.[0];
+  if (!file) { toast(t('soundboard.invalidFile'), 'error', 3600); return; }
+  if (state.personalSounds.length >= MAX_PERSONAL_SOUNDS) { toast(t('soundboard.boardFull'), 'error', 3600); return; }
+  const invalid = validatePersonalAudio(file);
+  if (invalid) { toast(t('soundboard.invalidFile'), 'error', 3600); return; }
+  if (els.boardMyAddBtn) els.boardMyAddBtn.disabled = true;
+  try {
+    const record = {
+      id: (window.crypto?.randomUUID?.() || `snd-${Date.now()}-${Math.random().toString(36).slice(2)}`),
+      name: (els.boardMyName?.value || file.name.replace(/\.[^.]+$/, '')).slice(0, 40),
+      emojiId: els.boardMyEmoji?.value || 'star',
+      imageDataUrl: boardMyImageDataUrl || '',
+      audio: file,
+      mime: file.type || 'audio/mpeg',
+      size: file.size,
+      createdAt: Date.now()
+    };
+    await putPersonalSound(record);
+    state.personalSounds = await listPersonalSounds();
+    boardMyImageDataUrl = '';
+    if (els.boardMyFile) els.boardMyFile.value = '';
+    if (els.boardMyName) els.boardMyName.value = '';
+    if (els.boardMyImage) els.boardMyImage.value = '';
+    if (els.boardMyImagePreview) els.boardMyImagePreview.hidden = true;
+    renderPersonalGrid();
+    toast(t('soundboard.mySaved'), 'info', 2400);
+  } catch { toast(t('error.generic'), 'error', 3600); }
+  finally { if (els.boardMyAddBtn) els.boardMyAddBtn.disabled = false; }
+}
+
+function renderPersonalGrid() {
+  if (!els.soundboardMyGrid) return;
+  els.soundboardMyGrid.replaceChildren();
+  const list = state.personalSounds || [];
+  if (els.soundboardMyClear) els.soundboardMyClear.hidden = !list.length;
+  for (const sound of list) {
     const wrap = el('span', 'soundboard-sound-wrap');
     const button = el('button', 'soundboard-sound is-custom');
     button.type = 'button';
-    button.dataset.sound = sound.id;
-    const face = el('span', 'soundboard-emoji');
-    face.append(customEmojiImage(sound.emojiId || 'star'));
-    button.append(face);
-    button.append(el('span', 'soundboard-name', sound.name || t('soundboard.custom')));
     button.title = sound.name || '';
-    button.addEventListener('click', () => playBoardSound(sound.id));
-    wrap.append(button);
-    const mine = sound.addedById === state.selfId;
-    if (mine || state.isHost) {
-      const del = el('button', 'custom-btn-delete', '×');
-      del.type = 'button';
-      del.title = t('soundboard.delete');
-      del.setAttribute('aria-label', t('soundboard.delete'));
-      del.addEventListener('click', (event) => { event.stopPropagation(); deleteCustomSound(sound.id); });
-      wrap.append(del);
+    if (sound.imageDataUrl) {
+      const img = document.createElement('img');
+      img.className = 'soundboard-thumb';
+      img.src = sound.imageDataUrl;
+      img.alt = '';
+      button.append(img);
+    } else {
+      const face = el('span', 'soundboard-emoji');
+      face.append(customEmojiImage(sound.emojiId || 'star'));
+      button.append(face);
     }
-    els.soundboardGrid.append(wrap);
+    button.append(el('span', 'soundboard-name', sound.name || t('soundboard.custom')));
+    button.addEventListener('click', async () => {
+      const full = (await getPersonalSoundSafe(sound.id)) || sound;
+      const url = personalBlobUrl(full);
+      if (url) playBlobSound(url);
+    });
+    wrap.append(button);
+    const share = el('button', 'btn btn-quiet btn-sm soundboard-share', t('soundboard.myShare'));
+    share.type = 'button';
+    share.title = t('soundboard.myShare');
+    share.addEventListener('click', (event) => { event.stopPropagation(); sharePersonalSound(sound); });
+    const del = el('button', 'custom-btn-delete', '×');
+    del.type = 'button';
+    del.title = t('soundboard.myDelete');
+    del.setAttribute('aria-label', t('soundboard.myDelete'));
+    del.addEventListener('click', async (event) => { event.stopPropagation(); await deletePersonalSound(sound.id); state.personalSounds = (state.personalSounds || []).filter((s) => s.id !== sound.id); renderPersonalGrid(); });
+    wrap.append(share, del);
+    els.soundboardMyGrid.append(wrap);
+  }
+}
+
+async function getPersonalSoundSafe(id) {
+  try { const mod = await import('./soundboard-store.js'); return await mod.getPersonalSound(id); } catch { return null; }
+}
+
+async function sharePersonalSound(sound) {
+  const full = (await getPersonalSoundSafe(sound.id)) || sound;
+  if (!full) { toast(t('error.generic'), 'error', 3600); return; }
+  if (!state.online || !state.socket?.connected) { toast(t('chat.offlineUpload'), 'error', 3600); return; }
+  if (state.customSounds.length >= 12) { toast(t('soundboard.boardFull'), 'error', 3600); return; }
+  const blob = full.audio instanceof Blob ? full.audio : new Blob([full.audio], { type: full.mime || 'audio/mpeg' });
+  if (blob.size > 2 * 1024 * 1024) { toast(t('soundboard.invalidFile'), 'error', 3600); return; }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20000);
+  try {
+    const body = new FormData();
+    const fileName = `${(full.name || 'sound').replace(/[^a-zA-Z0-9_-]+/g, '-').slice(0, 30) || 'sound'}.mp3`;
+    body.append('file', new File([blob], fileName, { type: blob.type || full.mime || 'audio/mpeg' }));
+    body.append('name', full.name || 'Sound');
+    body.append('emojiId', full.emojiId || 'star');
+    if (full.imageDataUrl) {
+      const imgBlob = await (await fetch(full.imageDataUrl)).blob();
+      body.append('image', new File([imgBlob], 'cover.png', { type: imgBlob.type || 'image/png' }));
+    }
+    body.append('addedById', state.selfId || '');
+    body.append('addedBy', state.selfName || '');
+    if (boardImageDataUrl) {
+      try { const imgBlob = await (await fetch(boardImageDataUrl)).blob(); body.append('image', new File([imgBlob], 'cover.png', { type: imgBlob.type || 'image/png' })); } catch { /* image is optional */ }
+    }
+    const response = await fetch(`/api/rooms/${encodeURIComponent(state.code)}/soundboard`, { method: 'POST', body, signal: controller.signal });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error === 'board-full' ? 'soundboard.boardFull' : 'error.generic');
+    toast(t('soundboard.myShared'), 'info', 2400);
+  } catch (error) { toast(errorText(error, 'error.generic'), 'error', 3600); }
+  finally { clearTimeout(timeout); }
+}
+
+function stopWatchingScreen() {
+  if (!state.activeScreenId || state.activeScreenId === state.selfId) return;
+  state.hiddenScreenId = state.activeScreenId;
+  updateScreenStage();
+  toast(t('screen.stoppedWatching'), 'info', 2200);
+}
+
+// Enlarge = a fixed overlay layer over everything (always works, no
+// Fullscreen-API dependency — the old fullscreen attempt was invisible/
+// janky in Brave). Esc or the button shrinks back.
+function toggleScreenEnlarge() {
+  const stage = els.screenStage;
+  if (!stage || stage.hidden) return;
+  stage.classList.toggle('is-enlarged');
+  syncScreenEnlarge();
+}
+
+function syncScreenEnlarge() {
+  const stage = els.screenStage;
+  if (!stage) return;
+  const enlarged = stage.classList.contains('is-enlarged');
+  els.screenEnlarge?.setAttribute('aria-pressed', String(enlarged));
+  if (els.screenEnlarge) {
+    els.screenEnlarge.title = t(enlarged ? 'screen.shrink' : 'screen.enlarge');
+    els.screenEnlarge.setAttribute('aria-label', t(enlarged ? 'screen.shrink' : 'screen.enlarge'));
+  }
+}
+
+function renderSoundboardGrid() {
+  if (!els.soundboardGrid) return;
+  els.soundboardGrid.replaceChildren();
+  const q = state.boardQuery || '';
+  const matches = (id, label) => !q || String(id).includes(q) || String(label).toLowerCase().includes(q);
+  for (const cat of SOUNDBOARD_CATEGORIES) {
+    const items = SOUNDBOARD_SOUNDS.filter((s) => s.cat === cat.id && matches(s.id, t(`soundboard.${s.id}`)));
+    if (!items.length) continue;
+    els.soundboardGrid.append(el('h4', 'soundboard-cat-title', `${cat.en} · ${cat.ar}`));
+    const grid = el('div', 'soundboard-cat-grid');
+    for (const sound of items) {
+      const button = el('button', 'soundboard-sound');
+      button.type = 'button';
+      button.dataset.sound = sound.id;
+      const face = el('span', 'soundboard-emoji');
+      face.append(customEmojiImage(sound.emojiId));
+      button.append(face);
+      const name = el('span', 'soundboard-name');
+      name.dataset.boardName = sound.id;
+      name.textContent = t(`soundboard.${sound.id}`);
+      button.append(name);
+      button.addEventListener('click', () => playBoardSound(sound.id));
+      grid.append(button);
+    }
+    els.soundboardGrid.append(grid);
+  }
+  const custom = state.customSounds.filter((s) => matches(String(s.id), s.name || ''));
+  if (custom.length) {
+    els.soundboardGrid.append(el('h4', 'soundboard-cat-title', t('soundboard.roomTitle')));
+    const grid = el('div', 'soundboard-cat-grid');
+    for (const sound of custom) {
+      const wrap = el('span', 'soundboard-sound-wrap');
+      const button = el('button', 'soundboard-sound is-custom');
+      button.type = 'button';
+      button.dataset.sound = sound.id;
+      if (sound.imageUrl) {
+        const img = document.createElement('img');
+        img.className = 'soundboard-thumb';
+        img.src = sound.imageUrl;
+        img.alt = '';
+        button.append(img);
+      } else {
+        const face = el('span', 'soundboard-emoji');
+        face.append(customEmojiImage(sound.emojiId || 'star'));
+        button.append(face);
+      }
+      button.append(el('span', 'soundboard-name', sound.name || t('soundboard.custom')));
+      button.title = sound.name || '';
+      button.addEventListener('click', () => playBoardSound(sound.id));
+      wrap.append(button);
+      const mine = sound.addedById === state.selfId;
+      if (mine || state.isHost) {
+        const del = el('button', 'custom-btn-delete', '×');
+        del.type = 'button';
+        del.title = t('soundboard.delete');
+        del.setAttribute('aria-label', t('soundboard.delete'));
+        del.addEventListener('click', (event) => { event.stopPropagation(); deleteCustomSound(sound.id); });
+        wrap.append(del);
+      }
+      grid.append(wrap);
+    }
+    els.soundboardGrid.append(grid);
   }
   if (els.boardClearBtn) els.boardClearBtn.hidden = !(state.isHost && state.customSounds.length);
 }
@@ -3423,6 +3710,15 @@ function renderSoundboardLabels() {
   if (els.boardAddBtn) els.boardAddBtn.textContent = t('soundboard.add');
   if (els.boardClearBtn) els.boardClearBtn.textContent = t('soundboard.clearAll');
   if (els.boardName) els.boardName.placeholder = t('soundboard.addName');
+  if (els.soundboardSearch) els.soundboardSearch.placeholder = t('soundboard.search');
+  if (els.soundboardMyTitle) els.soundboardMyTitle.textContent = t('soundboard.myTitle');
+  if (els.soundboardMyNote) els.soundboardMyNote.textContent = t('soundboard.myNote');
+  if (els.boardMyTitle) els.boardMyTitle.textContent = t('soundboard.myTitle');
+  if (els.boardMyAddBtn) els.boardMyAddBtn.textContent = t('soundboard.myAdd');
+  if (els.boardMyName) els.boardMyName.placeholder = t('soundboard.addName');
+  if (els.screenStopLabel) els.screenStopLabel.textContent = t('screen.stopWatching');
+  syncScreenEnlarge();
+  if (els.screenWatchLabel) els.screenWatchLabel.textContent = t('screen.watchAgain');
   if (els.boardEmoji) els.boardEmoji.setAttribute('aria-label', t('soundboard.chooseEmoji'));
   if (els.soundboardBtn) {
     els.soundboardBtn.title = t('soundboard.title');

@@ -41,6 +41,22 @@ const VIDEO_CONSTRAINTS = {
   facingMode: 'user'
 };
 
+/**
+ * True only when a stream actually has frames to show. A WebRTC receiver
+ * track exists ('live') before the first frame arrives but is `muted` —
+ * treating it as video rendered a blank white tile (error/ screenshot).
+ * `muted` is the spec signal for "no frames yet"; videoWidth can lag
+ * behind it, so it must NOT gate rendering (it stuck the room screen
+ * stage on "Waiting…" forever while the server, which never checked it,
+ * played fine).
+ */
+export function streamHasVideo(stream) {
+  if (!stream || typeof stream.getVideoTracks !== 'function') return false;
+  return stream.getVideoTracks().some(
+    (track) => track.readyState === 'live' && !track.muted
+  );
+}
+
 function friendlyMediaError(error) {
   switch (error?.name) {
     case 'NotAllowedError':
@@ -218,6 +234,9 @@ export class MediaMesh {
     if (context && context.state === 'suspended') {
       context.resume().catch(() => {});
     }
+    // The mic processors own separate contexts — a suspended one sends
+    // silence to peers. Resume them too (call this on every gesture).
+    try { this.micFx?.resume?.(); } catch { /* ignore */ }
     for (const peer of this.peers.values()) {
       const media = peer.channels.media;
       if (media) this.#attachRemoteAudio(peer, media);
@@ -270,13 +289,26 @@ export class MediaMesh {
       } catch { /* ignore */ }
     }
     for (const [id, peer] of this.peers) {
-      if (peer.audioEl) peer.audioEl.volume = Math.min(1, this._effectiveVolume(id));
+      if (!peer.audioEl) continue;
+      const effective = this._effectiveVolume(id);
+      peer.audioEl.volume = Math.min(1, effective);
+      // Fallback (non-gain-routed) elements must actually mute when the
+      // effective volume is 0 (deafen / peer mute) — volume alone was
+      // being reset back to 1 by the settings volume applier.
+      if (!peer.audioEl.dataset.gainRouted) peer.audioEl.muted = effective === 0;
     }
   }
 
   setDeafened(value) {
     this.deafened = Boolean(value);
     this.setMasterVolume(this.masterVolume); // re-applies effective gain
+    // Belt and braces: mute fallback elements directly so nothing can
+    // un-silence them while deafened.
+    if (this.deafened) {
+      for (const peer of this.peers.values()) {
+        if (peer.audioEl && !peer.audioEl.dataset.gainRouted) peer.audioEl.muted = true;
+      }
+    }
   }
 
   #teardownPeerAudio(peerId) {
@@ -689,6 +721,7 @@ export class MediaMesh {
       if (!kind) return;
       const stream = channel.streams[kind];
       if (!stream.getTracks().includes(event.track)) stream.addTrack(event.track);
+      this.#watchMuted(event.track, () => this.onChange(peer.id, kind));
       if (kind === 'audio') this.#attachRemoteAudio(peer, channel);
       this.onChange(peer.id, kind);
     };
@@ -745,8 +778,20 @@ export class MediaMesh {
     channel.senders[kind] = transceiver.sender;
     const stream = channel.streams[kind];
     const track = transceiver.receiver.track;
-    if (track && !stream.getTracks().includes(track)) stream.addTrack(track);
+    if (track && !stream.getTracks().includes(track)) {
+      stream.addTrack(track);
+      // Placeholder receiver tracks start muted — flip the tile when the
+      // first real frame lands (unmute) and back when it stalls (mute).
+      this.#watchMuted(track, () => this.onChange(peer.id, kind));
+    }
     if (kind === 'audio') this.#attachRemoteAudio(peer, channel);
+  }
+
+  #watchMuted(track, notify) {
+    if (!track || typeof track.addEventListener !== 'function') return;
+    for (const type of ['mute', 'unmute', 'ended']) {
+      try { track.addEventListener(type, notify, { passive: true }); } catch { /* ignore */ }
+    }
   }
 
   #bindReceivers(peer, channel) {
@@ -793,11 +838,14 @@ export class MediaMesh {
     if (!stream?.getAudioTracks?.().length) return;
 
     // WebAudio path: stream -> GainNode -> destination. This allows
-    // per-peer boost above 100% (up to 200%). If AudioContext fails we
-    // fall back to the plain <audio> element (clamped to 1.0).
+    // per-peer boost above 100% (up to 200%). Only route when the context
+    // is actually RUNNING — a suspended context (autoplay policy: created
+    // outside a user gesture) outputs silence while the element stays
+    // muted, which made nobody hear anybody in rooms AND servers.
+    // Otherwise fall back to the plain <audio> element (clamped to 1.0).
     const context = this.#ensureAudioContext();
     let routed = false;
-    if (context) {
+    if (context && context.state === 'running') {
       try {
         context.resume?.().catch(() => {});
         if (!this.peerAudio.has(peer.id)) {

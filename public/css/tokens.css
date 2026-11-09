@@ -11,6 +11,14 @@
   --color-fog: #e9e9e9;
   --color-paper: #f6f6f6;
   --color-white: #ffffff;
+  /* Presence: green = online/connected, red = offline/disconnected */
+  --color-online: #22c55e;
+  --color-offline: #ef4444;
+  --color-connecting: #f59e0b;
+  /* Video tiles are always dark so a frame-less track never shows white
+     (in dark theme --color-ink is near-white text — never use it as a
+     video background). */
+  --color-video-bg: #05070c;
 
   /* Semantic surfaces (theme-aware aliases) */
   --color-bg: var(--color-paper);

@@ -21,7 +21,7 @@
  * No I/O, no timers, no DOM — unit-testable in plain Node.
  */
 
-export const PING_OP_VERSION = '1.1.0';
+export const PING_OP_VERSION = '1.2.0';
 export const PING_OP_NAME = 'ping-op';
 
 export const MAX_SAMPLES = 60;
@@ -150,6 +150,9 @@ export function createPingOp({ maxSamples = MAX_SAMPLES, displayWindow = DISPLAY
       lossRate: lossRate(),
       quality: qualityFor(displayed),
       score: getScore(),
+      // v1.2: trend rides along in getStats (was getHealth-only), so
+      // /api/health ping dashboards get improving/worsening for free.
+      trend: getTrend(),
       samplesCount: samples.length
     };
   }

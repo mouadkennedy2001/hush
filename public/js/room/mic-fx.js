@@ -103,6 +103,11 @@ export class MicFx {
     return Boolean(this.settings.enabled);
   }
 
+  /** Resume the processing context (autoplay policy needs a gesture). */
+  resume() {
+    try { this.context?.resume?.().catch(() => {}); } catch { /* ignore */ }
+  }
+
   /** Returns the track to send to peers (processed, or raw as fallback). */
   async process(rawTrack) {
     this.rawTrack = rawTrack;

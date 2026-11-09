@@ -2,11 +2,12 @@
 // Own chat (server:chat:*), own voice channels (MediaMesh + server webrtc
 // relay), permanent server + saved channel history, invite link to join.
 
-import { MediaMesh } from './room/media.js';
+import { MediaMesh, streamHasVideo } from './room/media.js';
 import { initI18n, onLanguageChange, t, locale } from './i18n.js';
 import { initTheme } from './theme.js';
 import { startPing } from './ping.js';
-import { SOUNDBOARD_SOUNDS, playSoundboard, getSoundboardVolume, setSoundboardVolume, isSoundboardId, soundboardEmojiId } from './soundboard.js';
+import { SOUNDBOARD_SOUNDS, SOUNDBOARD_CATEGORIES, playSoundboard, playCustomSound, playBlobSound, getSoundboardVolume, setSoundboardVolume, isSoundboardId, soundboardEmojiId } from './soundboard.js';
+import { listPersonalSounds, putPersonalSound, deletePersonalSound, clearPersonalSounds, readIndex, personalBlobUrl, imageFileToDataUrl, validatePersonalAudio, MAX_PERSONAL_SOUNDS } from './soundboard-store.js';
 import { CUSTOM_EMOJIS, CUSTOM_STICKERS, STICKER_CATEGORIES, EMOJI_CATEGORIES, customEmojiImage, customStickerImage, isCustomSticker, isGifUrl, gifImage, splitEmojiShortcodes, preloadCustomEmojis, pushRecentEmoji, getRecentEmojis, searchEmojis, searchStickers, isEmojiOnlyMessage, emojiLabel, stickerLabel } from './emoji.js';
 import { buildGifPanel, buildStickerMenu, setStickerMenuDeps, openStickerCreator } from './gif-panel.js';
 setStickerMenuDeps({ CUSTOM_STICKERS, STICKER_CATEGORIES, customStickerImage, searchStickers, stickerLabel });
@@ -42,6 +43,22 @@ const els = {
   screenBtn: $('#screen-btn'), screenLabelBtn: $('#screen-label-btn'), leaveVoiceBtn: $('#leave-voice-btn'),
   leaveVoiceChip: $('#leave-voice-chip'), leaveVoiceChipLabel: $('#leave-voice-chip-label'),
   membersList: $('#members-list'), membersKicker: $('#members-kicker'),
+  soundboardSearch: $('#soundboard-search'), soundboardMyGrid: $('#soundboard-my-grid'),
+  soundboardMyTitle: $('#soundboard-my-title'), soundboardMyNote: $('#soundboard-my-note'),
+  soundboardMyClear: $('#soundboard-my-clear'), boardMyForm: $('#board-my-form'),
+  boardMyFile: $('#board-my-file'), boardMyName: $('#board-my-name'), boardMyImage: $('#board-my-image'),
+  boardMyImagePreview: $('#board-my-image-preview'), boardMyEmoji: $('#board-my-emoji'),
+  boardMyAddBtn: $('#board-my-add-btn'),
+  deafenBtn: $('#deafen-btn'), deafenLabel: $('#deafen-label'),
+  serverScreenStopWatching: $('#server-screen-stop-watching'), serverScreenStopLabel: $('#server-screen-stop-label'),
+  serverScreenEnlarge: $('#server-screen-enlarge'),
+  serverScreenWatchBtn: $('#server-screen-watch-btn'), serverScreenWatchLabel: $('#server-screen-watch-label'),
+  serverSettings: $('#server-settings'), serverSettingsName: $('#server-settings-name'),
+  serverSettingsDesc: $('#server-settings-desc'), serverSettingsIcon: $('#server-settings-icon'),
+  serverSettingsPreview: $('#server-settings-preview'), serverSettingsRemoveIcon: $('#server-settings-remove-icon'),
+  serverSettingsSave: $('#server-settings-save'),
+  serverSettingsNameLabel: $('#server-settings-name-label'), serverSettingsDescLabel: $('#server-settings-desc-label'),
+  serverSettingsIconLabel: $('#server-settings-icon-label'), serverSettingsTitle: $('#server-settings-title'),
   imageLightbox: $('#image-lightbox'), imageLightboxBackdrop: $('#image-lightbox-backdrop'),
   imageLightboxImg: $('#image-lightbox-img'), imageLightboxCaption: $('#image-lightbox-caption'),
   imageLightboxDownload: $('#image-lightbox-download'), imageLightboxClose: $('#image-lightbox-close'),
@@ -58,7 +75,8 @@ const state = {
   joined: false, emojiCat: 'all', emojiQuery: '', activeScreenId: null,
   sessionToken: '', loadSeq: 0, drafts: new Map(),
   lastTextChannelId: null, voiceOccupancy: {}, tempOccupancy: {},
-  joiningVoice: false, creatingRoom: false
+  joiningVoice: false, creatingRoom: false,
+  deafened: false, customSounds: [], personalSounds: [], boardQuery: '', hiddenScreenId: null
 };
 
 // A1: sessions/tokens — store the opaque token from join ack; REST calls
@@ -184,12 +202,36 @@ function bindEvents() {
     document.querySelector('#members-toggle')?.setAttribute('aria-expanded', String(show));
   });
   els.soundboardVolume?.addEventListener('input', () => setSoundboardVolume(Number(els.soundboardVolume.value) / 100));
+  els.deafenBtn?.addEventListener('click', () => toggleDeafen());
+  els.serverScreenStopWatching?.addEventListener('click', (e) => { e.stopPropagation(); stopWatchingScreen(); });
+  els.serverScreenEnlarge?.addEventListener('click', (e) => { e.stopPropagation(); toggleScreenEnlarge(); });
+  els.serverScreenVideo?.addEventListener('playing', () => {});
+  els.serverScreenStopWatching?.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); stopWatchingScreen(); } });
+  els.serverScreenWatchBtn?.addEventListener('click', () => { state.hiddenScreenId = null; updateScreenStage(); });
+  els.soundboardSearch?.addEventListener('input', () => { state.boardQuery = els.soundboardSearch.value.trim().toLowerCase(); renderSoundboardGrid(); });
+  els.boardMyForm?.addEventListener('submit', (e) => { e.preventDefault(); addPersonalSound(); });
+  els.soundboardMyClear?.addEventListener('click', async () => { await clearPersonalSounds(); state.personalSounds = []; renderPersonalGrid(); });
+  els.boardMyImage?.addEventListener('change', () => { const f = els.boardMyImage?.files?.[0]; if (!f) return; imageFileToDataUrl(f).then((u) => { boardMyImageDataUrl = u; if (els.boardMyImagePreview) { els.boardMyImagePreview.src = u; els.boardMyImagePreview.hidden = false; } }).catch(() => {}); });
+  els.serverSettings?.addEventListener('submit', (e) => { e.preventDefault(); saveServerSettings(); });
+  els.serverSettingsRemoveIcon?.addEventListener('click', () => removeServerIcon());
+  if (els.boardMyEmoji) {
+    els.boardMyEmoji.replaceChildren();
+    for (const emoji of CUSTOM_EMOJIS) {
+      const option = document.createElement('option');
+      option.value = emoji.id; option.textContent = emoji.id; els.boardMyEmoji.append(option);
+    }
+  }
+  loadPersonalSounds();
   els.micBtn?.addEventListener('click', toggleMic);
   els.cameraBtn?.addEventListener('click', toggleCamera);
   els.screenBtn?.addEventListener('click', toggleScreen);
   els.leaveVoiceBtn?.addEventListener('click', leaveVoice);
   els.leaveVoiceChip?.addEventListener('click', leaveVoice);
   els.createTempRoomForm?.addEventListener('submit', (e) => { e.preventDefault(); createTempRoom(); });
+  // Autoplay policy: resume audio contexts on any gesture (see room.js).
+  const resumeMeshAudio = () => { try { state.mesh?.resumeAudio(); } catch { /* ignore */ } };
+  document.addEventListener('pointerdown', resumeMeshAudio, { passive: true });
+  document.addEventListener('keydown', resumeMeshAudio);
   document.addEventListener('click', (e) => {
     if (els.emojiMenu && !els.emojiMenu.hidden && !els.emojiMenu.contains(e.target) && !els.emojiBtn?.contains(e.target)) closeEmojiMenu();
     if (els.gifMenu && !els.gifMenu.hidden && !els.gifMenu.contains(e.target) && !els.gifBtn?.contains(e.target)) closeGifMenu();
@@ -339,6 +381,24 @@ function applyServerUi() {
   const ownerCheck = isOwner();
   if (els.regenInvite) els.regenInvite.hidden = !ownerCheck;
   if (els.dangerZone) els.dangerZone.hidden = !ownerCheck;
+  if (els.serverSettings) {
+    els.serverSettings.hidden = !ownerCheck;
+    if (ownerCheck) {
+      if (els.serverSettingsName && document.activeElement !== els.serverSettingsName) els.serverSettingsName.value = server.name || '';
+      if (els.serverSettingsDesc && document.activeElement !== els.serverSettingsDesc) els.serverSettingsDesc.value = server.description || '';
+      if (els.serverSettingsPreview) {
+        if (server.iconUrl) { els.serverSettingsPreview.src = server.iconUrl; els.serverSettingsPreview.hidden = false; }
+        else els.serverSettingsPreview.hidden = true;
+      }
+      if (els.serverSettingsRemoveIcon) els.serverSettingsRemoveIcon.hidden = !server.iconUrl;
+      if (els.serverSettingsNameLabel) els.serverSettingsNameLabel.textContent = t('server.settingsName');
+      if (els.serverSettingsDescLabel) els.serverSettingsDescLabel.textContent = t('server.settingsDesc');
+      if (els.serverSettingsIconLabel) els.serverSettingsIconLabel.textContent = t('server.settingsIcon');
+      if (els.serverSettingsTitle) els.serverSettingsTitle.textContent = t('server.settings');
+      if (els.serverSettingsSave) els.serverSettingsSave.textContent = t('server.settingsSave');
+    }
+  }
+  if (Array.isArray(server.customSounds)) state.customSounds = server.customSounds;
   // N3: add-channel form is owner-only (was visible to everyone while the
   // server rejected members with a generic toast).
   if (els.addChannelForm) els.addChannelForm.hidden = !ownerCheck;
@@ -1437,12 +1497,23 @@ function updateScreenStage() {
   if (!id) {
     els.serverScreenStage.hidden = true;
     if (els.serverScreenVideo) els.serverScreenVideo.srcObject = null;
+    if (els.serverScreenWatchBtn) els.serverScreenWatchBtn.hidden = true;
+    els.serverScreenStage.classList.remove('is-enlarged');
+    syncScreenEnlarge();
+    return;
+  }
+  const stoppedWatching = state.hiddenScreenId === id;
+  if (els.serverScreenWatchBtn) els.serverScreenWatchBtn.hidden = !stoppedWatching;
+  if (stoppedWatching) {
+    els.serverScreenStage.hidden = true;
+    if (els.serverScreenVideo) els.serverScreenVideo.srcObject = null;
     return;
   }
   const stream = id === state.selfId
     ? state.mesh?.getLocalStream('screen')
     : state.mesh?.getRemoteStream(id, 'screen');
   els.serverScreenStage.hidden = false;
+  if (els.serverScreenStopWatching) els.serverScreenStopWatching.hidden = id === state.selfId;
   if (els.serverScreenVideo) {
     if (stream && els.serverScreenVideo.srcObject !== stream) els.serverScreenVideo.srcObject = stream;
     if (!stream) els.serverScreenVideo.srcObject = null;
@@ -1480,7 +1551,7 @@ function updateVoiceControls() {
   if (els.screenLabelBtn) els.screenLabelBtn.textContent = scr ? t('control.stopShare') : t('control.share');
 }
 function updatePresence() {
-  state.socket?.emit('server:presence', { micOn: state.mesh?.isOn('audio') ?? false, cameraOn: state.mesh?.isOn('camera') ?? false, screenOn: state.mesh?.isOn('screen') ?? false });
+  state.socket?.emit('server:presence', { micOn: state.mesh?.isOn('audio') ?? false, cameraOn: state.mesh?.isOn('camera') ?? false, screenOn: state.mesh?.isOn('screen') ?? false, deafened: state.deafened });
 }
 
 function handleMeshChange(peerId, kind) {
@@ -1528,8 +1599,9 @@ function renderTiles() {
     const video = document.createElement('video');
     video.className = 'tile-video';
     video.autoplay = true; video.playsInline = true; video.muted = true;
+    const cameraOn = id === state.selfId ? state.mesh?.isOn('camera') : onlineState?.cameraOn;
     const stream = id === state.selfId ? state.mesh?.getLocalStream('camera') : state.mesh?.getRemoteStream(id, 'camera');
-    const hasVideo = Boolean(stream?.getVideoTracks?.().some((tr) => tr.readyState !== 'ended'));
+    const hasVideo = Boolean(cameraOn) && streamHasVideo(stream);
     tile.classList.toggle('has-video', hasVideo);
     if (hasVideo) { video.srcObject = stream; video.play?.().catch(() => {}); }
     const avatar = document.createElement('div');
@@ -1541,7 +1613,12 @@ function renderTiles() {
     const badges = document.createElement('span');
     badges.className = 'tile-badges';
     badges.setAttribute('aria-hidden', 'false');
-    if (micOn === false) {
+    const deafened = id === state.selfId ? state.deafened : onlineState?.deafened;
+    if (deafened) {
+      const b = el('span', 'tile-badge', t('deafen.on'));
+      b.setAttribute('aria-label', t('deafen.on'));
+      badges.append(b);
+    } else if (micOn === false) {
       const b = el('span', 'tile-badge', t('chat.muted'));
       b.setAttribute('aria-label', t('chat.muted'));
       badges.append(b);
@@ -1562,6 +1639,7 @@ function renderMembers() {
   const activeId = document.activeElement?.closest?.('[data-member-key]')?.getAttribute('data-member-key') || '';
   els.membersList.replaceChildren();
   const onlineDeviceIds = new Set([...state.online.values()].map((p) => p.deviceId).filter(Boolean));
+  const onlineMemberIds = new Set([...state.online.values()].map((p) => p.memberId).filter(Boolean));
   const all = new Map();
   for (const m of state.server?.members || []) {
     const key = m.memberId || m.deviceId || m.name;
@@ -1581,7 +1659,7 @@ function renderMembers() {
     const isSelf = (state.selfMemberId && member.memberId === state.selfMemberId)
       || member.isYou || (member.deviceId && member.deviceId === state.deviceId);
     const isOwnerMember = member.isOwner;
-    const isOnline = isSelf || (member.deviceId && onlineDeviceIds.has(member.deviceId));
+    const isOnline = isSelf || (member.memberId && onlineMemberIds.has(member.memberId)) || (member.deviceId && onlineDeviceIds.has(member.deviceId));
     li.classList.toggle('is-online', isOnline);
     const avatar = document.createElement('span');
     avatar.className = `person-avatar tone-${toneFor(member.key)}`;
@@ -1708,9 +1786,19 @@ function bindSocketEvents(socket) {
     renderTiles();
     applyServerUi();
   });
+  socket.on('server:soundboard:added', ({ sound } = {}) => {
+    if (!sound?.id) return;
+    if (!state.customSounds.some((s) => s.id === sound.id)) state.customSounds.push(sound);
+    renderSoundboardGrid();
+  });
+  socket.on('server:soundboard:deleted', ({ id } = {}) => {
+    state.customSounds = state.customSounds.filter((s) => s.id !== id);
+    renderSoundboardGrid();
+  });
   socket.on('server:peer:left', ({ id, name } = {}) => {
     if (!id) return;
     state.online.delete(id);
+    if (state.hiddenScreenId === id) state.hiddenScreenId = null;
     state.typingMap.delete(id);
     state.mesh?.closePeer(id);
     renderMembers();
@@ -1718,9 +1806,9 @@ function bindSocketEvents(socket) {
     renderTyping([...state.typingMap.values()]);
     renderChannels();
   });
-  socket.on('server:peer:updated', ({ id, name, micOn, screenOn } = {}) => {
+  socket.on('server:peer:updated', ({ id, name, micOn, screenOn, deafened } = {}) => {
     const existing = state.online.get(id) || { id, name };
-    existing.micOn = micOn; existing.name = name || existing.name; existing.screenOn = screenOn;
+    existing.micOn = micOn; existing.name = name || existing.name; existing.screenOn = screenOn; existing.deafened = deafened;
     state.online.set(id, existing);
     // Keep occupancy names fresh (server is source of truth, this is a hint).
     for (const [cid, list] of Object.entries(state.voiceOccupancy || {})) {
@@ -1776,7 +1864,8 @@ function bindSocketEvents(socket) {
     }
     renderTyping([...state.typingMap.values()]);
   });
-  socket.on('server:soundboard:play', ({ id } = {}) => {
+  socket.on('server:soundboard:play', ({ id, custom = false, url = '', imageUrl = '', emojiId = '', name = '' } = {}) => {
+    if (custom && url) { playCustomSound(url); return; }
     if (isSoundboardId(id)) playSoundboard(id);
   });
   socket.on('server:deleted', () => {
@@ -1794,19 +1883,167 @@ function scrollLatest(behavior) {
 
 /* ---------------- Soundboard (server) ---------------- */
 
-function renderSoundboardGrid() {
-  els.soundboardGrid.replaceChildren();
-  for (const sound of SOUNDBOARD_SOUNDS) {
-    const button = el('button', 'soundboard-sound');
+let boardMyImageDataUrl = '';
+
+async function loadPersonalSounds() {
+  state.personalSounds = readIndex();
+  renderPersonalGrid();
+  const all = await listPersonalSounds();
+  if (Array.isArray(all) && all.length) { state.personalSounds = all; renderPersonalGrid(); }
+}
+
+async function addPersonalSound() {
+  const file = els.boardMyFile?.files?.[0];
+  if (!file) { toast(t('soundboard.invalidFile'), 'error', 3600); return; }
+  if (state.personalSounds.length >= MAX_PERSONAL_SOUNDS) { toast(t('soundboard.boardFull'), 'error', 3600); return; }
+  if (validatePersonalAudio(file)) { toast(t('soundboard.invalidFile'), 'error', 3600); return; }
+  if (els.boardMyAddBtn) els.boardMyAddBtn.disabled = true;
+  try {
+    const record = {
+      id: (window.crypto?.randomUUID?.() || `snd-${Date.now()}-${Math.random().toString(36).slice(2)}`),
+      name: (els.boardMyName?.value || file.name.replace(/\.[^.]+$/, '')).slice(0, 40),
+      emojiId: els.boardMyEmoji?.value || 'star',
+      imageDataUrl: boardMyImageDataUrl || '',
+      audio: file,
+      mime: file.type || 'audio/mpeg',
+      size: file.size,
+      createdAt: Date.now()
+    };
+    await putPersonalSound(record);
+    state.personalSounds = await listPersonalSounds();
+    boardMyImageDataUrl = '';
+    if (els.boardMyFile) els.boardMyFile.value = '';
+    if (els.boardMyName) els.boardMyName.value = '';
+    if (els.boardMyImage) els.boardMyImage.value = '';
+    if (els.boardMyImagePreview) els.boardMyImagePreview.hidden = true;
+    renderPersonalGrid();
+    toast(t('soundboard.mySaved'), 'info', 2400);
+  } catch { toast(t('error.generic'), 'error', 3600); }
+  finally { if (els.boardMyAddBtn) els.boardMyAddBtn.disabled = false; }
+}
+
+function renderPersonalGrid() {
+  if (!els.soundboardMyGrid) return;
+  els.soundboardMyGrid.replaceChildren();
+  const list = state.personalSounds || [];
+  if (els.soundboardMyClear) els.soundboardMyClear.hidden = !list.length;
+  for (const sound of list) {
+    const wrap = el('span', 'soundboard-sound-wrap');
+    const button = el('button', 'soundboard-sound is-custom');
     button.type = 'button';
-    const face = el('span', 'soundboard-emoji');
-    face.append(customEmojiImage(sound.emojiId));
-    button.append(face, el('span', 'soundboard-name', t(`soundboard.${sound.id}`)));
-    button.addEventListener('click', () => {
-      playSoundboard(sound.id);
-      state.socket?.emit('server:soundboard:play', { id: sound.id });
+    button.title = sound.name || '';
+    if (sound.imageDataUrl) {
+      const img = document.createElement('img');
+      img.className = 'soundboard-thumb';
+      img.src = sound.imageDataUrl;
+      img.alt = '';
+      button.append(img);
+    } else {
+      const face = el('span', 'soundboard-emoji');
+      face.append(customEmojiImage(sound.emojiId || 'star'));
+      button.append(face);
+    }
+    button.append(el('span', 'soundboard-name', sound.name || t('soundboard.custom')));
+    button.addEventListener('click', async () => {
+      let full = sound;
+      try { full = (await import('./soundboard-store.js')).getPersonalSound(sound.id) || sound; } catch { /* use index copy */ }
+      const url = personalBlobUrl(full);
+      if (url) playBlobSound(url);
     });
-    els.soundboardGrid.append(button);
+    wrap.append(button);
+    const share = el('button', 'btn btn-quiet btn-sm soundboard-share', t('soundboard.myShareServer'));
+    share.type = 'button';
+    share.title = t('soundboard.myShareServer');
+    share.addEventListener('click', (event) => { event.stopPropagation(); sharePersonalSound(sound); });
+    const del = el('button', 'custom-btn-delete', '×');
+    del.type = 'button';
+    del.title = t('soundboard.myDelete');
+    del.setAttribute('aria-label', t('soundboard.myDelete'));
+    del.addEventListener('click', async (event) => { event.stopPropagation(); await deletePersonalSound(sound.id); state.personalSounds = (state.personalSounds || []).filter((s) => s.id !== sound.id); renderPersonalGrid(); });
+    wrap.append(share, del);
+    els.soundboardMyGrid.append(wrap);
+  }
+}
+
+async function sharePersonalSound(sound) {
+  let full = sound;
+  try { full = (await import('./soundboard-store.js')).getPersonalSound(sound.id) || sound; } catch { /* index copy */ }
+  if (!full || !state.socket?.connected) { toast(t('chat.offlineUpload'), 'error', 3600); return; }
+  if ((state.customSounds || []).length >= 24) { toast(t('soundboard.boardFull'), 'error', 3600); return; }
+  const blob = full.audio instanceof Blob ? full.audio : new Blob([full.audio], { type: full.mime || 'audio/mpeg' });
+  if (blob.size > 2 * 1024 * 1024) { toast(t('soundboard.invalidFile'), 'error', 3600); return; }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20000);
+  try {
+    const body = new FormData();
+    const fileName = `${(full.name || 'sound').replace(/[^a-zA-Z0-9_-]+/g, '-').slice(0, 30) || 'sound'}.mp3`;
+    body.append('file', new File([blob], fileName, { type: blob.type || full.mime || 'audio/mpeg' }));
+    body.append('name', full.name || 'Sound');
+    body.append('emojiId', full.emojiId || 'star');
+    if (full.imageDataUrl) {
+      const imgBlob = await (await fetch(full.imageDataUrl)).blob();
+      body.append('image', new File([imgBlob], 'cover.png', { type: imgBlob.type || 'image/png' }));
+    }
+    const headers = { ...authHeaders(), 'X-Session-Token': state.sessionToken || '' };
+    const res = await fetch(`/api/servers/${encodeURIComponent(state.serverId)}/soundboard?deviceId=${encodeURIComponent(state.deviceId)}`, { method: 'POST', body, headers, signal: controller.signal });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error === 'board-full' ? 'soundboard.boardFull' : 'error.generic');
+    toast(t('soundboard.myShared'), 'info', 2400);
+  } catch (error) { toast(t('error.generic'), 'error', 3600); }
+  finally { clearTimeout(timeout); }
+}
+
+function renderSoundboardGrid() {
+  if (!els.soundboardGrid) return;
+  els.soundboardGrid.replaceChildren();
+  const q = state.boardQuery || '';
+  const matches = (id, label) => !q || String(id).includes(q) || String(label).toLowerCase().includes(q);
+  for (const cat of SOUNDBOARD_CATEGORIES) {
+    const items = SOUNDBOARD_SOUNDS.filter((s) => s.cat === cat.id && matches(s.id, t(`soundboard.${s.id}`)));
+    if (!items.length) continue;
+    els.soundboardGrid.append(el('h4', 'soundboard-cat-title', `${cat.en} · ${cat.ar}`));
+    const grid = el('div', 'soundboard-cat-grid');
+    for (const sound of items) {
+      const button = el('button', 'soundboard-sound');
+      button.type = 'button';
+      const face = el('span', 'soundboard-emoji');
+      face.append(customEmojiImage(sound.emojiId));
+      button.append(face, el('span', 'soundboard-name', t(`soundboard.${sound.id}`)));
+      button.addEventListener('click', () => {
+        playSoundboard(sound.id);
+        state.socket?.emit('server:soundboard:play', { id: sound.id });
+      });
+      grid.append(button);
+    }
+    els.soundboardGrid.append(grid);
+  }
+  const custom = (state.customSounds || []).filter((s) => matches(String(s.id), s.name || ''));
+  if (custom.length) {
+    els.soundboardGrid.append(el('h4', 'soundboard-cat-title', t('soundboard.serverTitle')));
+    const grid = el('div', 'soundboard-cat-grid');
+    for (const sound of custom) {
+      const button = el('button', 'soundboard-sound is-custom');
+      button.type = 'button';
+      button.title = sound.name || '';
+      if (sound.imageUrl) {
+        const img = document.createElement('img');
+        img.className = 'soundboard-thumb';
+        img.src = sound.imageUrl;
+        img.alt = '';
+        button.append(img);
+      } else {
+        const face = el('span', 'soundboard-emoji');
+        face.append(customEmojiImage(sound.emojiId || 'star'));
+        button.append(face);
+      }
+      button.append(el('span', 'soundboard-name', sound.name || t('soundboard.custom')));
+      button.addEventListener('click', () => {
+        if (sound.url) playCustomSound(sound.url);
+        state.socket?.emit('server:soundboard:play', { id: sound.id });
+      });
+      grid.append(button);
+    }
+    els.soundboardGrid.append(grid);
   }
   if (els.soundboardVolume) els.soundboardVolume.value = String(Math.round(getSoundboardVolume() * 100));
 }
@@ -1815,6 +2052,91 @@ function toggleSoundboard(force) {
   els.soundboardPanel.hidden = !open;
   els.soundboardBtn.setAttribute('aria-pressed', String(open));
   els.soundboardBtn?.setAttribute('aria-expanded', String(open));
+}
+
+function toggleDeafen(force) {
+  state.deafened = typeof force === 'boolean' ? force : !state.deafened;
+  state.mesh?.setDeafened(state.deafened);
+  if (els.deafenBtn) {
+    els.deafenBtn.setAttribute('aria-pressed', String(state.deafened));
+    els.deafenBtn.classList.toggle('is-active', state.deafened);
+  }
+  if (els.deafenLabel) els.deafenLabel.textContent = t(state.deafened ? 'deafen.on' : 'deafen.off');
+  playSound(state.deafened ? 'click' : 'success');
+  updatePresence();
+  renderTiles();
+}
+
+function stopWatchingScreen() {
+  if (!state.activeScreenId || state.activeScreenId === state.selfId) return;
+  state.hiddenScreenId = state.activeScreenId;
+  updateScreenStage();
+  toast(t('screen.stoppedWatching'), 'info', 2200);
+}
+
+// Enlarge = fixed overlay layer (always works, no Fullscreen API).
+function toggleScreenEnlarge() {
+  const stage = els.serverScreenStage;
+  if (!stage || stage.hidden) return;
+  stage.classList.toggle('is-enlarged');
+  syncScreenEnlarge();
+}
+
+function syncScreenEnlarge() {
+  const stage = els.serverScreenStage;
+  if (!stage) return;
+  const enlarged = stage.classList.contains('is-enlarged');
+  els.serverScreenEnlarge?.setAttribute('aria-pressed', String(enlarged));
+  if (els.serverScreenEnlarge) {
+    els.serverScreenEnlarge.title = t(enlarged ? 'screen.shrink' : 'screen.enlarge');
+    els.serverScreenEnlarge.setAttribute('aria-label', t(enlarged ? 'screen.shrink' : 'screen.enlarge'));
+  }
+}
+
+async function saveServerSettings() {
+  const name = els.serverSettingsName?.value?.trim();
+  const description = els.serverSettingsDesc?.value ?? '';
+  if (!name) { els.serverSettingsName?.focus(); return; }
+  if (els.serverSettingsSave) els.serverSettingsSave.disabled = true;
+  try {
+    const headers = { 'Content-Type': 'application/json', ...authHeaders() };
+    const res = await fetch(`/api/servers/${encodeURIComponent(state.serverId)}`, {
+      method: 'PATCH', headers,
+      body: JSON.stringify({ deviceId: state.deviceId, name, description })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.server) throw new Error(data.error || 'save-failed');
+    state.server = data.server;
+    // Image upload is a separate owner-only endpoint (file <= 2MB).
+    const file = els.serverSettingsIcon?.files?.[0];
+    if (file) {
+      const form = new FormData();
+      form.append('file', file);
+      const iconRes = await fetch(`/api/servers/${encodeURIComponent(state.serverId)}/icon?deviceId=${encodeURIComponent(state.deviceId)}`, { method: 'POST', body: form, headers: { ...authHeaders() } });
+      const iconData = await iconRes.json().catch(() => ({}));
+      if (!iconRes.ok || !iconData.server) throw new Error(iconData.error || 'icon-failed');
+      state.server = iconData.server;
+      if (els.serverSettingsIcon) els.serverSettingsIcon.value = '';
+    }
+    applyServerUi();
+    toast(t('server.settingsSaved'), 'info', 2400);
+  } catch { toast(t('error.generic'), 'error', 3600); }
+  finally { if (els.serverSettingsSave) els.serverSettingsSave.disabled = false; }
+}
+
+async function removeServerIcon() {
+  try {
+    const headers = { 'Content-Type': 'application/json', ...authHeaders() };
+    const res = await fetch(`/api/servers/${encodeURIComponent(state.serverId)}`, {
+      method: 'PATCH', headers,
+      body: JSON.stringify({ deviceId: state.deviceId, iconUrl: '' })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.server) throw new Error(data.error || 'save-failed');
+    state.server = data.server;
+    applyServerUi();
+    toast(t('server.settingsSaved'), 'info', 2400);
+  } catch { toast(t('error.generic'), 'error', 3600); }
 }
 
 /* ---------------- Helpers ---------------- */
@@ -1892,5 +2214,11 @@ function handleLanguageChange() {
     if (btn) { btn.title = t(key); btn.setAttribute('aria-label', t(key)); }
   }
   els.channelTopic && (els.channelTopic.textContent = t('server.permanent'));
+  if (els.deafenLabel) els.deafenLabel.textContent = t(state.deafened ? 'deafen.on' : 'deafen.off');
+  if (els.soundboardSearch) els.soundboardSearch.placeholder = t('soundboard.search');
+  if (els.soundboardMyTitle) els.soundboardMyTitle.textContent = t('soundboard.myTitle');
+  if (els.soundboardMyNote) els.soundboardMyNote.textContent = t('soundboard.myNote');
+  if (els.serverScreenStopLabel) els.serverScreenStopLabel.textContent = t('screen.stopWatching');
+  if (els.serverScreenWatchLabel) els.serverScreenWatchLabel.textContent = t('screen.watchAgain');
   document.title = state.server ? `${state.server.name} — Hush` : 'Server — Hush';
 }

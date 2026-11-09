@@ -51,7 +51,23 @@ export async function lookupInvite(code) {
 }
 
 export function serverIconUrl(server) {
+  // A custom uploaded image wins over the emoji icon.
+  if (server?.iconUrl && typeof server.iconUrl === 'string' && server.iconUrl.startsWith('/uploads/') && !server.iconUrl.includes('..')) {
+    return server.iconUrl;
+  }
   return emojiUrl(server?.iconEmojiId || 'star');
+}
+
+export async function uploadServerIcon(serverId, file, deviceId) {
+  const form = new FormData();
+  form.append('file', file);
+  const token = (() => { try { return sessionStorage.getItem(`hush:session:${serverId}`) || ''; } catch { return ''; } })();
+  const res = await fetch(`/api/servers/${encodeURIComponent(serverId)}/icon?deviceId=${encodeURIComponent(deviceId || getDeviceId())}`, {
+    method: 'POST', body: form, headers: token ? { 'X-Session-Token': token } : {}
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'icon-failed');
+  return data.server;
 }
 
 export function firstTextChannel(server) {

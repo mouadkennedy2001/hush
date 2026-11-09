@@ -115,9 +115,10 @@ test('v12.1: Log has search + kind filters, cards wrap without clipping', async 
 
 test('v12.1 changelog documents buttons, sizes, name box and log (v12.2 on top)', async () => {
   const changelog = JSON.parse(await readFile(path.join(PUBLIC, 'changelog.json'), 'utf8'));
-  assert.equal(changelog.version, '12.3.0');
+  assert.equal(changelog.version, '14.0.0');
   const top = changelog.entries[0];
-  assert.match(top.titleEn, /Emojis now actually update/);
+  assert.match(top.titleEn, /v14/);
+  assert.ok(changelog.entries.some((e) => /Emojis now actually update/.test(e.titleEn)), 'v12.3 entry still present');
   assert.ok(changelog.entries.some((e) => /GIF \+ Sticker buttons/.test(e.titleEn)), 'v12.1 entry still present');
   assert.ok(top.pointsEn.length >= 3 && top.pointsAr.length >= 3, 'bilingual v12.2 points');
 });

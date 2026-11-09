@@ -70,7 +70,7 @@ test('libraries changelog: dedicated bilingual log + header button', async () =>
     assert.ok(e.titleEn && e.titleAr, 'both languages');
     assert.ok(Array.isArray(e.pointsEn) && e.pointsEn.length);
     assert.ok(Array.isArray(e.pointsAr) && e.pointsAr.length);
-    assert.ok(['mic', 'ping-op', 'giphy'].includes(e.library));
+    assert.ok(['mic', 'ping-op', 'giphy', 'soundboard'].includes(e.library));
   }
   assert.ok(data.entries.some((e) => e.library === 'ping-op' && e.titleAr.includes('تحسين البنق')));
   assert.ok(data.entries.some((e) => e.library === 'mic'));

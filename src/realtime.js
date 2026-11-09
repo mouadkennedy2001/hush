@@ -167,9 +167,12 @@ export function attachRealtime(io, { rooms, servers, sessions = null, maxPartici
     // A2/C2: never expose deviceId in broadcast presence lists — ids needed
     // for kicks stay server-side. The private join ack passes
     // includeDeviceIds so the new member can still correlate presence dots.
+    // memberId (SHA-256 pseudonym) IS safe to broadcast and lets clients
+    // match presence to the member list — without it, online members all
+    // showed as offline in the members panel.
     return [...(serverOnline.get(serverId)?.values() ?? [])].map((p) => includeDeviceIds
-      ? ({ id: p.id, name: p.name, deviceId: p.deviceId })
-      : ({ id: p.id, name: p.name }));
+      ? ({ id: p.id, name: p.name, deviceId: p.deviceId, memberId: p.memberId })
+      : ({ id: p.id, name: p.name, memberId: p.memberId }));
   }
   // Internal only: full records including deviceId for duplicate-device /
   // eviction logic. Never sent to clients.
@@ -788,7 +791,7 @@ export function attachRealtime(io, { rooms, servers, sessions = null, maxPartici
       const custom = (membership.room.customSounds || []).find((s) => s.id === id);
       if (!custom) return safeAck(ack, { ok: false, error: 'invalid-sound' });
       io.to(channelFor(membership.room.code)).emit('soundboard:play', {
-        id: custom.id, custom: true, url: custom.url, emojiId: custom.emojiId, soundName: custom.name,
+        id: custom.id, custom: true, url: custom.url, imageUrl: custom.imageUrl || '', emojiId: custom.emojiId, soundName: custom.name,
         from: socket.id,
         name: membership.participant.name
       });
@@ -839,6 +842,7 @@ export function attachRealtime(io, { rooms, servers, sessions = null, maxPartici
       participant.cameraOn = asBoolean(payload.cameraOn);
       participant.screenOn = asBoolean(payload.screenOn);
       participant.handRaised = asBoolean(payload.handRaised);
+      participant.deafened = asBoolean(payload.deafened);
       rooms.touch(membership.room);
       io.to(channelFor(membership.room.code)).emit('peer:updated', publicParticipant(participant));
     });
@@ -917,9 +921,9 @@ export function attachRealtime(io, { rooms, servers, sessions = null, maxPartici
       socket.data.serverDeviceId = deviceId || '';
       socket.data.serverVoiceChannelId = null;
       socket.data.serverTempRoomId = null;
-      trackServerOnline(serverId, socket.id, { id: socket.id, name: participant.name, deviceId: deviceId || '' });
+      trackServerOnline(serverId, socket.id, { id: socket.id, name: participant.name, deviceId: deviceId || '', memberId: servers.memberIdFor(deviceId || '') });
       socket.join(serverChannelFor(serverId));
-      socket.to(serverChannelFor(serverId)).emit('server:peer:joined', { participant: { id: participant.id, name: participant.name } });
+      socket.to(serverChannelFor(serverId)).emit('server:peer:joined', { participant: { id: participant.id, name: participant.name, memberId: servers.memberIdFor(deviceId || '') } });
       // A1: issue a session token bound to this device+server for REST calls.
       const sessionToken = sessions && deviceId ? sessions.issue(deviceId, serverId) : '';
       safeAck(ack, {
@@ -1384,20 +1388,58 @@ export function attachRealtime(io, { rooms, servers, sessions = null, maxPartici
       participant.micOn = asBoolean(payload.micOn);
       participant.cameraOn = asBoolean(payload.cameraOn);
       participant.screenOn = asBoolean(payload.screenOn);
+      participant.deafened = asBoolean(payload.deafened);
       let room = serverChannelFor(serverMembership.server.id);
       if (serverMembership.tempRoomId) room = tempChannelFor(serverMembership.server.id, serverMembership.tempRoomId);
       else if (serverMembership.voiceChannelId) room = voiceChannelFor(serverMembership.server.id, serverMembership.voiceChannelId);
-      io.to(room).emit('server:peer:updated', { id: participant.id, name: participant.name, micOn: participant.micOn, cameraOn: participant.cameraOn, screenOn: participant.screenOn });
+      io.to(room).emit('server:peer:updated', { id: participant.id, name: participant.name, micOn: participant.micOn, cameraOn: participant.cameraOn, screenOn: participant.screenOn, deafened: participant.deafened, memberId: servers.memberIdFor(serverMembership.deviceId) });
     });
 
     socket.on('server:soundboard:play', (payload = {}, ack) => {
       if (!servers || !serverMembership) return safeAck(ack, { ok: false, error: 'not-in-server' });
       if (!allowRateFor(socket, 'boardRate', SOUNDBOARD_MAX_PER_5S)) return safeAck(ack, { ok: false, error: 'rate-limited' });
       const id = String(payload?.id ?? '');
-      if (!SOUNDBOARD_SET.has(id)) return safeAck(ack, { ok: false, error: 'invalid-sound' });
+      if (SOUNDBOARD_SET.has(id)) {
+        io.to(serverChannelFor(serverMembership.server.id)).emit('server:soundboard:play', {
+          id, from: socket.id, name: serverMembership.participant.name
+        });
+        return safeAck(ack, { ok: true });
+      }
+      // Permanent server custom sound (uploaded via POST /:id/soundboard).
+      const fresh = servers.get(serverMembership.server.id);
+      const custom = fresh?.customSounds?.find((s) => s.id === id);
+      if (!custom) return safeAck(ack, { ok: false, error: 'invalid-sound' });
       io.to(serverChannelFor(serverMembership.server.id)).emit('server:soundboard:play', {
-        id, from: socket.id, name: serverMembership.participant.name
+        id: custom.id, custom: true, url: custom.url, imageUrl: custom.imageUrl || '',
+        emojiId: custom.emojiId, name: serverMembership.participant.name,
+        from: socket.id
       });
+      safeAck(ack, { ok: true });
+    });
+
+    socket.on('server:soundboard:deleteCustom', async (payload = {}, ack) => {
+      if (!servers || !serverMembership) return safeAck(ack, { ok: false, error: 'not-in-server' });
+      if (!allowRateFor(socket, 'boardRate', SOUNDBOARD_MAX_PER_5S)) return safeAck(ack, { ok: false, error: 'rate-limited' });
+      const fresh = servers.get(serverMembership.server.id);
+      if (!fresh) return safeAck(ack, { ok: false, error: 'server-not-found' });
+      const target = fresh.customSounds?.find((s) => s.id === String(payload?.id ?? ''));
+      if (!target) return safeAck(ack, { ok: false, error: 'invalid-sound' });
+      const isOwner = servers.isOwner(fresh, serverMembership.deviceId);
+      if (target.addedById !== serverMembership.deviceId && !isOwner) return safeAck(ack, { ok: false, error: 'not-admin' });
+      const removed = await servers.removeCustomSound(fresh.id, target.id);
+      if (!removed) return safeAck(ack, { ok: false, error: 'invalid-sound' });
+      // Delete the files (board dir holds audio + optional cover image).
+      try {
+        const { promises: fsp } = await import('node:fs');
+        const base = servers.uploadsDir || 'uploads';
+        for (const u of [removed.url, removed.imageUrl]) {
+          const file = String(u || '').split('/').pop();
+          if (file && !file.includes('..') && !file.includes('\\') && !file.includes('/')) {
+            try { await fsp.unlink(`${base}/server-${fresh.id}/board/${file}`); } catch { /* already gone */ }
+          }
+        }
+      } catch { /* best effort */ }
+      io.to(serverChannelFor(fresh.id)).emit('server:soundboard:deleted', { id: target.id });
       safeAck(ack, { ok: true });
     });
 

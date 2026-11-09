@@ -160,5 +160,8 @@ test('rooms and servers are separate pages/systems', async () => {
 
   const css = await readFile(path.join(PUBLIC, 'css', 'server.css'), 'utf8');
   assert.match(css, /flex: none/, 'icons never overlap');
-  assert.match(css, /minmax\(92px/, 'soundboard grid does not overlap');
+  // v13.2: compact board — category grids own the button columns (56px).
+  const roomCss = await readFile(path.join(PUBLIC, 'css', 'room.css'), 'utf8');
+  assert.match(roomCss, /minmax\(56px/, 'soundboard grid does not overlap');
+  assert.match(roomCss, /max-height: 42vh/, 'soundboard panel is compact and scrolls');
 });

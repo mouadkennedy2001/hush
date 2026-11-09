@@ -149,7 +149,7 @@
               <div class="mock-chat">
                 <div class="mock-bubble them">Are we still on for 3?</div>
                 <div class="mock-bubble me">Yep — room's open.</div>
-                <div class="mock-bubble them">Joining now <img src="/emoji/wave.svg?v=twemoji-1" alt=":wave:" class="custom-emoji" width="18" height="18" /></div>
+                <div class="mock-bubble them">Joining now <img src="/emoji/wave.svg?v=twemoji-2" alt=":wave:" class="custom-emoji" width="18" height="18" /></div>
                 <div class="mock-typing">Sam is typing<span>…</span></div>
               </div>
               <div class="mock-composer">
@@ -237,9 +237,9 @@
           <h2>Start with text. Stay for the conversation.</h2>
           <p class="muted">No lobby, no downloads, no “you're on mute” guesswork. Everyone lands in the same room, with chat, audio, and video ready when they are.</p>
           <ul class="check-list">
-            <li><span class="check-icon" aria-hidden="true"><img src="/emoji/check.svg?v=twemoji-1" alt="" class="custom-emoji" width="14" height="14" /></span> A name and a room code — that's the whole signup.</li>
-            <li><span class="check-icon" aria-hidden="true"><img src="/emoji/check.svg?v=twemoji-1" alt="" class="custom-emoji" width="14" height="14" /></span> Mute, camera, hand raise, and reactions in one toolbar.</li>
-            <li><span class="check-icon" aria-hidden="true"><img src="/emoji/check.svg?v=twemoji-1" alt="" class="custom-emoji" width="14" height="14" /></span> Messages, reactions, and files saved with the room.</li>
+            <li><span class="check-icon" aria-hidden="true"><img src="/emoji/check.svg?v=twemoji-2" alt="" class="custom-emoji" width="14" height="14" /></span> A name and a room code — that's the whole signup.</li>
+            <li><span class="check-icon" aria-hidden="true"><img src="/emoji/check.svg?v=twemoji-2" alt="" class="custom-emoji" width="14" height="14" /></span> Mute, camera, hand raise, and reactions in one toolbar.</li>
+            <li><span class="check-icon" aria-hidden="true"><img src="/emoji/check.svg?v=twemoji-2" alt="" class="custom-emoji" width="14" height="14" /></span> Messages, reactions, and files saved with the room.</li>
           </ul>
         </div>
 
@@ -272,11 +272,11 @@
 
             <div class="panel-chat-demo">
               <span class="demo-bubble">I'll drop the notes here after.</span>
-              <span class="demo-bubble is-self">Perfect. <img src="/emoji/ok.svg?v=twemoji-1" alt=":ok:" class="custom-emoji" width="18" height="18" /></span>
+              <span class="demo-bubble is-self">Perfect. <img src="/emoji/ok.svg?v=twemoji-2" alt=":ok:" class="custom-emoji" width="18" height="18" /></span>
             </div>
 
             <div class="panel-reactions" aria-hidden="true">
-              <span><img src="/emoji/thumbsup.svg?v=twemoji-1" alt="" class="custom-emoji" width="22" height="22" /></span><span><img src="/emoji/tada.svg?v=twemoji-1" alt="" class="custom-emoji" width="22" height="22" /></span><span><img src="/emoji/heart.svg?v=twemoji-1" alt="" class="custom-emoji" width="22" height="22" /></span>
+              <span><img src="/emoji/thumbsup.svg?v=twemoji-2" alt="" class="custom-emoji" width="22" height="22" /></span><span><img src="/emoji/tada.svg?v=twemoji-2" alt="" class="custom-emoji" width="22" height="22" /></span><span><img src="/emoji/heart.svg?v=twemoji-2" alt="" class="custom-emoji" width="22" height="22" /></span>
             </div>
           </div>
         </div>
@@ -325,9 +325,9 @@
           <h2>Point at the thing, not the whole desktop.</h2>
           <p class="muted">Share a tab, a window, or your full screen with one click. Everyone sees the same view while the call keeps running — no separate streaming app, no reconnecting.</p>
           <ul class="check-list">
-            <li><span class="check-icon" aria-hidden="true"><img src="/emoji/check.svg?v=twemoji-1" alt="" class="custom-emoji" width="14" height="14" /></span> One-click screen sharing from the call toolbar.</li>
-            <li><span class="check-icon" aria-hidden="true"><img src="/emoji/check.svg?v=twemoji-1" alt="" class="custom-emoji" width="14" height="14" /></span> Camera and screen can be on at the same time.</li>
-            <li><span class="check-icon" aria-hidden="true"><img src="/emoji/check.svg?v=twemoji-1" alt="" class="custom-emoji" width="14" height="14" /></span> Stop from the browser bar or the room controls.</li>
+            <li><span class="check-icon" aria-hidden="true"><img src="/emoji/check.svg?v=twemoji-2" alt="" class="custom-emoji" width="14" height="14" /></span> One-click screen sharing from the call toolbar.</li>
+            <li><span class="check-icon" aria-hidden="true"><img src="/emoji/check.svg?v=twemoji-2" alt="" class="custom-emoji" width="14" height="14" /></span> Camera and screen can be on at the same time.</li>
+            <li><span class="check-icon" aria-hidden="true"><img src="/emoji/check.svg?v=twemoji-2" alt="" class="custom-emoji" width="14" height="14" /></span> Stop from the browser bar or the room controls.</li>
           </ul>
         </div>
       </div>
@@ -564,6 +564,13 @@
         <span>Choose an icon</span>
       </label>
       <div class="server-icon-picker" id="server-icon-picker"></div>
+      <label class="field">
+        <span>Server image (optional)</span>
+        <span style="display:flex;align-items:center;gap:8px">
+          <img class="server-icon-preview" id="server-image-preview" alt="" hidden />
+          <input type="file" id="server-image-input" accept="image/png,image/jpeg,image/webp,image/gif,image/avif" />
+        </span>
+      </label>
       <p class="dialog-error" id="server-dialog-error" role="alert" hidden></p>
       <button class="btn btn-primary btn-block" type="submit">Create server</button>
       <p class="dialog-foot">You'll land in the general channel right away.</p>

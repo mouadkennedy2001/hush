@@ -27,12 +27,15 @@ test('mic library: mic_ev1 ships a complete fail-safe enhancer', async () => {
   const worklet = await readFile(path.join(MIC, 'mic_ev1', 'worklet', 'noise-suppress-processor.js'), 'utf8');
   assert.match(worklet, /registerProcessor/, 'AudioWorklet processor registered');
 
-  for (const v of ['mic_ev1.1', 'mic_ev1.3', 'mic_ev1.4', 'mic_ev1.5', 'mic_ev1.6', 'mic_ev1.7', 'mic_ev1.8', 'mic_ev1.9', 'mic_ev2']) {
+  for (const v of ['mic_ev1.1', 'mic_ev1.4', 'mic_ev1.5', 'mic_ev1.6', 'mic_ev1.7', 'mic_ev1.8', 'mic_ev1.9', 'mic_ev2']) {
     const st = await stat(path.join(MIC, v, 'README.md'));
     assert.ok(st.isFile(), `${v} has a README`);
     const ver = JSON.parse(await readFile(path.join(MIC, v, 'version.json'), 'utf8'));
     assert.equal(ver.status, 'planned', `${v} is planned`);
   }
+  // ev1.3 is live (gain ownership + deafen mute landed with it).
+  const ev13 = JSON.parse(await readFile(path.join(MIC, 'mic_ev1.3', 'version.json'), 'utf8'));
+  assert.equal(ev13.status, 'active', 'ev1.3 is live');
   // ev1.2 is live in the ev1 entrypoint (same pattern as ev1.1).
   const ev12 = JSON.parse(await readFile(path.join(MIC, 'mic_ev1.2', 'version.json'), 'utf8'));
   assert.equal(ev12.status, 'active', 'ev1.2 is live');
