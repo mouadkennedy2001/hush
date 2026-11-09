@@ -1453,12 +1453,12 @@ html[data-theme="dark"] .control[aria-pressed="true"] {
 .emoji-choice {
   width: 100%;
   height: auto;
-  min-width: 34px;
-  min-height: 34px;
+  min-width: 44px;
+  min-height: 44px;
   aspect-ratio: 1;
-  padding: 4px;
+  padding: 5px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 10px;
   background: transparent;
   font-size: 1.1rem;
   display: flex;
@@ -2472,18 +2472,42 @@ html[dir="rtl"] .gate-code code {
 .host-badge { display: inline-flex; padding: 1px 6px; border-radius: 999px; background: var(--wash-sky-strong); color: var(--color-accent-2); font-size: .5625rem; font-weight: 700; }
 .log-dot { display: inline-block; width: 7px; height: 7px; margin-inline-start: 5px; border-radius: 50%; background: var(--color-accent); vertical-align: middle; }
 .log-dot[hidden] { display: none; }
-.changelog-dialog { width: min(560px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); padding: 0; border: 1px solid var(--color-border); border-radius: var(--radius-panels); background: var(--color-surface); color: var(--color-text); box-shadow: var(--shadow-lg); overflow: auto; }
+.changelog-dialog { width: min(640px, calc(100vw - 24px)); max-height: calc(100dvh - 32px); padding: 0; border: 1px solid var(--color-border); border-radius: 16px; background: var(--color-surface); color: var(--color-text); box-shadow: var(--shadow-lg); overflow: hidden; }
 .changelog-dialog::backdrop { background: color-mix(in srgb, var(--color-signal-sky) 48%, transparent); backdrop-filter: blur(4px); }
-.changelog-inner { padding: 22px; }
-.changelog-lead { margin-top: 4px; font-size: .8125rem; }
-.changelog-list { display: grid; gap: 12px; margin-top: 16px; }
-.changelog-card { padding: 14px; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-surface-2); }
-.changelog-card h3 { margin: 8px 0 6px; font-size: .9375rem; }
-.changelog-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.changelog-date { color: var(--color-text-2); font-size: .6875rem; font-family: var(--font-mono); }
-.changelog-tag { padding: 2px 8px; border-radius: 999px; background: var(--wash-sky); color: var(--color-accent-2); font-size: .625rem; font-weight: 700; }
+.changelog-inner { display: flex; flex-direction: column; max-height: calc(100dvh - 32px); padding: 20px; overflow: hidden; text-align: start; }
+.changelog-inner .dialog-head { flex: none; display: flex; align-items: flex-start; gap: 10px; }
+.changelog-inner .dialog-head h2 { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 1.125rem; line-height: 1.3; margin: 0; }
+.changelog-lead { flex: none; margin-top: 6px; font-size: .8125rem; line-height: 1.5; overflow-wrap: anywhere; }
+.changelog-tools { flex: none; display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.changelog-tools .emoji-search { width: 100%; }
+.changelog-tabs { display: flex; flex-wrap: wrap; gap: 4px; }
+.changelog-count { flex: none; color: var(--color-text-2); font-size: .6875rem; }
+.changelog-list { display: grid; gap: 10px; margin-top: 12px; overflow-y: auto; overscroll-behavior: contain; padding-inline-end: 4px; scrollbar-width: thin; min-height: 0; }
+.changelog-card { padding: 15px 16px; border: 1px solid var(--color-border); border-radius: 14px; background: var(--color-surface-2); text-align: start; }
+.changelog-card h3 { margin: 9px 0 7px; font-size: .9375rem; line-height: 1.45; overflow-wrap: anywhere; }
+.changelog-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.changelog-date { color: var(--color-text-2); font-size: .6875rem; font-family: var(--font-mono); direction: ltr; unicode-bidi: isolate; font-variant-numeric: tabular-nums; }
+.changelog-tag { padding: 3px 9px; border-radius: 999px; background: var(--wash-sky); color: var(--color-accent-2); font-size: .625rem; font-weight: 700; white-space: nowrap; }
 .changelog-tag.is-fix { background: color-mix(in srgb, #f59e0b 18%, transparent); color: #92400e; }
-.changelog-points { margin: 0; padding-inline-start: 18px; color: var(--color-text-2); font-size: .8125rem; display: grid; gap: 5px; }
+.changelog-tag.is-security { background: color-mix(in srgb, #b42318 14%, transparent); color: #b42318; }
+.changelog-tag.is-feature { background: color-mix(in srgb, #16a34a 16%, transparent); color: #15803d; }
+.changelog-points { margin: 0; padding-inline-start: 20px; color: var(--color-text-2); font-size: .8125rem; line-height: 1.6; display: grid; gap: 6px; text-align: start; }
+.changelog-points li { overflow-wrap: anywhere; }
+.libraries-tools { flex: none; display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.libraries-tabs { display: flex; flex-wrap: wrap; gap: 4px; }
+.libraries-search { width: 100%; }
+
+/* ---------- Display-name field (join gate only) ---------- */
+.name-field { display: grid; gap: 7px; margin-bottom: 18px; text-align: start; }
+.name-field-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; color: var(--color-text); font-size: .8125rem; font-weight: 700; }
+.name-field-count { color: var(--color-text-2); font-size: .6875rem; font-weight: 600; font-variant-numeric: tabular-nums; direction: ltr; unicode-bidi: isolate; }
+.name-field-wrap { position: relative; display: block; }
+.name-field-icon { position: absolute; inset-inline-start: 13px; top: 50%; transform: translateY(-50%); width: 19px; height: 19px; color: var(--color-text-2); pointer-events: none; }
+.name-field #name-input { width: 100%; height: 52px; padding: 0 14px; padding-inline-start: 44px; border: 1.5px solid var(--color-border); border-radius: 12px; background: var(--color-surface-2); color: var(--color-text); font-size: 1rem; font-weight: 600; letter-spacing: 0; text-transform: none; text-align: start; box-sizing: border-box; transition: border-color 140ms ease, box-shadow 140ms ease, background-color 140ms ease; }
+.name-field #name-input::placeholder { color: color-mix(in srgb, var(--color-text-2) 60%, transparent); font-weight: 500; }
+.name-field #name-input:focus { outline: none; border-color: var(--color-accent); background: var(--color-surface); box-shadow: 0 0 0 3px var(--wash-sky); }
+.name-field #name-input:disabled { opacity: .55; }
+.name-field-hint { color: var(--color-text-2); font-size: .6875rem; line-height: 1.4; }
 .sound-volume-row { margin-top: 10px; }
 .sound-volume-row input { flex: 1; accent-color: var(--color-accent); }
 
@@ -2500,24 +2524,36 @@ html[dir="rtl"] .gate-code code {
 .soundboard-sound { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 9px 4px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-surface-2); color: var(--color-text); cursor: pointer; transition: transform 90ms ease, background 120ms ease; }
 .soundboard-sound:hover { background: var(--wash-sky); transform: translateY(-1px); }
 .soundboard-sound:active { transform: scale(.96); }
-/* ---------- Emoji system v11 (polished picker + rich render, no overlap) ---------- */
+/* ---------- Emoji system v12.3 (larger, cleaner picker) ---------- */
 .emoji-menu {
   animation: emoji-menu-in 160ms cubic-bezier(.2,.9,.3,1.1);
   border-radius: 14px;
-  width: min(320px, calc(100vw - 24px));
+  width: min(340px, calc(100vw - 24px));
 }
-.custom-sticker { width: 36px; height: 36px; object-fit: contain; border-radius: 10px; flex: none; }
-.emoji-sticker { width: 34px; height: 34px; }
-.message-sticker { width: 44px; height: 44px; vertical-align: -8px; }
-.message.is-emoji-only .message-sticker { width: 64px; height: 64px; }
-.message-gif { max-width: min(280px, 100%); max-height: 240px; border-radius: 12px; display: block; margin-top: 4px; }
-.gif-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-.gif-row .gif-input { flex: 1 1 160px; }
+.custom-sticker { width: 40px; height: 40px; object-fit: contain; border-radius: 10px; flex: none; }
+.emoji-sticker { width: 38px; height: 38px; }
+/* v12.1: stickers + GIFs are LARGE in chat (were 44/64px — too small).
+   Inline in text: 56px. Alone (emoji-only message): 128px. GIF: 340px. */
+.message-sticker { width: 56px; height: 56px; vertical-align: -10px; }
+.message.is-emoji-only .message-sticker { width: 128px; height: 128px; vertical-align: middle; margin: 2px; }
+.message-gif { width: min(340px, 100%); max-width: 100%; max-height: 320px; height: auto; object-fit: contain; border-radius: 14px; border: 1px solid var(--color-border); display: block; margin-top: 6px; background: var(--color-surface-2); }
+.message-gif.gif-broken { min-width: 160px; min-height: 100px; }
+.gif-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; width: 100%; min-width: 0; }
+.gif-row .gif-input { flex: 1 1 140px; min-width: 0; height: 34px; }
+.gif-row .btn { flex: 0 0 auto; min-height: 34px; white-space: nowrap; }
 .sticker-tab { border-style: dashed; }
+/* GIF/Sticker menus: wider than the emoji menu, panel layout (not grid cells) */
+.emoji-menu-wide { width: min(360px, calc(100vw - 24px)); }
+.emoji-menu-wide .emoji-grid { grid-template-columns: repeat(5, minmax(0,1fr)); }
+.emoji-grid.is-panel { display: block; max-height: 380px; }
+.gif-panel { display: flex; flex-direction: column; gap: 8px; width: 100%; min-width: 0; text-align: start; }
+.gif-panel .emoji-empty { padding: 8px 4px; text-align: start; }
+.composer-gif-btn .icon { width: 22px; height: 22px; }
+.composer-attach { flex: none; }
 @keyframes emoji-menu-in { from { opacity: 0; transform: translateY(6px) scale(.98); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .emoji-menu, .message-emoji, .floating-reaction .custom-emoji { animation: none; transition: none; } }
-.custom-emoji { width: 26px; height: 26px; object-fit: contain; border-radius: 8px; filter: drop-shadow(0 2px 4px rgba(27,27,27,.2)); transition: transform 150ms cubic-bezier(.34,1.56,.64,1), background-color 120ms ease; flex: none; }
-.emoji-choice .custom-emoji { width: 26px; height: 26px; }
+.custom-emoji { width: 32px; height: 32px; object-fit: contain; border-radius: 8px; filter: drop-shadow(0 2px 4px rgba(27,27,27,.2)); transition: transform 150ms cubic-bezier(.34,1.56,.64,1), background-color 120ms ease; flex: none; }
+.emoji-choice .custom-emoji { width: 32px; height: 32px; }
 .message-emoji { animation: emoji-pop 280ms cubic-bezier(.34,1.56,.64,1); }
 .soundboard-sound:hover .custom-emoji, .emoji-choice:hover .custom-emoji, .emoji-choice:focus-visible .custom-emoji, .reaction-choice:hover .custom-emoji { transform: scale(1.24) rotate(-4deg); }
 .emoji-choice:hover .custom-emoji { transform: scale(1.28); }
@@ -2546,17 +2582,17 @@ html[dir="rtl"] .gate-code code {
 .board-add-note { margin-top: 5px; font-size: .625rem; color: var(--color-text-2); }
 .floating-reaction .custom-emoji { width: 40px; height: 40px; animation: emoji-pop 400ms cubic-bezier(.34,1.56,.64,1); }
 @keyframes emoji-pop { from { transform: scale(.4) rotate(-14deg); } to { transform: scale(1) rotate(0); } }
-.custom-emoji-sm { width: 24px; height: 24px; }
-.custom-emoji-xs { width: 16px; height: 16px; }
-.message-emoji { width: 22px; height: 22px; vertical-align: -4px; }
-.message.is-emoji-only .message-emoji { width: 34px; height: 34px; vertical-align: middle; margin: 1px 2px; }
+.custom-emoji-sm { width: 28px; height: 28px; }
+.custom-emoji-xs { width: 20px; height: 20px; }
+.message-emoji { width: 28px; height: 28px; vertical-align: -4px; }
+.message.is-emoji-only .message-emoji { width: 48px; height: 48px; vertical-align: middle; margin: 1px 2px; }
 .message.is-emoji-only .message-bubble { padding: 6px 8px; background: transparent; border-color: transparent; }
-.reaction-choice .custom-emoji { width: 24px; height: 24px; }
-.emoji-choice .custom-emoji { width: 26px; height: 26px; }
+.reaction-choice .custom-emoji { width: 28px; height: 28px; }
+.emoji-choice .custom-emoji { width: 38px; height: 38px; }
 .reaction-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 7px; border: 1px solid var(--color-border); border-radius: 999px; background: var(--color-surface-2); font-size: .6875rem; min-height: 26px; }
 .reaction-chip.is-mine { border-color: var(--color-accent); background: var(--wash-sky); color: var(--color-accent-2); font-weight: 700; }
 .reaction-chip:hover { border-color: var(--color-accent); background: var(--wash-sky); }
-.reaction-chip .custom-emoji { width: 16px; height: 16px; }
+.reaction-chip .custom-emoji { width: 20px; height: 20px; }
 .mock-bubble .custom-emoji, .demo-bubble .custom-emoji { vertical-align: -3px; }
 .soundboard-name { font-size: .5625rem; font-weight: 600; color: var(--color-text-2); text-align: center; line-height: 1.15; }
 @media (max-width: 700px) { .soundboard-grid { grid-template-columns: repeat(4, minmax(0,1fr)); } }
@@ -2567,7 +2603,7 @@ html[dir="rtl"] .gate-code code {
 .emoji-tabs { display: flex; flex-wrap: nowrap; overflow-x: auto; gap: 4px; width: 100%; margin-top: 6px; padding-bottom: 2px; scrollbar-width: thin; }
 .emoji-tab { flex: none; padding: 3px 8px; border: 1px solid var(--color-border); border-radius: 999px; background: var(--color-surface-2); color: var(--color-text-2); font-size: .625rem; font-weight: 700; cursor: pointer; }
 .emoji-tab[aria-pressed="true"] { background: var(--wash-sky); border-color: var(--color-accent); color: var(--color-accent-2); }
-.emoji-grid { display: grid; grid-template-columns: repeat(6, minmax(0,1fr)); gap: 4px; width: 100%; margin-top: 6px; max-height: 220px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; padding: 2px; }
+.emoji-grid { display: grid; grid-template-columns: repeat(6, minmax(0,1fr)); gap: 6px; width: 100%; margin-top: 6px; max-height: 260px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; padding: 4px; }
 .emoji-tabs { flex-wrap: nowrap; overflow-x: auto; }
 .emoji-choice:hover, .emoji-choice:focus-visible { background: var(--wash-sky); outline: none; box-shadow: inset 0 0 0 2px var(--color-accent); }
 .emoji-empty { padding: 12px 6px; color: var(--color-text-2); font-size: .75rem; text-align: center; }
@@ -2602,3 +2638,22 @@ html[dir="rtl"] .gate-code code {
 .tile-vol { position: absolute; top: 8px; left: 8px; display: inline-flex; align-items: center; gap: 3px; padding: 2px 6px; border-radius: 999px; background: color-mix(in srgb, var(--color-white) 88%, transparent); color: var(--color-deep-signal); font-size: .5625rem; font-weight: 700; backdrop-filter: blur(6px); }
 .tile-vol .icon { width: 11px; height: 11px; }
 .message { content-visibility: auto; contain-intrinsic-size: auto 64px; }
+
+/* ---------- Giphy v12 + custom stickers ---------- */
+.gif-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 6px; margin-top: 8px; max-height: 220px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; padding: 2px; }
+.gif-choice { padding: 0; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-surface-2); overflow: hidden; cursor: pointer; aspect-ratio: 4 / 3; }
+.gif-choice:hover, .gif-choice:focus-visible { border-color: var(--color-accent); outline: none; box-shadow: inset 0 0 0 2px var(--color-accent); }
+.gif-thumb { width: 100%; height: 100%; object-fit: cover; display: block; }
+.message-gif.gif-broken { min-width: 120px; min-height: 80px; object-fit: contain; background: var(--color-surface-2); border: 1px dashed var(--color-border); }
+.custom-sticker-wrap { position: relative; display: inline-flex; }
+.custom-sticker-btn { position: relative; }
+.custom-sticker-del { position: absolute; top: 1px; inset-inline-end: 1px; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 50%; background: color-mix(in srgb, #b42318 16%, transparent); color: #b42318; font-size: .75rem; line-height: 1; opacity: 0; z-index: 2; cursor: pointer; }
+.custom-sticker-wrap:hover .custom-sticker-del, .custom-sticker-del:focus-visible { opacity: 1; }
+@media (pointer: coarse) { .custom-sticker-del { opacity: 1; } }
+.sticker-creator-dialog { width: min(420px, calc(100vw - 32px)); border: 1px solid var(--color-border); border-radius: 14px; background: var(--color-surface); color: var(--color-text); padding: 18px; box-shadow: var(--shadow-lg); }
+.sticker-creator-dialog::backdrop { background: rgba(12,12,20,.55); backdrop-filter: blur(3px); }
+.sticker-creator-dialog h2 { margin: 0 0 6px; font-size: 1rem; }
+.sticker-preview { display: flex; align-items: center; justify-content: center; min-height: 110px; margin: 10px 0; border: 1px dashed var(--color-border); border-radius: 12px; background: var(--color-surface-2); overflow: hidden; }
+.sticker-preview-img { max-width: 140px; max-height: 140px; object-fit: contain; border-radius: 8px; }
+.sticker-preview-img:not([src]) { display: none; }
+.sticker-creator-dialog .gif-input { width: 100%; margin-bottom: 8px; }

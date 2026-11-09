@@ -1,6 +1,96 @@
 {
-  "version": "11.0.0",
+  "version": "12.3.0",
   "entries": [
+    {
+      "date": "2026-11-09",
+      "ts": 1763800400000,
+      "kind": "fix",
+      "kindEn": "Fix",
+      "kindAr": "إصلاح",
+      "titleEn": "Emojis now actually update (cache fix) + larger, cleaner emoji picker",
+      "titleAr": "الإيموجيات تتحدّث فعليًا الآن (إصلاح التخزين) + منتقي أكبر وأنظف",
+      "pointsEn": [
+        "FIX \"emojis did not change\" (error/ screenshot): emoji/sticker SVGs were cached as immutable for a day, so browsers kept showing the old drawings after the v12.2 Twemoji replacement. Asset URLs now carry a cache-busting version (?v=twemoji-1 / ?v=stickers-v2 — bump EMOJI_ASSET_VERSION in public/js/emoji.js on the next pack change), and non-versioned binaries revalidate hourly instead of immutable.",
+        "LARGER emojis everywhere: picker 38px (was 26), inline in messages 28px (was 22), emoji-only messages 48px (was 34), reaction chips 20px (was 16).",
+        "Cleaner picker: wider menu (340px), 6px grid gaps, 44px cells so Twemoji drawings breathe instead of crowding (error/ screenshot)."
+      ],
+      "pointsAr": [
+        "إصلاح «الإيموجيات لم تتغير» (صورة error/): كانت ملفات SVG للإيموجي/الستيكر تُخزّن immutable ليوم كامل، فالمتصفحات استمرت بعرض الرسومات القديمة بعد استبدال Twemoji في v12.2. روابط الأصول تحمل الآن رقم إصدار (?v=twemoji-1 / ?v=stickers-v2 — ارفع EMOJI_ASSET_VERSION في public/js/emoji.js عند تغيير الحزمة)، والملفات غير المُصدّرة تُتحقق كل ساعة بدل immutable.",
+        "إيموجي أكبر في كل مكان: المنتقي 38px (كان 26)، داخل الرسائل 28px (كان 22)، والرسالة بالإيموجي وحده 48px (كان 34)، ورقائق التفاعل 20px (كان 16).",
+        "منتقي أنظف: قائمة أوسع (340px) وفجوات شبكة 6px وخلايا 44px حتى تتنفس رسومات Twemoji بدل الازدحام (صورة error/)."
+      ]
+    },
+    {
+      "date": "2026-11-09",
+      "ts": 1763800300000,
+      "kind": "update",
+      "kindEn": "Update",
+      "kindAr": "تحديث",
+      "titleEn": "All 60 emojis replaced with the Twemoji pack (hush_emoji_pro) + visible attribution",
+      "titleAr": "استُبدلت كل الإيموجيات الـ60 بحزمة Twemoji (hush_emoji_pro) + نسب مرئي",
+      "pointsEn": [
+        "All 60 site emojis in public/emoji/ are now the Twemoji pack copied from new emoji/hush_emoji_pro/ (built by emoji_forge.py --source twemoji): 60 SVG + 60 PNG + preview + manifest + ids. Same ids/shortcodes as before, so existing messages, reactions, and the soundboard keep working.",
+        "The last 5 hand-made outliers (wave, wink, wow, yay, trombone) are now the real Twemoji drawings too — every file in public/emoji/ matches the pack exactly.",
+        "Twemoji is CC-BY 4.0: attribution is visible in the landing footer and the join gates (Twemoji (CC-BY 4.0) link), plus public/emoji/ATTRIBUTION.md and the README.",
+        "The local forge source (new emoji/) is gitignored — public/emoji/ is the committed runtime copy. Regenerate with emoji_forge.py and copy the pack over public/emoji/."
+      ],
+      "pointsAr": [
+        "كل إيموجيات الموقع الـ60 في public/emoji/ أصبحت حزمة Twemoji منسوخة من new emoji/hush_emoji_pro/ (بُنيت بـ emoji_forge.py --source twemoji): 60 SVG + 60 PNG + معاينة + بيان + معرفات. نفس المعرفات والأكواد المختصرة كما قبل، فالرسائل والتفاعلات ولوحة الصوت تستمر بالعمل.",
+        "آخر 5 ملفات يدوية متبقية (wave وwink وwow وyay وtrombone) أصبحت رسومات Twemoji الحقيقية أيضًا — كل ملف في public/emoji/ يطابق الحزمة تمامًا.",
+        "Twemoji برخصة CC-BY 4.0: النسب مرئي في تذييل الصفحة الرئيسية وبوابات الانضمام (رابط Twemoji (CC-BY 4.0))، إضافة إلى public/emoji/ATTRIBUTION.md وREADME.",
+        "مصدر الـforge المحلي (new emoji/) مُتجاهَل في Git — public/emoji/ هي النسخة التشغيلية الملتزمة. أعد التوليد بـ emoji_forge.py وانسخ الحزمة فوق public/emoji/."
+      ]
+    },
+    {
+      "date": "2026-11-09",
+      "ts": 1763800200000,
+      "kind": "update",
+      "kindEn": "Update",
+      "kindAr": "تحديث",
+      "titleEn": "Dedicated GIF + Sticker buttons, large GIFs/stickers, new display-name box, improved Log",
+      "titleAr": "زرا GIF وستيكر مخصصان، GIF وستيكر كبيران، مربع اسم معروض جديد، وسجل محسّن",
+      "pointsEn": [
+        "NEW dedicated buttons beside the chat box: a GIF button opens the Giphy panel directly and a sticker button opens the sticker picker directly (separate menus, in rooms + servers). The emoji menu is unchanged.",
+        "FIX the broken GIF panel (error/ screenshot): panel rows/buttons were crushed into the 6-column emoji grid (~50px cells, stretched vertically, worst in Arabic RTL). The panel now uses its own block layout.",
+        "GIFs and stickers are LARGE in chat: GIF up to 340px, sticker alone 128px (56px inline) — was 280px / 44-64px.",
+        "Filters are translated: sticker category tabs now show Arabic in Arabic and English in English (were always English), and picker menus rebuild on language switch.",
+        "NEW display-name box (join gate only): user icon inside the field, 0/32 character counter, clear label + hint, 52px tall with a glowing focus ring.",
+        "IMPROVED Log: cards that wrap text without clipping (Arabic RTL fixed), dates isolated, plus search and kind filters (All / Updates / Fixes / Security / Features) with a result count — all bilingual."
+      ],
+      "pointsAr": [
+        "جديد زرّان مخصصان بجانب مربع الدردشة: زر GIF يفتح لوحة Giphy مباشرة وزر ستيكر يفتح منتقي الستيكرات مباشرة (قائمتان منفصلتان، في الغرف والخوادم). قائمة الإيموجي لم تتغير.",
+        "إصلاح لوحة GIF المكسورة (صورة error/): كانت صفوف/أزرار اللوحة مسحوقة داخل شبكة الإيموجي ذات 6 أعمدة (خلايا ~50px ممتدة عموديًا، أسوأ في العربية RTL). اللوحة الآن بتخطيط كتلة خاص بها.",
+        "GIF والستيكرات كبيرة في الدردشة: GIF حتى 340px، والستيكر وحده 128px (56px داخل النص) — كانت 280px / 44-64px.",
+        "الفلاتر مترجمة: تبويبات فئات الستيكرات تعرض العربية بالعربية والإنجليزية بالإنجليزية (كانت إنجليزية دائمًا)، وقوائم المنتقي تُعاد بناؤها عند تبديل اللغة.",
+        "جديد مربع الاسم المعروض (شاشة الانضمام فقط): أيقونة مستخدم داخل الحقل، عدّاد أحرف 0/32، تسمية وتلميح واضحان، ارتفاع 52px مع إطار متوهج عند التركيز.",
+        "سجل محسّن: بطاقات تلتف نصوصها دون قصّ (أُصلح العربية RTL)، والتواريخ معزولة، مع بحث وفلتر حسب النوع (الكل / تحديثات / إصلاحات / أمن / مميزات) وعدّاد نتائج — كلها ثنائية اللغة."
+      ]
+    },
+    {
+      "date": "2026-11-09",
+      "ts": 1763800100000,
+      "kind": "update",
+      "kindEn": "Update",
+      "kindAr": "تحديث",
+      "titleEn": "Giphy search + 65 unique stickers + custom sticker creator + mic ev1.2 + PING OP 1.1",
+      "titleAr": "بحث Giphy + 65 ستيكر فريدًا + منشئ ستيكرات مخصصة + mic ev1.2 + PING OP 1.1",
+      "pointsEn": [
+        "FIX broken GIFs (error/ screenshot): CSP blocked all https images, so pasted GIFs showed a tiny broken icon. CSP now allows https images only (scripts still self-only, object-src none), GIF validation is strict (https, no credentials/traversal), and failed GIFs get a clickable fallback.",
+        "NEW Giphy (server-only key in .env, never in browser): search / Trending / Random in the emoji picker for rooms + servers via /api/gif/*, rate-limited + cached. Direct .gif paste (Tenor/anywhere) still works.",
+        "STICKERS: deleted the 60 duplicated stickers (only 5 shapes repeated in colors) — all 65 are now unique drawings with unique names (Desert Oasis/Throne/Spark replace the Owl/Crown/Heart dupes). IDs are stable, old :sticker-XX: still render. Regenerate anytime with node Sticker/generate.mjs.",
+        "NEW custom sticker creator: pick PNG/JPG/GIF/WebP/AVIF (2MB, SVG blocked), it stays on this device in IndexedDB (localStorage fallback for small images, 30 stickers / 12MB cap) until you press Send — then its Blob is uploaded from IndexedDB through the existing upload flow and sent as an image.",
+        "LIBRARIES: mic ev1.2 (smoothed meter, gate hangover, live API, real CPU, idempotent dispose) + PING OP 1.1.0 (trend/health, client stats reporting to /api/health). See Libraries log for details.",
+        "SECURITY: Giphy key never leaves the server (no key in public/, logs, or errors; fixed upstream URL = no SSRF; only *.giphy.com media returned); custom-sticker SVG/script upload blocked; ping stats are numbers-only clamped; new GIF endpoints rate-limited."
+      ],
+      "pointsAr": [
+        "إصلاح GIF المكسور (صورة error/): CSP كان يحظر كل صور https فظهرت GIF الملصقة كأيقونة مكسورة صغيرة. CSP يسمح الآن بالصور https فقط (السكربتات self فقط، object-src none)، والتحقق صارم (https بلا بيانات اعتماد أو traversal)، والـ GIF الفاشل يعرض بديلًا قابلًا للنقر.",
+        "جديد Giphy (مفتاح خادمي فقط في .env، لا يصل للمتصفح): بحث / رائج / عشوائي في منتقي الإيموجي للغرف والخوادم عبر /api/gif/*، محدود المعدل ومخزّن. لصق رابط .gif المباشر (Tenor/أي مكان) ما يزال يعمل.",
+        "الستيكرات: حُذفت 60 ستيكرًا مكررًا (5 أشكال فقط كانت تتكرر بألوان) — الـ 65 الآن رسومات فريدة بأسماء فريدة (واحة/عرش/شرارة بدل تكرار البومة/التاج/القلب). المعرفات ثابتة، والرسائل القديمة :sticker-XX: ما تزال تُعرض. أعد التوليد بـ node Sticker/generate.mjs.",
+        "جديد منشئ ستيكرات مخصصة: اختر PNG/JPG/GIF/WebP/AVIF (2MB، SVG محظور)، تبقى على هذا الجهاز في IndexedDB (بديل localStorage للصور الصغيرة، حد 30 ستيكرًا / 12MB) حتى تضغط إرسال — حينها يُرفع Blob من IndexedDB عبر تدفق الرفع الحالي ويُرسل كصورة.",
+        "المكتبات: mic ev1.2 (مقياس أملس، مهلة بوابة، واجهة حية، CPU حقيقي، dispose آمن) + PING OP 1.1.0 (اتجاه/صحة، إبلاغ إحصاءات إلى /api/health). التفاصيل في سجل المكتبات.",
+        "أمن: مفتاح Giphy لا يغادر الخادم أبدًا (لا مفتاح في public/ أو السجلات أو الأخطاء؛ رابط upstream ثابت = لا SSRF؛ تُرجع روابط *.giphy.com فقط)؛ رفع SVG/سكربت للستيكرات محظور؛ إحصاءات البنق أرقام فقط ومقيّدة؛ نقاط GIF الجديدة محدودة المعدل."
+      ]
+    },
     {
       "date": "2026-11-08",
       "ts": 1763480300000,

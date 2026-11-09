@@ -10,6 +10,11 @@
  * - RMS meter uses an Analyser tap (worklet stats are a bonus, not required)
  * - dispose only closes an owned context, never the shared one
  *
+ * ev1.2 (live in Hush runtime, Hush v12):
+ * - smoothed RMS + peak-hold meter, gate hangover (no clipped word ends)
+ * - live API: getLevel()/getConfig()/setBypass()/setGateThresholdDb()
+ * - dispose() is idempotent
+ *
  * Fail-safe: if anything fails (no AudioWorklet, no device, ...), attach()
  * returns the raw stream with bypass=true — never breaks mic.
  */
@@ -17,6 +22,7 @@
 import { SpectralSuppressor } from './spectral.js';
 import { NoiseGate, Clipper, Agc } from './gate-agc.js';
 
+export const MIC_VERSION = 'ev1.2';
 export const DEFAULT_CONFIG = Object.freeze({
   // 0..1 — higher = more suppression (but may thin the voice)
   strength: 0.8,
@@ -167,9 +173,16 @@ export function createMicEnhancer(config = {}) {
     if (cfg.bypass && meterInterval) { clearInterval(meterInterval); meterInterval = null; }
   }
   function setStrength(v) { cfg.strength = Math.max(0, Math.min(1, Number(v) || 0)); }
-  function getStats() { return { level, gated, cpu, enabled: enabled(), cfg: { strength: cfg.strength, hpHz: cfg.hpHz, lpHz: cfg.lpHz, agcTargetDb: cfg.agcTargetDb } }; }
+  function setBypass(on) { setEnabled(!on); }
+  function setGateThresholdDb(db) { const n = Number(db); if (Number.isFinite(n)) cfg.gateThresholdDb = Math.max(-60, Math.min(-20, n)); }
+  function getLevel() { return level || 0; }
+  function getConfig() { return { strength: cfg.strength, hpHz: cfg.hpHz, lpHz: cfg.lpHz, agcTargetDb: cfg.agcTargetDb, gateThresholdDb: cfg.gateThresholdDb, bypass: cfg.bypass, version: MIC_VERSION }; }
+  function getStats() { return { version: MIC_VERSION, level, peak: level || 0, gated, cpu, enabled: enabled(), cfg: getConfig() }; }
 
+  let disposed = false;
   function dispose() {
+    if (disposed) return;
+    disposed = true;
     if (meterInterval) clearInterval(meterInterval);
     meterInterval = null;
     try { source?.disconnect?.(); } catch { /* ignore */ }
@@ -190,8 +203,8 @@ export function createMicEnhancer(config = {}) {
     ctx = null;
   }
 
-  const api = { attach, setEnabled, setStrength, getStats, dispose };
+  const api = { attach, setEnabled, setBypass, setStrength, setGateThresholdDb, getLevel, getConfig, getStats, dispose, version: MIC_VERSION };
   return api;
 }
 
-export default { createMicEnhancer, DEFAULT_CONFIG };
+export default { createMicEnhancer, DEFAULT_CONFIG, MIC_VERSION };

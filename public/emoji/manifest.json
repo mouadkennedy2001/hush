@@ -1,0 +1,604 @@
+[
+  {
+    "id": "airhorn",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f4e2.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f4e2"
+    ]
+  },
+  {
+    "id": "alien",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f47d.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f47d"
+    ]
+  },
+  {
+    "id": "angry",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f620.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f620"
+    ]
+  },
+  {
+    "id": "applause",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f44f.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f44f"
+    ]
+  },
+  {
+    "id": "ball",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/26bd.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "26bd"
+    ]
+  },
+  {
+    "id": "boing",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1fa80.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1fa80",
+      "1f300"
+    ]
+  },
+  {
+    "id": "book",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f4d6.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f4d6"
+    ]
+  },
+  {
+    "id": "cat",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f431.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f431"
+    ]
+  },
+  {
+    "id": "check",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/2705.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "2705"
+    ]
+  },
+  {
+    "id": "coffee",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/2615.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "2615"
+    ]
+  },
+  {
+    "id": "cool",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f60e.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f60e"
+    ]
+  },
+  {
+    "id": "crickets",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f997.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f997"
+    ]
+  },
+  {
+    "id": "cross",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/274c.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "274c"
+    ]
+  },
+  {
+    "id": "cry",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f62d.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f62d"
+    ]
+  },
+  {
+    "id": "ding",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f514.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f514"
+    ]
+  },
+  {
+    "id": "dizzy",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f635-200d-1f4ab.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f635-200d-1f4ab",
+      "1f635"
+    ]
+  },
+  {
+    "id": "drumroll",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f941.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f941"
+    ]
+  },
+  {
+    "id": "eyes",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f440.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f440"
+    ]
+  },
+  {
+    "id": "fart",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f4a8.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f4a8"
+    ]
+  },
+  {
+    "id": "fire",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f525.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f525"
+    ]
+  },
+  {
+    "id": "flower",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f338.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f338"
+    ]
+  },
+  {
+    "id": "game",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f3ae.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f3ae"
+    ]
+  },
+  {
+    "id": "ghost",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f47b.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f47b"
+    ]
+  },
+  {
+    "id": "glowstar",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f31f.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f31f"
+    ]
+  },
+  {
+    "id": "heart",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/2764.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "2764"
+    ]
+  },
+  {
+    "id": "hundred",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f4af.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f4af"
+    ]
+  },
+  {
+    "id": "hush",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f92b.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f92b"
+    ]
+  },
+  {
+    "id": "idea",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f4a1.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f4a1"
+    ]
+  },
+  {
+    "id": "kiss",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f618.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f618"
+    ]
+  },
+  {
+    "id": "laser",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/26a1.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "26a1"
+    ]
+  },
+  {
+    "id": "laugh",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f602.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f602"
+    ]
+  },
+  {
+    "id": "love",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f60d.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f60d"
+    ]
+  },
+  {
+    "id": "mindblown",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f92f.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f92f"
+    ]
+  },
+  {
+    "id": "music",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f3b5.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f3b5"
+    ]
+  },
+  {
+    "id": "ok",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f44c.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f44c"
+    ]
+  },
+  {
+    "id": "party",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f973.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f973"
+    ]
+  },
+  {
+    "id": "pizza",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f355.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f355"
+    ]
+  },
+  {
+    "id": "pop",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f4a5.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f4a5"
+    ]
+  },
+  {
+    "id": "pray",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f64f.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f64f"
+    ]
+  },
+  {
+    "id": "rimshot",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f3ad.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f3ad"
+    ]
+  },
+  {
+    "id": "robot",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f916.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f916"
+    ]
+  },
+  {
+    "id": "rocket",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f680.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f680"
+    ]
+  },
+  {
+    "id": "sad",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f622.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f622"
+    ]
+  },
+  {
+    "id": "siren",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f6a8.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f6a8"
+    ]
+  },
+  {
+    "id": "sleep",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f634.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f634"
+    ]
+  },
+  {
+    "id": "smile",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f60a.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f60a"
+    ]
+  },
+  {
+    "id": "sparkles",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/2728.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "2728"
+    ]
+  },
+  {
+    "id": "star",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/2b50.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "2b50"
+    ]
+  },
+  {
+    "id": "starstruck",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f929.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f929"
+    ]
+  },
+  {
+    "id": "strong",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f4aa.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f4aa"
+    ]
+  },
+  {
+    "id": "surprised",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f62e.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f62e"
+    ]
+  },
+  {
+    "id": "tada",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f389.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f389"
+    ]
+  },
+  {
+    "id": "think",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f914.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f914"
+    ]
+  },
+  {
+    "id": "thumbsdown",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f44e.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f44e"
+    ]
+  },
+  {
+    "id": "thumbsup",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f44d.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f44d"
+    ]
+  },
+  {
+    "id": "trombone",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f3ba.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f3ba"
+    ]
+  },
+  {
+    "id": "wave",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f44b.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f44b"
+    ]
+  },
+  {
+    "id": "wink",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f609.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f609"
+    ]
+  },
+  {
+    "id": "wow",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f632.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f632"
+    ]
+  },
+  {
+    "id": "yay",
+    "source": "twemoji",
+    "url": "https://cdn.jsdelivr.net/gh/jdecked/twemoji@main/assets/svg/1f64c.svg",
+    "svg": true,
+    "png": true,
+    "codepoints": [
+      "1f64c"
+    ]
+  }
+]

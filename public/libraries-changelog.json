@@ -1,7 +1,58 @@
 {
-  "version": "libraries-1.2.0",
-  "updated": "2026-11-08",
+  "version": "libraries-2.0.0",
+  "updated": "2026-11-09",
   "entries": [
+    {
+      "date": "2026-11-09",
+      "ts": 1763800000000,
+      "library": "giphy",
+      "version": "1.0.0",
+      "kind": "update",
+      "titleEn": "Giphy v1.0 — server-proxied GIF search (key never in browser)",
+      "titleAr": "Giphy v1.0 — بحث GIF عبر الخادم (المفتاح لا يصل للمتصفح أبدًا)",
+      "pointsEn": [
+        "NEW server-only src/giphy.js: search/trending/random/by-id through /api/gif/* with validation, 60s cache, rate limits, and only *.giphy.com media URLs returned. Key loads from env/.env (gitignored) — never in public/ JS, never logged.",
+        "GIF panel in rooms + servers: search, Trending, Random, plus paste-any-.gif fallback. Fixed the broken-GIF bug: CSP now allows https images (img only, scripts still self-only) and failed GIFs show a clickable fallback instead of a tiny broken icon."
+      ],
+      "pointsAr": [
+        "جديد src/giphy.js خادمي فقط: بحث/رائج/عشوائي/حسب المعرف عبر /api/gif/* مع تحقق وتخزين 60s وحدود معدل، وتُرجع روابط *.giphy.com فقط. المفتاح من env/.env (متجاهَل في git) — لا يظهر في JS أبدًا ولا يُسجَّل.",
+        "لوحة GIF في الغرف والخوادم: بحث + رائج + عشوائي + لصق أي رابط. أُصلح خطأ GIF المكسور: CSP يسمح الآن بالصور https (صور فقط، السكربتات self فقط) والـ GIF الفاشل يعرض بديلًا قابلًا للنقر بدل أيقونة مكسورة صغيرة."
+      ]
+    },
+    {
+      "date": "2026-11-09",
+      "ts": 1763799900000,
+      "library": "ping-op",
+      "version": "1.1.0",
+      "kind": "update",
+      "titleEn": "PING OP 1.1.0 — trend + health + real server stats",
+      "titleAr": "PING OP 1.1.0 — اتجاه + صحة + إحصاءات خادم حقيقية",
+      "pointsEn": [
+        "Core: getTrend() (improving/worsening/stable) + getHealth() + sanitizeStatsReport() (numbers-only, clamped).",
+        "Server: POST /api/ping/stats stores the last client report (rate-limited, validated) so /api/health ping stats are real instead of always empty. Client reports every 30s, best-effort with keepalive."
+      ],
+      "pointsAr": [
+        "النواة: getTrend() (يتحسن/يسوء/مستقر) + getHealth() + sanitizeStatsReport() (أرقام فقط ومقيّدة).",
+        "الخادم: POST /api/ping/stats يحفظ آخر تقرير عميل (محدود المعدل ومُتحقق) ليصبح ping في /api/health حقيقيًا بدل الفراغ الدائم. العميل يبلّغ كل 30 ثانية."
+      ]
+    },
+    {
+      "date": "2026-11-09",
+      "ts": 1763799800000,
+      "library": "mic",
+      "version": "ev1.2",
+      "kind": "update",
+      "titleEn": "mic ev1.2 — smoothed meter, gate hangover, live API",
+      "titleAr": "mic ev1.2 — مقياس أملس + مهلة بوابة + واجهة حية",
+      "pointsEn": [
+        "Smoothed RMS + peak-hold meter and gate hangover (closes only after gateHoldMs of silence) — word endings are no longer clipped and gate/AGC stop pumping.",
+        "New live API: getLevel()/getConfig()/setBypass()/setGateThresholdDb() without rebuilding the graph; real CPU from the meter tick; idempotent dispose(). All old APIs unchanged."
+      ],
+      "pointsAr": [
+        "مقياس RMS أملس + peak-hold ومهلة بوابة (تُغلق بعد gateHoldMs من الصمت فقط) — نهايات الكلمات لم تعد تُقصّ والبوابة/AGC توقفتا عن الضخ.",
+        "واجهة حية جديدة: getLevel()/getConfig()/setBypass()/setGateThresholdDb() دون إعادة بناء الرسم؛ CPU حقيقي من نبضة المقياس؛ dispose آمن عند التكرار. كل الواجهات القديمة باقية."
+      ]
+    },
     {
       "date": "2026-11-08",
       "ts": 1763480200000,

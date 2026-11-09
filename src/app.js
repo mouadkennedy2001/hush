@@ -13,6 +13,7 @@ import { ServerManager, cleanServerName, cleanChannelName, cleanChannelType, cle
 import { attachRealtime } from './realtime.js';
 import { SessionStore, sessions as defaultSessionsStore } from './sessions.js';
 import { createPingServer } from '../PING OP/src/server.js';
+import { isGiphyConfigured, searchGifs, trendingGifs, randomGif, getGifById } from './giphy.js';
 import {
   MAX_UPLOAD_BYTES,
   UPLOAD_EXTENSIONS,
@@ -137,7 +138,13 @@ export async function createHushServer({
         "script-src 'self'",
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
         "font-src 'self' https://fonts.gstatic.com",
-        "img-src 'self' data: blob:",
+        // v12: https: images ONLY (no script). This is the error/-folder
+        // fix: the old `img-src 'self' data: blob:` blocked every external
+        // GIF (Giphy/Tenor/direct .gif), so chat showed a tiny broken
+        // "GIF" icon. An <img> cannot execute script and object-src stays
+        // 'none', so allowing https images does not open XSS — scripts
+        // still come only from 'self'.
+        "img-src 'self' data: blob: https:",
         "media-src 'self' blob:",
         "connect-src 'self' ws: wss:",
         "object-src 'none'",
@@ -171,6 +178,51 @@ export async function createHushServer({
 
   // PING OP v1.0 HTTP probe (pingOpServer keeps no-store + adds X-Ping-Op).
   app.get('/api/ping', (req, res) => pingOpServer.httpHandler(req, res));
+
+  // PING OP 1.1: clients report aggregated stats so /api/health is real.
+  // Numbers only, clamped — never trust client strings (stored-XSS guard).
+  const pingStatsLimit = rateLimiter({ windowMs: 60_000, max: 30 });
+  app.post('/api/ping/stats', pingStatsLimit, (req, res) => {
+    try { pingOpServer.reportStats(req.body || {}); } catch { /* ignore */ }
+    res.json({ ok: true });
+  });
+
+  /* -------- Giphy v1.0 (server-only API key, never in browser code) -------- */
+  // The browser only ever sees /api/gif/* + media.giphy.com URLs.
+  // Rate limits protect the key quota; validation happens in src/giphy.js.
+  const gifSearchLimit = rateLimiter({ windowMs: 60_000, max: 30 });
+  const gifReadLimit = rateLimiter({ windowMs: 60_000, max: 60 });
+  app.get('/api/gif/status', gifReadLimit, (req, res) => {
+    res.setHeader('Cache-Control', 'public, max-age=60');
+    res.json({ ok: true, configured: isGiphyConfigured() });
+  });
+  app.get('/api/gif/search', gifSearchLimit, async (req, res, next) => {
+    try {
+      res.setHeader('Cache-Control', 'public, max-age=30');
+      res.json(await searchGifs({
+        q: req.query.q, limit: req.query.limit, offset: req.query.offset,
+        rating: req.query.rating, lang: req.query.lang
+      }));
+    } catch (error) { next(error); }
+  });
+  app.get('/api/gif/trending', gifReadLimit, async (req, res, next) => {
+    try {
+      res.setHeader('Cache-Control', 'public, max-age=30');
+      res.json(await trendingGifs({ limit: req.query.limit, offset: req.query.offset, rating: req.query.rating }));
+    } catch (error) { next(error); }
+  });
+  app.get('/api/gif/random', gifReadLimit, async (req, res, next) => {
+    try {
+      res.setHeader('Cache-Control', 'no-store');
+      res.json(await randomGif({ tag: req.query.tag }));
+    } catch (error) { next(error); }
+  });
+  app.get('/api/gif/:id', gifReadLimit, async (req, res, next) => {
+    try {
+      res.setHeader('Cache-Control', 'public, max-age=300');
+      res.json(await getGifById(req.params.id));
+    } catch (error) { next(error); }
+  });
 
   app.get('/api/changelog', async (req, res, next) => {
     try {
@@ -779,7 +831,12 @@ export async function createHushServer({
         } else if (/\.(?:js|css)$/i.test(filePath)) {
           res.setHeader('Cache-Control', 'public, max-age=60, must-revalidate');
         } else if (/\.(?:wav|svg|png|ico)$/i.test(filePath)) {
-          res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
+          // v12.3: emoji/sticker assets are requested with a cache-busting
+          // version (?v=twemoji-1), so immutable is safe for them. Every
+          // other binary revalidates hourly instead of serving stale
+          // files after an update (the "emojis didn't change" bug).
+          const isVersionedAsset = /[/\\](?:emoji|sticker)[/\\]/i.test(filePath);
+          res.setHeader('Cache-Control', isVersionedAsset ? 'public, max-age=86400, immutable' : 'public, max-age=3600, must-revalidate');
         } else {
           res.setHeader('Cache-Control', 'public, max-age=3600');
         }

@@ -47,7 +47,7 @@ export function sanitizeMicSettings(raw = {}, fallback = {}) {
 
   if ('quality' in raw) out.quality = QUALITIES.has(raw.quality) ? raw.quality : (base.quality ?? 'auto');
   if ('preset' in raw) out.preset = PRESETS.has(raw.preset) ? raw.preset : (base.preset ?? 'voice');
-  if ('micVersion' in raw) out.micVersion = raw.micVersion === 'ev1' ? 'ev1' : (base.micVersion ?? 'ev1');
+  if ('micVersion' in raw) out.micVersion = (raw.micVersion === 'ev1' || raw.micVersion === 'ev1.2') ? raw.micVersion : (base.micVersion ?? 'ev1');
 
   // deviceId goes into getUserMedia as { exact } — shape-check strictly.
   if ('deviceId' in raw) {

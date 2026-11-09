@@ -175,6 +175,15 @@
     <symbol id="i-volume2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
       <path d="M11 5 6 9H2v6h4l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/>
     </symbol>
+    <symbol id="i-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+    </symbol>
+    <symbol id="i-gif" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="2" y="4" width="20" height="16" rx="3"/><text x="12" y="15.5" text-anchor="middle" font-size="7" font-weight="800" fill="currentColor" stroke="none" font-family="inherit">GIF</text>
+    </symbol>
+    <symbol id="i-sticker" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 3l2.2 4.6 5 .7-3.6 3.5.9 5-4.5-2.4-4.5 2.4.9-5L4.8 8.3l5-.7Z"/><path d="M5 20c2-1 4 1 6 0s4 1 6 0"/>
+    </symbol>
   </svg>
 
   <div class="room-shell" id="room-shell">
@@ -400,6 +409,18 @@
               </button>
               <div class="emoji-menu" id="emoji-menu" hidden></div>
             </div>
+            <div class="emoji-wrap">
+              <button class="icon-button composer-attach composer-gif-btn" id="gif-btn" type="button" title="Open GIF picker" aria-label="Open GIF picker" aria-haspopup="dialog" aria-expanded="false" aria-controls="gif-menu">
+                <svg class="icon" aria-hidden="true"><use href="#i-gif"></use></svg>
+              </button>
+              <div class="emoji-menu emoji-menu-wide" id="gif-menu" hidden></div>
+            </div>
+            <div class="emoji-wrap">
+              <button class="icon-button composer-attach" id="sticker-btn" type="button" title="Open sticker picker" aria-label="Open sticker picker" aria-haspopup="dialog" aria-expanded="false" aria-controls="sticker-menu">
+                <svg class="icon" aria-hidden="true"><use href="#i-sticker"></use></svg>
+              </button>
+              <div class="emoji-menu emoji-menu-wide" id="sticker-menu" hidden></div>
+            </div>
             <button class="icon-button composer-attach" id="attach-btn" type="button" title="Attach a file" aria-label="Attach a file">
               <svg class="icon" aria-hidden="true"><use href="#i-paperclip"></use></svg>
             </button>
@@ -516,6 +537,8 @@
                 <a href="https://github.com/mouadkennedy2001" target="_blank" rel="noopener noreferrer">GitHub</a>
                 <span aria-hidden="true">·</span>
                 <a href="https://www.instagram.com/mouad_kennedy/" target="_blank" rel="noopener noreferrer">Instagram</a>
+                <span aria-hidden="true">·</span>
+                <a href="https://github.com/jdecked/twemoji" target="_blank" rel="noopener noreferrer" data-no-translate>Twemoji (CC-BY 4.0)</a>
               </span>
             </p>
           </div>
@@ -683,9 +706,13 @@
       <p class="gate-sub">Choose how you want to show up. You can change it any time.</p>
 
       <form id="join-form" class="join-form">
-        <label class="field">
-          <span>Display name</span>
-          <input id="name-input" name="name" maxlength="32" autocomplete="nickname" placeholder="Your name" required />
+        <label class="field name-field">
+          <span class="name-field-head"><span>Display name</span><span class="name-field-count" id="name-count" aria-hidden="true">0/32</span></span>
+          <span class="name-field-wrap">
+            <svg class="icon name-field-icon" aria-hidden="true"><use href="#i-user"></use></svg>
+            <input id="name-input" name="name" maxlength="32" autocomplete="nickname" placeholder="Your name" required dir="auto" />
+          </span>
+          <small class="name-field-hint">Up to 32 characters. You can change it any time.</small>
         </label>
 
         <div class="join-media">
@@ -720,6 +747,8 @@
           <a href="https://github.com/mouadkennedy2001" target="_blank" rel="noopener noreferrer">GitHub</a>
           <span aria-hidden="true">·</span>
           <a href="https://www.instagram.com/mouad_kennedy/" target="_blank" rel="noopener noreferrer">Instagram</a>
+          <span aria-hidden="true">·</span>
+          <a href="https://github.com/jdecked/twemoji" target="_blank" rel="noopener noreferrer" data-no-translate>Twemoji (CC-BY 4.0)</a>
         </span>
       </div>
     </div>

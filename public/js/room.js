@@ -6,6 +6,8 @@ import { startPing, refreshPing } from './ping.js';
 import { initSettings, getSettings, updateSettings } from './settings.js';
 import { SOUNDBOARD_SOUNDS, playSoundboard, playCustomSound, getSoundboardVolume, setSoundboardVolume, isSoundboardId, soundboardEmojiId } from './soundboard.js';
 import { CUSTOM_EMOJIS, CUSTOM_STICKERS, STICKER_CATEGORIES, EMOJI_CATEGORIES, customEmojiImage, customStickerImage, isCustomSticker, isGifUrl, gifImage, isCustomEmoji, emojiUrl, splitEmojiShortcodes, preloadCustomEmojis, pushRecentEmoji, getRecentEmojis, searchEmojis, searchStickers, isEmojiOnlyMessage, emojiLabel, stickerLabel } from './emoji.js';
+import { buildGifPanel, buildStickerMenu, setStickerMenuDeps, openStickerCreator } from './gif-panel.js';
+setStickerMenuDeps({ CUSTOM_STICKERS, STICKER_CATEGORIES, customStickerImage, searchStickers, stickerLabel });
 import { playSound, getSoundsEnabled, setSoundsEnabled, getSoundVolume, setSoundVolume } from './sounds.js';
 import { initChangelog } from './changelog.js';
 import { initLibraries } from './libraries-log.js';
@@ -183,6 +185,11 @@ const els = {
   pinnedClear: $('#pinned-clear'),
   emojiBtn: $('#emoji-btn'),
   emojiMenu: $('#emoji-menu'),
+  gifBtn: $('#gif-btn'),
+  gifMenu: $('#gif-menu'),
+  stickerBtn: $('#sticker-btn'),
+  stickerMenu: $('#sticker-menu'),
+  nameCount: $('#name-count'),
   focusToggle: $('#focus-toggle'),
   focusModeBtn: $('#focus-mode-btn'),
   notificationsToggle: $('#notifications-toggle'),
@@ -364,8 +371,15 @@ function formatCode(code) {
   return code.length === 6 ? `${code.slice(0, 3)}-${code.slice(3)}` : code;
 }
 
+function updateNameCount() {
+  if (!els.nameCount || !els.nameInput) return;
+  els.nameCount.textContent = t('name.count', { count: String(els.nameInput.value.length) });
+}
+
 function bindEvents() {
   els.joinForm.addEventListener('submit', joinRoom);
+  els.nameInput?.addEventListener('input', updateNameCount);
+  updateNameCount();
 
   els.micBtn.addEventListener('click', toggleMic);
   els.cameraBtn.addEventListener('click', toggleCamera);
@@ -388,9 +402,19 @@ function bindEvents() {
     event.stopPropagation();
     toggleEmojiMenu();
   });
+  els.gifBtn?.addEventListener('click', (event) => {
+    event.stopPropagation();
+    toggleGifMenu();
+  });
+  els.stickerBtn?.addEventListener('click', (event) => {
+    event.stopPropagation();
+    toggleStickerMenu();
+  });
   if (els.emojiMenu) {
     buildRoomEmojiMenu();
   }
+  if (els.gifMenu) buildGifMenu();
+  if (els.stickerMenu) buildStickerMenuPanel();
 
   els.composer.addEventListener('submit', (event) => {
     event.preventDefault();
@@ -568,6 +592,12 @@ function bindEvents() {
     }
     if (els.emojiMenu && !els.emojiMenu.hidden && !els.emojiMenu.contains(event.target) && !els.emojiBtn?.contains(event.target)) {
       closeEmojiMenu();
+    }
+    if (els.gifMenu && !els.gifMenu.hidden && !els.gifMenu.contains(event.target) && !els.gifBtn?.contains(event.target)) {
+      closeGifMenu();
+    }
+    if (els.stickerMenu && !els.stickerMenu.hidden && !els.stickerMenu.contains(event.target) && !els.stickerBtn?.contains(event.target)) {
+      closeStickerMenu();
     }
   });
 
@@ -2242,31 +2272,19 @@ function buildRoomEmojiMenu() {
     grid.replaceChildren();
     const isStickerCat = STICKER_CATEGORIES.some((c) => c.id === activeCat);
     if (activeCat === 'gif') {
-      const hint = el('p', 'emoji-empty', t('gif.hint'));
-      grid.append(hint);
-      const row = el('div', 'gif-row');
-      const input = el('input', 'emoji-search gif-input');
-      input.type = 'url';
-      input.placeholder = 'https://…/image.gif';
-      input.setAttribute('aria-label', 'GIF link');
-      const add = el('button', 'btn btn-primary btn-sm', t('gif.add'));
-      add.type = 'button';
-      const open = el('button', 'btn btn-quiet btn-sm', t('gif.openFree'));
-      open.type = 'button';
-      open.addEventListener('click', () => {
-        const q = encodeURIComponent(String(query || '').trim() || 'funny');
-        window.open(`https://tenor.com/search/${q}`, '_blank', 'noopener,noreferrer');
+      // v12: Giphy search (server proxy) + Trending/Random + My custom
+      // stickers (IndexedDB) + paste-link fallback — shared gif-panel.js.
+      buildGifPanel(grid, {
+        query,
+        t,
+        toast,
+        onInsert: (url) => { insertEmoji(url); closeEmojiMenu(); },
+        onSendCustomSticker: async (file) => { closeEmojiMenu(); await uploadFile(file); },
+        onOpenStickerCreator: () => openStickerCreator({ t, toast })
       });
-      add.addEventListener('click', () => {
-        const url = input.value.trim();
-        if (!isGifUrl(url)) { toast(t('gif.invalid'), 'error', 3000); return; }
-        insertEmoji(url);
-        closeEmojiMenu();
-      });
-      row.append(input, add, open);
-      grid.append(row);
       return;
     }
+    grid.classList.remove('is-panel');
     let list;
     if (isStickerCat && !query) {
       list = CUSTOM_STICKERS.filter((e) => e.cat === activeCat).map((e) => ({ ...e, kind: 'sticker' }));
@@ -2323,7 +2341,9 @@ function buildRoomEmojiMenu() {
     tabs.append(tab);
   }
   for (const cat of STICKER_CATEGORIES) {
-    const tab = el('button', 'emoji-tab sticker-tab', cat.en);
+    // v12.1: localized tabs — Arabic labels in ar, English in en
+    // (was hardcoded cat.en, so Arabic users always saw English).
+    const tab = el('button', 'emoji-tab sticker-tab', locale() === 'ar' ? cat.ar : cat.en);
     tab.type = 'button';
     tab.dataset.cat = cat.id;
     tab.setAttribute('aria-pressed', String(cat.id === activeCat));
@@ -2359,12 +2379,13 @@ function buildRoomEmojiMenu() {
 function toggleEmojiMenu() {
   if (!els.emojiMenu) return;
   const willOpen = els.emojiMenu.hidden;
+  if (willOpen) { closeGifMenu(); closeStickerMenu(); }
   els.emojiMenu.hidden = !willOpen;
   if (willOpen) {
     const rect = els.emojiBtn?.getBoundingClientRect();
     if (rect) {
-      const menuW = Math.min(272, window.innerWidth - 24);
-      const menuH = 380;
+      const menuW = Math.min(340, window.innerWidth - 24);
+      const menuH = 420;
       const rtl = document.documentElement.dir === 'rtl' || document.documentElement.lang === 'ar';
       let left = rtl ? rect.right - menuW : rect.left;
       left = Math.max(8, Math.min(left, window.innerWidth - menuW - 8));
@@ -2385,6 +2406,69 @@ function closeEmojiMenu() {
   if (!els.emojiMenu || els.emojiMenu.hidden) return;
   els.emojiMenu.hidden = true;
   els.emojiBtn?.setAttribute('aria-expanded', 'false');
+}
+
+/* ---------------- Dedicated GIF + Sticker menus (v12.1) ---------------- */
+function positionMenu(menu, btn, menuW = 360) {
+  if (!menu || !btn) return;
+  const rect = btn.getBoundingClientRect();
+  const menuH = 420;
+  const rtl = document.documentElement.dir === 'rtl' || document.documentElement.lang === 'ar';
+  let left = rtl ? rect.right - menuW : rect.left;
+  left = Math.max(8, Math.min(left, window.innerWidth - menuW - 8));
+  let top = rect.top - menuH - 8;
+  if (top < 8) top = Math.min(rect.bottom + 8, window.innerHeight - menuH - 8);
+  menu.style.left = `${left}px`;
+  menu.style.right = 'auto';
+  menu.style.top = `${Math.max(8, top)}px`;
+  menu.style.bottom = 'auto';
+}
+function closeAllPickers() { closeEmojiMenu(); closeGifMenu(); closeStickerMenu(); }
+function closeGifMenu() {
+  if (!els.gifMenu || els.gifMenu.hidden) return;
+  els.gifMenu.hidden = true;
+  els.gifBtn?.setAttribute('aria-expanded', 'false');
+}
+function closeStickerMenu() {
+  if (!els.stickerMenu || els.stickerMenu.hidden) return;
+  els.stickerMenu.hidden = true;
+  els.stickerBtn?.setAttribute('aria-expanded', 'false');
+}
+function toggleMenu(menu, btn, closeOthers) {
+  if (!menu || !btn) return;
+  const willOpen = menu.hidden;
+  if (willOpen) closeOthers();
+  menu.hidden = !willOpen;
+  if (willOpen) positionMenu(menu, btn, Math.min(360, window.innerWidth - 24));
+  btn.setAttribute('aria-expanded', String(willOpen));
+}
+function toggleGifMenu() { toggleMenu(els.gifMenu, els.gifBtn, () => { closeEmojiMenu(); closeStickerMenu(); }); }
+function toggleStickerMenu() { toggleMenu(els.stickerMenu, els.stickerBtn, () => { closeEmojiMenu(); closeGifMenu(); }); }
+function buildGifMenu() {
+  if (!els.gifMenu) return;
+  els.gifMenu.replaceChildren();
+  const grid = el('div', 'emoji-grid is-panel');
+  grid.id = 'gif-grid';
+  els.gifMenu.setAttribute('role', 'dialog');
+  els.gifMenu.setAttribute('aria-label', t('composer.gif'));
+  els.gifMenu.append(grid);
+  buildGifPanel(grid, {
+    query: '',
+    t,
+    toast,
+    onInsert: (url) => { insertEmoji(url); closeGifMenu(); },
+    onSendCustomSticker: async (file) => { closeGifMenu(); await uploadFile(file); },
+    onOpenStickerCreator: () => openStickerCreator({ t, toast })
+  });
+}
+function buildStickerMenuPanel() {
+  if (!els.stickerMenu) return;
+  buildStickerMenu(els.stickerMenu, {
+    t, toast, locale,
+    onInsertSticker: (id) => { insertEmoji(`:${id}:`); pushRecentEmoji(id); closeStickerMenu(); },
+    onSendCustomSticker: async (file) => { closeStickerMenu(); await uploadFile(file); },
+    onOpenStickerCreator: () => openStickerCreator({ t, toast })
+  });
 }
 
 function insertEmoji(emoji) {
@@ -3102,6 +3186,14 @@ function handleLanguageChange() {
   closeReactionPopover();
   if (els.micDialog?.open) renderMicSettings();
   renderServerPanel();
+  // v12.1: picker tabs/labels are language-dependent — rebuild them.
+  if (els.emojiMenu) buildRoomEmojiMenu();
+  if (els.gifMenu) buildGifMenu();
+  if (els.stickerMenu) buildStickerMenuPanel();
+  updateNameCount();
+  for (const [btn, key] of [[els.gifBtn, 'composer.gifTitle'], [els.stickerBtn, 'composer.stickerTitle']]) {
+    if (btn) { btn.title = t(key); btn.setAttribute('aria-label', t(key)); }
+  }
 }
 
 /* ---------------- Keyboard shortcuts ---------------- */
@@ -3114,6 +3206,7 @@ function handleShortcut(event) {
     closeReactionPopover();
     closeAdminMenu();
     closeImageLightbox();
+    closeAllPickers();
     toggleSoundboard(false);
     return;
   }

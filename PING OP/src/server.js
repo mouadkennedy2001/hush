@@ -1,5 +1,5 @@
 /**
- * PING OP v1.0 — Node server adapter.
+ * PING OP v1.1 — Node server adapter.
  *
  * attach(io) registers `ping:request` (echo + server clock + seq,
  * rate-limited to 5/s per socket) echoing { ok, t, seq, serverTime, op, version }.
@@ -16,7 +16,7 @@
  * Zero dependencies. Written from scratch for Hush.
  */
 
-import { createPingOp, PING_OP_VERSION, PING_OP_NAME } from './ping-op.js';
+import { createPingOp, PING_OP_VERSION, PING_OP_NAME, sanitizeStatsReport } from './ping-op.js';
 
 export { PING_OP_VERSION, PING_OP_NAME };
 
@@ -73,11 +73,20 @@ export function createPingServer(options = {}) {
     });
   }
 
-  function getStats() {
-    return pingOp.getStats();
+  // v1.1: last stats reported by a client (POST /api/ping/stats).
+  let lastReported = null;
+  function reportStats(raw) {
+    const clean = sanitizeStatsReport(raw);
+    if (!clean) return null;
+    lastReported = { ...clean, at: Date.now() };
+    return lastReported;
   }
 
-  return { attach, httpHandler, applyHardening, getStats, pingOp, arabicLabel };
+  function getStats() {
+    return { ...pingOp.getStats(), reported: lastReported };
+  }
+
+  return { attach, httpHandler, applyHardening, getStats, reportStats, pingOp, arabicLabel };
 }
 
-export default { createPingServer, PING_OP_VERSION };
+export default { createPingServer, PING_OP_VERSION, sanitizeStatsReport };

@@ -210,6 +210,7 @@ function render() {
   const avg = average();
   const med = median(samples);
   const jit = jitter();
+  reportStatsThrottled({ avg, med, jit, quality });
   for (const badge of document.querySelectorAll('[data-ping-badge]')) {
     badge.dataset.quality = quality;
     badge.title = `${t('ping.label')}: ${qualityLabel(quality)}`;
@@ -231,6 +232,27 @@ function render() {
     node.textContent = jit == null ? '--' : `${jit} ms`;
   }
   drawChart();
+}
+
+let lastReportAt = 0;
+function reportStatsThrottled({ avg, med, jit, quality } = {}) {
+  // PING OP 1.1: tell the server our aggregated latency so /api/health
+  // shows real client-measured stats (numbers only, server clamps).
+  const now = Date.now();
+  if (now - lastReportAt < 30_000) return;
+  lastReportAt = now;
+  try {
+    const op = pingOp.getStats();
+    fetch('/api/ping/stats', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        current: displayed, avg, median: med, jitter: jit,
+        lossRate: op.lossRate, score: op.score, quality, samplesCount: samples.length
+      }),
+      keepalive: true
+    }).catch(() => {});
+  } catch { /* best-effort */ }
 }
 
 export function refreshPing() { warmup = 0; pingOp.reset(); if (timer) clearTimeout(timer); void measure(); }

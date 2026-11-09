@@ -1,5 +1,6 @@
 /**
- * PING OP v1.0 — browser client (written from scratch, zero deps).
+ * PING OP v1.1 — browser client (written from scratch, zero deps).
+ * v1.1 adds: periodic stats reporting to POST /api/ping/stats.
  *
  * - 2 parallel probes per round, take the MIN (kills polling jitter)
  * - displayed value = min of last 4 rounds, adaptive interval
@@ -15,7 +16,7 @@
 
 import { createPingOp } from './ping-op.js';
 
-export const PING_OP_VERSION = '1.0.0';
+export const PING_OP_VERSION = '1.1.0';
 
 const TIMEOUT_MS = 1500;
 const MAX_SAMPLES = 60;
@@ -180,7 +181,29 @@ export function refreshPing() { engine.reset(); if (timer) clearTimeout(timer); 
 export function getPingSamples() { return [...engine.getSamples()]; }
 export function getPingModel() {
   const s = engine.getStats();
-  return { last: s.last, displayed: s.current, median: s.median, avg: s.avg, jitter: s.jitter, quality: s.quality, score: s.score, version: PING_OP_VERSION };
+  const health = typeof engine.getHealth === 'function' ? engine.getHealth() : s;
+  return { last: s.last, displayed: s.current, median: s.median, avg: s.avg, jitter: s.jitter, quality: s.quality, score: s.score, trend: health.trend || 'stable', version: PING_OP_VERSION };
+}
+
+// v1.1: report aggregated stats to the server (throttled, best-effort).
+let lastReportAt = 0;
+export async function reportPingStats({ force = false } = {}) {
+  const now = Date.now();
+  if (!force && now - lastReportAt < 30_000) return false;
+  lastReportAt = now;
+  try {
+    const s = engine.getStats();
+    await fetch('/api/ping/stats', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        current: s.current, avg: s.avg, median: s.median, jitter: s.jitter,
+        lossRate: s.lossRate, score: s.score, quality: s.quality, samplesCount: s.samplesCount
+      }),
+      keepalive: true
+    });
+    return true;
+  } catch { return false; }
 }
 
 export function startPing({ socketGetter = () => null } = {}) {
@@ -199,4 +222,4 @@ export function stopPing() {
   started = false;
 }
 
-export default { startPing, stopPing, refreshPing, getPingModel, getPingSamples, PING_OP_VERSION };
+export default { startPing, stopPing, refreshPing, getPingModel, getPingSamples, reportPingStats, PING_OP_VERSION };

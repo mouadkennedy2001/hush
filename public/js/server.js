@@ -8,6 +8,8 @@ import { initTheme } from './theme.js';
 import { startPing } from './ping.js';
 import { SOUNDBOARD_SOUNDS, playSoundboard, getSoundboardVolume, setSoundboardVolume, isSoundboardId, soundboardEmojiId } from './soundboard.js';
 import { CUSTOM_EMOJIS, CUSTOM_STICKERS, STICKER_CATEGORIES, EMOJI_CATEGORIES, customEmojiImage, customStickerImage, isCustomSticker, isGifUrl, gifImage, splitEmojiShortcodes, preloadCustomEmojis, pushRecentEmoji, getRecentEmojis, searchEmojis, searchStickers, isEmojiOnlyMessage, emojiLabel, stickerLabel } from './emoji.js';
+import { buildGifPanel, buildStickerMenu, setStickerMenuDeps, openStickerCreator } from './gif-panel.js';
+setStickerMenuDeps({ CUSTOM_STICKERS, STICKER_CATEGORIES, customStickerImage, searchStickers, stickerLabel });
 const REACTIONS = ['thumbsup', 'heart', 'laugh', 'tada', 'eyes', 'applause', 'fire', 'check'];
 import { playSound, getSoundsEnabled, setSoundsEnabled } from './sounds.js';
 import { getDeviceId, serverIconUrl } from './servers.js';
@@ -29,6 +31,8 @@ const els = {
   stage: $('#server-stage'), channelTitle: $('#channel-title'), channelTopic: $('#channel-topic'),
   messages: $('#messages'), typing: $('#typing'), composer: $('#composer'), messageInput: $('#message-input'),
   composerHint: $('#composer-hint'), emojiBtn: $('#emoji-btn'), emojiMenu: $('#emoji-menu'),
+  gifBtn: $('#gif-btn'), gifMenu: $('#gif-menu'), stickerBtn: $('#sticker-btn'), stickerMenu: $('#sticker-menu'),
+  nameCount: $('#name-count'),
   attachBtn: $('#attach-btn'), fileInput: $('#file-input'),
   soundboardBtn: $('#soundboard-btn'), soundboardPanel: $('#soundboard-panel'), soundboardTitle: $('#soundboard-title'),
   soundboardGrid: $('#soundboard-grid'), soundboardVolume: $('#soundboard-volume'), soundboardClose: $('#soundboard-close'),
@@ -134,8 +138,14 @@ function loadName() {
   } catch { /* ignore */ }
 }
 
+function updateNameCount() {
+  if (!els.nameCount || !els.nameInput) return;
+  els.nameCount.textContent = t('name.count', { count: String(els.nameInput.value.length) });
+}
 function bindEvents() {
   els.joinForm.addEventListener('submit', join);
+  els.nameInput?.addEventListener('input', updateNameCount);
+  updateNameCount();
   els.inviteBtn?.addEventListener('click', copyInvite);
   els.inviteCopy?.addEventListener('click', copyInvite);
   els.regenInvite?.addEventListener('click', regenerateInvite);
@@ -149,6 +159,10 @@ function bindEvents() {
   els.messageInput.addEventListener('input', handleDraftInput);
   els.messageInput.addEventListener('input', saveDraft);
   els.emojiBtn?.addEventListener('click', (e) => { e.stopPropagation(); toggleEmojiMenu(); });
+  els.gifBtn?.addEventListener('click', (e) => { e.stopPropagation(); toggleGifMenu(); });
+  els.stickerBtn?.addEventListener('click', (e) => { e.stopPropagation(); toggleStickerMenu(); });
+  if (els.gifMenu) buildGifMenu();
+  if (els.stickerMenu) buildStickerMenuPanel();
   els.attachBtn?.addEventListener('click', () => els.fileInput.click());
   els.fileInput.addEventListener('change', () => {
     const file = els.fileInput.files?.[0];
@@ -178,11 +192,13 @@ function bindEvents() {
   els.createTempRoomForm?.addEventListener('submit', (e) => { e.preventDefault(); createTempRoom(); });
   document.addEventListener('click', (e) => {
     if (els.emojiMenu && !els.emojiMenu.hidden && !els.emojiMenu.contains(e.target) && !els.emojiBtn?.contains(e.target)) closeEmojiMenu();
+    if (els.gifMenu && !els.gifMenu.hidden && !els.gifMenu.contains(e.target) && !els.gifBtn?.contains(e.target)) closeGifMenu();
+    if (els.stickerMenu && !els.stickerMenu.hidden && !els.stickerMenu.contains(e.target) && !els.stickerBtn?.contains(e.target)) closeStickerMenu();
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       const wasOpen = Boolean(state.reactionPopover);
-      closeImageLightbox(); closeEmojiMenu(); toggleSoundboard(false);
+      closeImageLightbox(); closeEmojiMenu(); closeGifMenu(); closeStickerMenu(); toggleSoundboard(false);
       closeReactionPopover();
       if (wasOpen && state.reactionPopoverAnchor) { try { state.reactionPopoverAnchor.focus({ preventScroll: true }); } catch { /* ignore */ } }
     }
@@ -1106,7 +1122,7 @@ function buildEmojiMenu() {
     tabs.append(tab);
   }
   for (const cat of STICKER_CATEGORIES) {
-    const tab = el('button', 'emoji-tab sticker-tab', cat.en);
+    const tab = el('button', 'emoji-tab sticker-tab', locale() === 'ar' ? cat.ar : cat.en);
     tab.type = 'button';
     tab.dataset.cat = cat.id;
     tab.setAttribute('aria-pressed', String(state.emojiCat === cat.id));
@@ -1146,6 +1162,7 @@ function renderEmojiGrid(query = state.emojiQuery) {
     renderGifPanel(grid, query);
     return;
   }
+  grid.classList.remove('is-panel');
   const isStickerCat = STICKER_CATEGORIES.some((c) => c.id === state.emojiCat);
   let list;
   if (isStickerCat && !query) {
@@ -1185,37 +1202,23 @@ function renderEmojiGrid(query = state.emojiQuery) {
   }
 }
 function renderGifPanel(grid, query) {
-  const hint = el('p', 'emoji-empty', t('gif.hint'));
-  grid.append(hint);
-  const row = el('div', 'gif-row');
-  const input = el('input', 'emoji-search gif-input');
-  input.type = 'url';
-  input.placeholder = 'https://…/image.gif';
-  input.setAttribute('aria-label', 'GIF link');
-  const add = el('button', 'btn btn-primary btn-sm', t('gif.add'));
-  add.type = 'button';
-  const open = el('button', 'btn btn-quiet btn-sm', t('gif.openFree'));
-  open.type = 'button';
-  open.addEventListener('click', () => {
-    const q = encodeURIComponent(String(query || '').trim() || 'funny');
-    window.open(`https://tenor.com/search/${q}`, '_blank', 'noopener,noreferrer');
+  // v12: shared Giphy + custom-sticker panel (see gif-panel.js).
+  buildGifPanel(grid, {
+    query,
+    t,
+    toast,
+    onInsert: (url) => { insertEmoji(url); closeEmojiMenu(); },
+    onSendCustomSticker: async (file) => { closeEmojiMenu(); await uploadFile(file); },
+    onOpenStickerCreator: () => openStickerCreator({ t, toast })
   });
-  add.addEventListener('click', () => {
-    const url = input.value.trim();
-    if (!isGifUrl(url)) { toast(t('gif.invalid'), 'error', 3000); return; }
-    insertEmoji(url);
-    closeEmojiMenu();
-  });
-  row.append(input, add, open);
-  grid.append(row);
 }
 function positionEmojiMenu() {
   if (!els.emojiMenu || !els.emojiBtn) return;
   // Fixed positioning: the stage has overflow:hidden, so an absolute
   // menu inside the composer gets clipped (empty-looking picker).
   const rect = els.emojiBtn.getBoundingClientRect();
-  const menuW = Math.min(272, window.innerWidth - 24);
-  const menuH = 380;
+  const menuW = Math.min(340, window.innerWidth - 24);
+  const menuH = 420;
   const rtl = document.documentElement.dir === 'rtl' || document.documentElement.lang === 'ar';
   let left = rtl ? rect.right - menuW : rect.left;
   left = Math.max(8, Math.min(left, window.innerWidth - menuW - 8));
@@ -1228,6 +1231,7 @@ function positionEmojiMenu() {
 }
 function toggleEmojiMenu() {
   const open = els.emojiMenu.hidden;
+  if (open) { closeGifMenu(); closeStickerMenu(); }
   els.emojiMenu.hidden = !open;
   if (open) positionEmojiMenu();
   els.emojiBtn?.setAttribute('aria-expanded', String(open));
@@ -1236,6 +1240,65 @@ function closeEmojiMenu() {
   if (els.emojiMenu.hidden) return;
   els.emojiMenu.hidden = true;
   els.emojiBtn?.setAttribute('aria-expanded', 'false');
+}
+/* Dedicated GIF + Sticker menus (v12.1) — shared builders in gif-panel.js */
+function positionMenu(menu, btn, menuW = 360) {
+  if (!menu || !btn) return;
+  const rect = btn.getBoundingClientRect();
+  const menuH = 420;
+  const rtl = document.documentElement.dir === 'rtl' || document.documentElement.lang === 'ar';
+  let left = rtl ? rect.right - menuW : rect.left;
+  left = Math.max(8, Math.min(left, window.innerWidth - menuW - 8));
+  let top = rect.top - menuH - 8;
+  if (top < 8) top = Math.min(rect.bottom + 8, window.innerHeight - menuH - 8);
+  menu.style.left = `${left}px`;
+  menu.style.right = 'auto';
+  menu.style.top = `${Math.max(8, top)}px`;
+  menu.style.bottom = 'auto';
+}
+function closeGifMenu() {
+  if (!els.gifMenu || els.gifMenu.hidden) return;
+  els.gifMenu.hidden = true;
+  els.gifBtn?.setAttribute('aria-expanded', 'false');
+}
+function closeStickerMenu() {
+  if (!els.stickerMenu || els.stickerMenu.hidden) return;
+  els.stickerMenu.hidden = true;
+  els.stickerBtn?.setAttribute('aria-expanded', 'false');
+}
+function toggleMenu(menu, btn, closeOthers) {
+  if (!menu || !btn) return;
+  const willOpen = menu.hidden;
+  if (willOpen) closeOthers();
+  menu.hidden = !willOpen;
+  if (willOpen) positionMenu(menu, btn, Math.min(360, window.innerWidth - 24));
+  btn.setAttribute('aria-expanded', String(willOpen));
+}
+function toggleGifMenu() { toggleMenu(els.gifMenu, els.gifBtn, () => { closeEmojiMenu(); closeStickerMenu(); }); }
+function toggleStickerMenu() { toggleMenu(els.stickerMenu, els.stickerBtn, () => { closeEmojiMenu(); closeGifMenu(); }); }
+function buildGifMenu() {
+  if (!els.gifMenu) return;
+  els.gifMenu.replaceChildren();
+  const grid = el('div', 'emoji-grid is-panel');
+  grid.id = 'gif-grid';
+  els.gifMenu.setAttribute('role', 'dialog');
+  els.gifMenu.setAttribute('aria-label', t('composer.gif'));
+  els.gifMenu.append(grid);
+  buildGifPanel(grid, {
+    query: '', t, toast,
+    onInsert: (url) => { insertEmoji(url); closeGifMenu(); },
+    onSendCustomSticker: async (file) => { closeGifMenu(); await uploadFile(file); },
+    onOpenStickerCreator: () => openStickerCreator({ t, toast })
+  });
+}
+function buildStickerMenuPanel() {
+  if (!els.stickerMenu) return;
+  buildStickerMenu(els.stickerMenu, {
+    t, toast, locale,
+    onInsertSticker: (id) => { insertEmoji(`:${id}:`); pushRecentEmoji(id); closeStickerMenu(); },
+    onSendCustomSticker: async (file) => { closeStickerMenu(); await uploadFile(file); },
+    onOpenStickerCreator: () => openStickerCreator({ t, toast })
+  });
 }
 function insertEmoji(shortcode) {
   const input = els.messageInput;
@@ -1822,6 +1885,12 @@ function handleLanguageChange() {
   renderMessages();
   renderSoundboardGrid();
   buildEmojiMenu();
+  if (els.gifMenu) buildGifMenu();
+  if (els.stickerMenu) buildStickerMenuPanel();
+  updateNameCount();
+  for (const [btn, key] of [[els.gifBtn, 'composer.gifTitle'], [els.stickerBtn, 'composer.stickerTitle']]) {
+    if (btn) { btn.title = t(key); btn.setAttribute('aria-label', t(key)); }
+  }
   els.channelTopic && (els.channelTopic.textContent = t('server.permanent'));
   document.title = state.server ? `${state.server.name} — Hush` : 'Server — Hush';
 }

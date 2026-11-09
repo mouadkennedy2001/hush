@@ -1,5 +1,7 @@
 /**
- * PING OP v1.0 — core statistics engine (written from scratch, zero deps).
+ * PING OP v1.1 — core statistics engine (written from scratch, zero deps).
+ * v1.1 adds: getTrend() (improving/worsening/stable), getHealth(),
+ * and sanitizeStatsReport() for safe client -> server reporting.
  *
  * Pure math + adaptive scheduling used identically on server and client:
  * - sample(roundTripMs): records one round trip, or null for a loss/timeout
@@ -19,13 +21,34 @@
  * No I/O, no timers, no DOM — unit-testable in plain Node.
  */
 
-export const PING_OP_VERSION = '1.0.0';
+export const PING_OP_VERSION = '1.1.0';
 export const PING_OP_NAME = 'ping-op';
 
 export const MAX_SAMPLES = 60;
 export const DISPLAY_WINDOW = 4;
 export const GOOD_MS = 80;
 export const FAIR_MS = 180;
+
+/** v1.1: validate a client-reported stats object. Numbers only, clamped —
+ *  a malicious client can never store strings/HTML through this path. */
+export function sanitizeStatsReport(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const num = (v, min, max) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : null;
+  };
+  const quality = ['good', 'fair', 'poor', 'offline'].includes(raw.quality) ? raw.quality : 'offline';
+  return {
+    current: num(raw.current, 0, 10000),
+    avg: num(raw.avg, 0, 10000),
+    median: num(raw.median, 0, 10000),
+    jitter: num(raw.jitter, 0, 10000),
+    lossRate: num(raw.lossRate, 0, 100),
+    score: num(raw.score, 0, 100),
+    quality,
+    samplesCount: num(raw.samplesCount, 0, 1000)
+  };
+}
 
 export function qualityFor(ms) {
   if (ms == null || !Number.isFinite(ms)) return 'offline';
@@ -135,6 +158,21 @@ export function createPingOp({ maxSamples = MAX_SAMPLES, displayWindow = DISPLAY
     return [...samples];
   }
 
+  // v1.1: trend of the displayed value over recent rounds.
+  function getTrend() {
+    if (rounds.length < 2) return 'stable';
+    const first = rounds[0];
+    const lastRound = rounds[rounds.length - 1];
+    if (lastRound < first - 10) return 'improving';
+    if (lastRound > first + 10) return 'worsening';
+    return 'stable';
+  }
+
+  function getHealth() {
+    const stats = getStats();
+    return { ...stats, trend: getTrend(), healthy: stats.quality === 'good' || stats.quality === 'fair' };
+  }
+
   function reset() {
     samples.length = 0;
     rounds.length = 0;
@@ -144,7 +182,7 @@ export function createPingOp({ maxSamples = MAX_SAMPLES, displayWindow = DISPLAY
     warmupDone = false;
   }
 
-  return { sample, getStats, getScore, nextIntervalMs, getSamples, reset };
+  return { sample, getStats, getHealth, getTrend, getScore, nextIntervalMs, getSamples, reset };
 }
 
 export class PingOp {
@@ -155,9 +193,11 @@ export class PingOp {
   sample(ms) { return this.#engine.sample(ms); }
   getStats() { return this.#engine.getStats(); }
   getScore() { return this.#engine.getScore(); }
+  getHealth() { return this.#engine.getHealth(); }
+  getTrend() { return this.#engine.getTrend(); }
   nextIntervalMs() { return this.#engine.nextIntervalMs(); }
   getSamples() { return this.#engine.getSamples(); }
   reset() { return this.#engine.reset(); }
 }
 
-export default { createPingOp, PingOp, PING_OP_VERSION, PING_OP_NAME, qualityFor };
+export default { createPingOp, PingOp, PING_OP_VERSION, PING_OP_NAME, qualityFor, sanitizeStatsReport };

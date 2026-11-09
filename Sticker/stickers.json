@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0",
+  "version": "2.0.0",
   "count": 65,
   "stickers": [
     {
@@ -125,7 +125,7 @@
       "id": "sticker-18",
       "cat": "animals",
       "en": "Panda",
-      "ar": "د Panda",
+      "ar": "باندا",
       "url": "/sticker/sticker-18.svg"
     },
     {
@@ -334,15 +334,15 @@
     {
       "id": "sticker-48",
       "cat": "emblems",
-      "en": "Owl",
-      "ar": "بومة",
+      "en": "Desert Oasis",
+      "ar": "واحة",
       "url": "/sticker/sticker-48.svg"
     },
     {
       "id": "sticker-49",
       "cat": "emblems",
-      "en": "Crown",
-      "ar": "تاج",
+      "en": "Throne",
+      "ar": "عرش",
       "url": "/sticker/sticker-49.svg"
     },
     {
@@ -411,8 +411,8 @@
     {
       "id": "sticker-59",
       "cat": "notes",
-      "en": "Heart",
-      "ar": "قلب",
+      "en": "Spark",
+      "ar": "شرارة",
       "url": "/sticker/sticker-59.svg"
     },
     {

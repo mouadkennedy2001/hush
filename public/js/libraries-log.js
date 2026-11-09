@@ -23,6 +23,7 @@ function pick(entry, base, fallback) {
 
 function libraryLabel(lib) {
   if (lib === 'ping-op') return getLanguage() === 'ar' ? 'PING OP — تحسين البنق' : 'PING OP — Ping Optimizer';
+  if (lib === 'giphy') return getLanguage() === 'ar' ? 'Giphy — صور GIF' : 'Giphy — GIF search';
   return getLanguage() === 'ar' ? 'mic — المايك' : 'mic — Microphone';
 }
 
@@ -80,7 +81,8 @@ function renderTabs(dialog) {
   const filters = [
     { id: 'all', label: t('libraries.all') },
     { id: 'mic', label: 'mic' },
-    { id: 'ping-op', label: getLanguage() === 'ar' ? 'PING OP — تحسين البنق' : 'PING OP' }
+    { id: 'ping-op', label: getLanguage() === 'ar' ? 'PING OP — تحسين البنق' : 'PING OP' },
+    { id: 'giphy', label: 'Giphy' }
   ];
   for (const f of filters) {
     const tab = el('button', 'emoji-tab', f.label);

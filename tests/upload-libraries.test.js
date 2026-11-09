@@ -14,11 +14,12 @@ test('emoji picker: fixed position, unified sizes, no overlap', async () => {
   assert.match(roomCss, /\.emoji-menu \{\s*position: fixed;/, 'menu is fixed (not clipped by overflow:hidden)');
   assert.match(roomCss, /\.emoji-grid \{[^}]*grid-template-columns: repeat\(6/, 'grid lives on .emoji-grid');
   assert.doesNotMatch(roomCss, /\.emoji-menu \{\s*position: absolute;\s*inset-inline-start/, 'old absolute menu removed');
-  // Sizes: picker 26, message 22, emoji-only 34, chip 16.
-  assert.match(roomCss, /\.custom-emoji \{[^}]*width: 26px;/);
-  assert.match(roomCss, /\.message-emoji \{[^}]*width: 22px;/);
-  assert.match(roomCss, /\.message\.is-emoji-only \.message-emoji \{[^}]*width: 34px;/);
-  assert.match(roomCss, /\.reaction-chip \.custom-emoji \{[^}]*width: 16px;/);
+  // Sizes (v12.3, larger): base 32, message 28, emoji-only 48, chip 20.
+  assert.match(roomCss, /\.custom-emoji \{[^}]*width: 32px;/);
+  assert.match(roomCss, /\.message-emoji \{[^}]*width: 28px;/);
+  assert.match(roomCss, /\.message\.is-emoji-only \.message-emoji \{[^}]*width: 48px;/);
+  assert.match(roomCss, /\.reaction-chip \.custom-emoji \{[^}]*width: 20px;/);
+  assert.match(roomCss, /\.emoji-choice \.custom-emoji \{[^}]*width: 38px;/, 'picker emoji 38px');
 
   const serverJs = await readFile(path.join(PUBLIC, 'js', 'server.js'), 'utf8');
   assert.match(serverJs, /positionEmojiMenu/);
@@ -69,7 +70,7 @@ test('libraries changelog: dedicated bilingual log + header button', async () =>
     assert.ok(e.titleEn && e.titleAr, 'both languages');
     assert.ok(Array.isArray(e.pointsEn) && e.pointsEn.length);
     assert.ok(Array.isArray(e.pointsAr) && e.pointsAr.length);
-    assert.ok(['mic', 'ping-op'].includes(e.library));
+    assert.ok(['mic', 'ping-op', 'giphy'].includes(e.library));
   }
   assert.ok(data.entries.some((e) => e.library === 'ping-op' && e.titleAr.includes('تحسين البنق')));
   assert.ok(data.entries.some((e) => e.library === 'mic'));
