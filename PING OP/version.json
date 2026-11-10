@@ -1,8 +1,8 @@
 {
   "name": "ping-op",
-  "version": "1.2.0",
+  "version": "1.4.0",
   "status": "active",
-  "description": "PING OP v1.2 — adaptive ping library written from scratch (server statistics + client probing).",
+  "description": "PING OP v1.4 — adaptive ping library written from scratch (server statistics + client probing, MAD jitter, rAF chart, clock-drift guard + trend-aware cadence).",
   "writtenFromScratch": true,
   "entrypoints": [
     "src/ping-op.js",

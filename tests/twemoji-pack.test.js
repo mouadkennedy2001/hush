@@ -67,8 +67,8 @@ test('v12.2: Twemoji attribution is visible (CC-BY 4.0) and forge source is giti
 
 test('v12.2 changelog documents the emoji replacement', async () => {
   const changelog = JSON.parse(await readFile(path.join(PUBLIC, 'changelog.json'), 'utf8'));
-  assert.equal(changelog.version, '14.0.0');
-  assert.match(changelog.entries[0].titleEn, /v14/);
+  assert.equal(changelog.version, '15.0.0');
+  assert.match(changelog.entries[0].titleEn, /v15/);
   assert.ok(changelog.entries.some((e) => /Twemoji pack/.test(e.titleEn)), 'v12.2 entry still present');
   assert.ok(changelog.entries[0].pointsEn.length >= 3 && changelog.entries[0].pointsAr.length >= 3);
 });

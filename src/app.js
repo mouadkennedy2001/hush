@@ -30,7 +30,9 @@ import {
   BOARD_IMAGE_MIME_TYPES,
   MAX_SERVER_ICON_BYTES,
   MAX_CUSTOM_SOUNDS_PER_SERVER,
-  UI_SOUND_IDS
+  UI_SOUND_IDS,
+  MIN_ROOM_PASSWORD_LENGTH,
+  MAX_ROOM_PASSWORD_LENGTH
 } from './constants.js';
 import { normalizeCustomSound } from './rooms.js';
 
@@ -281,12 +283,30 @@ export async function createHushServer({
   const createRoomLimit = rateLimiter({ windowMs: 60_000, max: 12 });
   app.post('/api/rooms', createRoomLimit, async (req, res, next) => {
     try {
+      // Optional room title (plain string) + optional password. The password
+      // is hashed (scrypt) before anything is written — the plaintext only
+      // exists in this request scope and is dropped immediately.
+      const name = String(req.body?.name ?? '').slice(0, 120);
+      const password = req.body?.password === undefined || req.body?.password === null
+        ? ''
+        : String(req.body?.password ?? '');
+      if (password.length > MAX_ROOM_PASSWORD_LENGTH) {
+        return res.status(400).json({ error: 'invalid-room-password' });
+      }
+      const cleanedPassword = password.trim();
+      if (cleanedPassword && (cleanedPassword.length < MIN_ROOM_PASSWORD_LENGTH || cleanedPassword.length > MAX_ROOM_PASSWORD_LENGTH)) {
+        return res.status(400).json({ error: 'invalid-room-password' });
+      }
       const code = await rooms.generateUniqueCode();
-      await rooms.getOrCreate(code);
+      const room = await rooms.getOrCreate(code);
+      if (name) await rooms.setRoomName(room, name);
+      if (cleanedPassword) await rooms.setPassword(room, cleanedPassword);
       res.status(201).json({
         code,
         formatted: formatCode(code),
-        url: `/r/${code}`
+        url: `/r/${code}`,
+        name: room.name,
+        hasPassword: rooms.hasPassword(room)
       });
     } catch (error) {
       next(error);
@@ -298,7 +318,17 @@ export async function createHushServer({
       const code = normalizeCode(req.params.code);
       if (!isValidCode(code)) return res.status(400).json({ error: 'invalid-code' });
       const exists = await rooms.codeExists(code);
-      res.json({ code, formatted: formatCode(code), exists });
+      if (!exists) return res.json({ code, formatted: formatCode(code), exists: false });
+      // Only reveal that a password is needed — never the hash, never the name
+      // beyond what the join screen already shows once you are inside.
+      const room = await rooms.getOrCreate(code);
+      res.json({
+        code,
+        formatted: formatCode(code),
+        exists: true,
+        name: room.name ?? '',
+        passwordRequired: rooms.hasPassword(room)
+      });
     } catch (error) {
       next(error);
     }

@@ -1,7 +1,28 @@
 {
-  "version": "libraries-3.2.0",
-  "updated": "2026-11-09",
+  "version": "libraries-3.3.0",
+  "updated": "2026-11-10",
   "entries": [
+    {
+      "date": "2026-11-10",
+      "ts": 1763800900000,
+      "library": "ping-op",
+      "version": "1.3.0",
+      "kind": "update",
+      "titleEn": "PING OP 1.3.0 — accuracy + clock-drift guard + smarter probing",
+      "titleAr": "PING OP 1.3.0 — دقة أعلى + تعويض انقطاع الساعة + استطلاع أذكى",
+      "pointsEn": [
+        "Average is now an EWMA (alpha 0.25): a transient spike fades within a few rounds instead of haunting a plain mean for the whole 60-sample window; jitter only reads the last 12 samples so old spikes stop keeping it high forever.",
+        "Clock-drift guard: when two samples arrive more than 30s apart (tab suspension, throttled timers, system sleep) the display window and the EWMA re-anchor on the fresh sample — the badge never shows a stale pre-suspension value, averages are not poisoned across eras, and no fake trend is produced from mixing them.",
+        "Trend/loss-aware cadence: nextIntervalMs() still starts from quality (good 3s / fair 2s / poor 1.2s / offline 0.9s) but now probes ~0.75x faster (stacking, 800ms floor) while the trend is worsening or loss >= 20%, so decay and recovery show sooner without flooding a busy link. getStats() exposes the last recommended cadence as intervalMs.",
+        "Client: PING_OP_VERSION is imported from the core instead of a stale hardcoded const, quality display now shows the trend too (badge title + data-ping-trend), and public/js/ping.js uses the single shared engine for the badge, the Connection card and stats — they can never disagree. Mirrors public/js/ping-op/* are in sync; all prior APIs unchanged (sample(ms) still works, the { atMs } meta is optional)."
+      ],
+      "pointsAr": [
+        "المتوسط أصبح EWMA (alpha 0.25): القفزة العابرة تتلاشى في جولات قليلة بدل أن تسكن المتوسط البسيط طوال نافذة الـ 60 عينة؛ والاهتزاز يقرأ آخر 12 عينة فقط فلا تبقى القفزات القديمة ترفعه للأبد.",
+        "حارس انحراف الساعة: إذا وصلت عينتان متباعدتان أكثر من 30 ثانية (تعليق التبويب، مؤقتات مثبّطة، نوم النظام) تعيد نافذة العرض والـ EWMA ارتكازها على العينة الجديدة — الشارة لا تعرض قيمة قديمة من قبل الانقطاع، والمتوسطات لا تُسمم عبر الحقب، ولا ينتج اتجاه زائف من مزجها.",
+        "دورة تراعي الاتجاه والفقدان: nextIntervalMs() تبدأ من الجودة (جيد 3s / مقبول 2s / ضعيف 1.2s / غير متصل 0.9s) لكنها تستطلع الآن أسرع بـ 0.75x (تراكميًا بأرضية 800ms) عند تسوء الاتجاه أو يبلغ الفقدان 20%، فيظهر التدهور والتعافي أسرع دون إغراق رابط مزدحم. getStats() يكشف آخر دورة مستحسنة في intervalMs.",
+        "العميل: PING_OP_VERSION تُستورد من المحرك بدل ثابت قديم مخزّن، وعرض الجودة يُظهر الاتجاه أيضًا (عنوان الشارة + data-ping-trend)، وpublic/js/ping.js يستعمل المحرك الواحد المشترك للشارة وبطاقة الاتصال والإحصاءات — فلا يمكن أن تختلف أبدًا. المرايا public/js/ping-op/ متزامنة؛ كل الواجهات السابقة باقية (sample(ms) كما هو، والوسيط { atMs } اختياري)."
+      ]
+    },
     {
       "date": "2026-11-09",
       "ts": 1763800700000,

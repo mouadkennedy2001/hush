@@ -2,6 +2,7 @@ import { randomUUID, createHash } from 'node:crypto';
 import {
   cleanMessageText,
   cleanName,
+  cleanDeviceType,
   isAllowedReaction,
   isAllowedFloatingReaction,
   normalizeFloatingReaction,
@@ -415,6 +416,28 @@ export function attachRealtime(io, { rooms, servers, sessions = null, maxPartici
           return safeAck(ack, { ok: false, error: 'banned', until: banned.until ?? null, reason: banned.reason || '' });
         }
 
+        // Password gate (v15): rooms may carry a scrypt password hash. The
+        // client sends the password (or the one it remembered for this room)
+        // in the join payload; wrong/missing -> error and NO membership, NO
+        // history, NO participant list. Attempts are throttled per socket
+        // (scrypt is deliberately expensive — see passwordRate bucket).
+        if (rooms.hasPassword(room)) {
+          if (!allowRateFor(socket, 'passwordRate', 6)) {
+            return safeAck(ack, { ok: false, error: 'rate-limited' });
+          }
+          const supplied = String(payload.password ?? '');
+          const ok = await rooms.verifyPassword(room, supplied);
+          if (!ok) {
+            // 'wrong-password' lets the UI keep the typed value; a client
+            // that sent nothing gets 'password-required' to show the gate.
+            return safeAck(ack, {
+              ok: false,
+              error: supplied ? 'wrong-password' : 'password-required',
+              passwordRequired: true
+            });
+          }
+        }
+
         if (room.participants.size >= maxParticipants) {
           return safeAck(ack, { ok: false, error: 'room-full' });
         }
@@ -450,6 +473,8 @@ export function attachRealtime(io, { rooms, servers, sessions = null, maxPartici
           screenOn: false,
           handRaised: false,
           joinedAt: Date.now(),
+          // Client-declared device class ('phone' | 'pc' | 'tablet', '').
+          deviceType: cleanDeviceType(payload.deviceType),
           deviceHash,
           ipHash
         };
@@ -479,6 +504,8 @@ export function attachRealtime(io, { rooms, servers, sessions = null, maxPartici
           isHost: room.hostId === socket.id,
           room: {
             code,
+            name: room.name ?? '',
+            hasPassword: rooms.hasPassword(room),
             participants: [...room.participants.values()].map(publicParticipant),
             messages: room.messages,
             pinnedMessageId: room.pinnedMessageId ?? null,
@@ -572,6 +599,49 @@ export function attachRealtime(io, { rooms, servers, sessions = null, maxPartici
       safeAck(ack, { ok: true });
     });
 
+    /* -------- Room settings (v15): host renames / manages the password -------- */
+    socket.on('room:rename', async (payload = {}, ack) => {
+      try {
+        if (!membership) return safeAck(ack, { ok: false, error: 'not-in-room' });
+        if (!isHost()) return safeAck(ack, { ok: false, error: 'not-admin' });
+        if (!allowRateFor(socket, 'roomSettingsRate', 10)) return safeAck(ack, { ok: false, error: 'rate-limited' });
+        const name = await rooms.setRoomName(membership.room, payload.name);
+        // Instant for everyone: header + tab title update live.
+        io.to(channelFor(membership.room.code)).emit('room:renamed', { name, by: membership.participant.name });
+        safeAck(ack, { ok: true, name });
+      } catch (error) {
+        console.error('room:rename failed', error);
+        safeAck(ack, { ok: false, error: 'rename-failed' });
+      }
+    });
+
+    socket.on('room:password', async (payload = {}, ack) => {
+      try {
+        if (!membership) return safeAck(ack, { ok: false, error: 'not-in-room' });
+        if (!isHost()) return safeAck(ack, { ok: false, error: 'not-admin' });
+        if (!allowRateFor(socket, 'roomSettingsRate', 5)) return safeAck(ack, { ok: false, error: 'rate-limited' });
+        if (payload.password === undefined) return safeAck(ack, { ok: false, error: 'invalid-room-password' });
+        if (payload.password === '' || payload.password === null) {
+          await rooms.removePassword(membership.room);
+        } else {
+          await rooms.setPassword(membership.room, payload.password);
+        }
+        // Never broadcast the password itself — only that protection changed.
+        // People already inside stay inside; NEW joins follow the new rule.
+        io.to(channelFor(membership.room.code)).emit('room:password-changed', {
+          hasPassword: rooms.hasPassword(membership.room),
+          by: membership.participant.name
+        });
+        safeAck(ack, { ok: true, hasPassword: rooms.hasPassword(membership.room) });
+      } catch (error) {
+        if (error?.message === 'invalid-room-password') {
+          return safeAck(ack, { ok: false, error: 'invalid-room-password' });
+        }
+        console.error('room:password failed', error);
+        safeAck(ack, { ok: false, error: 'password-failed' });
+      }
+    });
+
     socket.on('admin:mute', (payload = {}, ack) => {
       if (!allowRateFor(socket, 'adminRate', 10)) return safeAck(ack, { ok: false, error: 'rate-limited' });
       const target = requireHost(String(payload.targetId || ''), ack);
@@ -647,6 +717,9 @@ export function attachRealtime(io, { rooms, servers, sessions = null, maxPartici
         attachment,
         authorId: participant.id,
         authorName: participant.name,
+        // Device icon next to the name in chat (kept in history so icons
+        // still render for authors who already left).
+        authorDeviceType: participant.deviceType || '',
         createdAt: Date.now(),
         reactions: {}
       };

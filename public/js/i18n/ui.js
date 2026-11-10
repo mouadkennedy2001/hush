@@ -19,6 +19,10 @@ export const ui = {
   'ping.offline': ['Offline', 'غير متصل'],
   'ping.avg': ['Average', 'المتوسط'],
   'ping.jitter': ['Jitter', 'الاهتزاز'],
+  'ping.trend': ['Trend', 'الاتجاه'],
+  'ping.improving': ['Improving', 'يتحسن'],
+  'ping.worsening': ['Worsening', 'يسوء'],
+  'ping.stable': ['Stable', 'مستقر'],
   'ping.connection': ['Connection', 'الاتصال'],
 
   'meta.landingTitle': [
@@ -30,6 +34,7 @@ export const ui = {
     'نص وصوت وفيديو ومشاركة شاشة في غرفة واحدة هادئة. بلا تنزيلات وبلا حسابات. مجرد رابط والأشخاص الذين تريد التحدث إليهم.'
   ],
   'meta.roomTitle': ['Room {code} — Hush', 'الغرفة {code} — Hush'],
+  'meta.roomNameTitle': ['{name} — Hush', '{name} — Hush'],
   'meta.roomUntitled': ['Room — Hush', 'الغرفة — Hush'],
   'meta.roomDescription': [
     'A quiet room for text, voice, video, and screen sharing.',
@@ -53,6 +58,11 @@ export const ui = {
 
   'join.busy': ['Joining…', 'جارٍ الانضمام…'],
   'join.idle': ['Join room', 'انضم إلى الغرفة'],
+  'join.passwordPlaceholder': ['Room password', 'كلمة مرور الغرفة'],
+  'join.passwordHint': [
+    'This room is protected. Enter the password the host shared with you.',
+    'هذه الغرفة محمية. أدخل كلمة المرور التي شاركها معك المضيف.'
+  ],
 
   'error.invalidLink': [
     'This room link is missing a valid code. Go back and create a new room.',
@@ -103,6 +113,23 @@ export const ui = {
     'عدد كبير من عمليات الرفع. انتظر دقيقة وحاول مرة أخرى.'
   ],
   'error.uploadFailed': ['The upload failed. Try again.', 'فشل الرفع. حاول مرة أخرى.'],
+  'error.passwordRequired': [
+    'This room is protected. Enter the room password to join.',
+    'هذه الغرفة محمية. أدخل كلمة مرور الغرفة للانضمام.'
+  ],
+  'error.wrongPassword': [
+    'That password is not correct. Try again.',
+    'كلمة المرور غير صحيحة. حاول مرة أخرى.'
+  ],
+  'error.invalidRoomPassword': [
+    'Passwords must be 4–128 characters.',
+    'يجب أن تتكوّن كلمة المرور من ٤ إلى ١٢٨ حرفًا.'
+  ],
+  'error.renameFailed': ['Could not rename the room. Try again.', 'تعذّر تغيير اسم الغرفة. حاول مرة أخرى.'],
+  'error.passwordFailed': [
+    'Could not change the room password. Try again.',
+    'تعذّر تغيير كلمة مرور الغرفة. حاول مرة أخرى.'
+  ],
 
   'chat.you': ['You', 'أنت'],
   'chat.guest': ['Guest', 'ضيف'],
@@ -153,6 +180,10 @@ export const ui = {
   'chat.jumpPinned': ['Jump to pinned message', 'الانتقال إلى الرسالة المثبّتة'],
   'chat.unpin': ['Unpin message', 'إلغاء تثبيت الرسالة'],
   'chat.insertEmoji': ['Insert emoji', 'إدراج إيموجي'],
+  'chat.openChat': ['Open chat (C)', 'فتح الدردشة (C)'],
+  'chat.closeChat': ['Close chat', 'إغلاق الدردشة'],
+  'chat.closePanel': ['Close panel', 'إغلاق اللوحة'],
+  'chat.panelLabel': ['Chat', 'الدردشة'],
 
   'settings.title': ['Display', 'العرض'],
   'settings.textSize': ['Text size', 'حجم النص'],
@@ -341,6 +372,11 @@ export const ui = {
 
   'landing.openRoom': ['Open a room', 'افتح غرفة'],
   'landing.opening': ['Opening…', 'جارٍ الفتح…'],
+  'landing.createDialogTitle': ['Open a room', 'افتح غرفة'],
+  'landing.createDialogLead': [
+    'Both fields are optional — as the host you can change them any time.',
+    'كلا الحقلين اختياري — يمكنك تغييرهما في أي وقت كمضيف.'
+  ],
   'landing.rateLimited': [
     'Too many rooms from this browser. Give it a minute and try again.',
     'عدد كبير من الغرف من هذا المتصفح. انتظر دقيقة وحاول مرة أخرى.'
@@ -534,6 +570,59 @@ export const ui = {
   'screen.shrink': ['Shrink screen', 'تصغير الشاشة'],
   'screen.watchAgain': ['Watch screen', 'مشاهدة الشاشة'],
   'screen.stoppedWatching': ['You stopped watching the screen.', 'أوقفت مشاهدة الشاشة.'],
+  'screen.zoomIn': ['Zoom in (+)', 'تكبير (+)'],
+  'screen.zoomOut': ['Zoom out (-)', 'تصغير (-)'],
+  'screen.zoomReset': ['Reset zoom (0)', 'إعادة ضبط التكبير (0)'],
+
+  /* Room settings (host only): name + password + dice generator. */
+  'room.settingsBtn': ['Room settings', 'إعدادات الغرفة'],
+  'room.settingsTitle': ['Room settings', 'إعدادات الغرفة'],
+  'room.settingsLead': [
+    'Only the host can change these. Everyone in the room sees updates instantly.',
+    'يمكن للمضيف وحده تغيير هذه الإعدادات. يراها الجميع في الغرفة فورًا.'
+  ],
+  'room.nameLabel': ['Room name', 'اسم الغرفة'],
+  'room.namePlaceholder': ['Optional room name', 'اسم غرفة اختياري'],
+  'room.nameHint': [
+    'Shown to everyone in the room. Leave empty to use the room code.',
+    'يظهر للجميع في الغرفة. اتركه فارغًا لاستخدام رمز الغرفة.'
+  ],
+  'room.passwordLabel': ['Room password', 'كلمة مرور الغرفة'],
+  'room.passwordPlaceholder': ['Leave empty to remove the password', 'اتركها فارغة لإزالة كلمة المرور'],
+  'room.passwordHintSet': [
+    'A password is set. Type a new one to change it, or leave empty to remove it.',
+    'كلمة المرور مضبوطة. اكتب واحدة جديدة لتغييرها، أو اترك الحقل فارغًا لإزالتها.'
+  ],
+  'room.passwordHintNone': [
+    'No password. Type one to protect the room, or leave empty.',
+    'لا توجد كلمة مرور. اكتب واحدة لحماية الغرفة، أو اترك الحقل فارغًا.'
+  ],
+  'room.passwordHintDice': [
+    '4–128 characters. Tap the dice to generate a strong one.',
+    'من ٤ إلى ١٢٨ حرفًا. انقر النرد لتوليد كلمة قوية.'
+  ],
+  'room.diceTitle': ['Generate a strong password', 'توليد كلمة مرور قوية'],
+  'room.cancel': ['Cancel', 'إلغاء'],
+  'room.save': ['Save changes', 'حفظ التغييرات'],
+  'room.close': ['Close', 'إغلاق'],
+  'room.saved': ['Room settings saved.', 'حُفظت إعدادات الغرفة.'],
+  'password.show': ['Show password', 'إظهار كلمة المرور'],
+  'password.hide': ['Hide password', 'إخفاء كلمة المرور'],
+
+  /* Device-type icons next to names (tiles, people list, chat). */
+  'device.phone': ['Phone', 'هاتف'],
+  'device.pc': ['Computer', 'حاسوب'],
+  'device.tablet': ['Tablet', 'جهاز لوحي'],
+
+  'toast.roomRenamed': ['{by} renamed the room to “{name}”.', 'غيّر {by} اسم الغرفة إلى «{name}».'],
+  'toast.roomPasswordSet': [
+    '{by} protected the room with a password.',
+    'حمى {by} الغرفة بكلمة مرور.'
+  ],
+  'toast.roomPasswordRemoved': [
+    '{by} removed the room password.',
+    'أزال {by} كلمة مرور الغرفة.'
+  ],
   'server.settings': ['Server settings', 'إعدادات الخادم'],
   'server.settingsName': ['Server name', 'اسم الخادم'],
   'server.settingsDesc': ['Description', 'الوصف'],

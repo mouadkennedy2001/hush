@@ -5,6 +5,7 @@ import { initChangelog } from './changelog.js';
 import { initLibraries } from './libraries-log.js';
 import { CUSTOM_EMOJIS, customEmojiImage } from './emoji.js';
 import { fetchServers, createServer, serverIconUrl, serverUrl, inviteUrl, lookupInvite, uploadServerIcon, getDeviceId } from './servers.js';
+import { animateDiceRoll, isValidRoomPassword } from './dice-password.js';
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -273,13 +274,28 @@ function navigateToRoom(code) {
   window.location.href = `/r/${code}`;
 }
 
-async function createRoom(button) {
-  showLandingError('');
-  button.disabled = true;
-  button.textContent = t('landing.opening');
+async function createRoom(submitButton) {
+  const name = (createNameInput?.value ?? '').trim().slice(0, 60);
+  const password = (createPasswordInput?.value ?? '').trim();
+  showCreateError('');
+
+  if (password && !isValidRoomPassword(password)) {
+    showCreateError(t('error.invalidRoomPassword'));
+    createPasswordInput?.focus();
+    return;
+  }
+
+  if (submitButton) {
+    submitButton.disabled = true;
+    submitButton.textContent = t('landing.opening');
+  }
 
   try {
-    const response = await fetch('/api/rooms', { method: 'POST' });
+    const response = await fetch('/api/rooms', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, password })
+    });
     const data = await response.json().catch(() => ({}));
     if (!response.ok || !data.code) {
       throw new Error(
@@ -288,15 +304,116 @@ async function createRoom(button) {
     }
     navigateToRoom(data.code);
   } catch (error) {
-    button.disabled = false;
-    button.textContent = t('landing.openRoom');
-    showLandingError(error.message || t('landing.createFailed'));
+    if (submitButton) {
+      submitButton.disabled = false;
+      submitButton.textContent = t('landing.openRoom');
+    }
+    showCreateError(error.message || t('landing.createFailed'));
+  }
+}
+
+/* ---------------- Create-room dialog (optional name + password) ---------------- */
+
+const createDialog = $('#create-dialog');
+const createForm = $('#create-form');
+const createNameInput = $('#create-name-input');
+const createPasswordInput = $('#create-password-input');
+const createPasswordToggle = $('#create-password-toggle');
+const createDiceBtn = $('#create-dice-btn');
+const createDialogError = $('#create-dialog-error');
+const createSubmit = $('#create-submit');
+const createPasswordHint = $('#create-password-hint');
+
+function showCreateError(message) {
+  if (!createDialogError) return;
+  createDialogError.textContent = message || '';
+  createDialogError.hidden = !message;
+  if (message) toast(message, 4200);
+}
+
+function openCreateDialog() {
+  if (!createDialog) return;
+  showCreateError('');
+  if (createNameInput) createNameInput.value = '';
+  if (createPasswordInput) {
+    createPasswordInput.value = '';
+    createPasswordInput.type = 'password';
+  }
+  createPasswordToggle?.classList.remove('is-visible');
+  renderCreateLabels();
+  if (typeof createDialog.showModal === 'function') createDialog.showModal();
+  else createDialog.setAttribute('open', '');
+  setTimeout(() => createNameInput?.focus(), 40);
+}
+
+function closeCreateDialog() {
+  if (!createDialog) return;
+  if (typeof createDialog.close === 'function') createDialog.close();
+  else createDialog.removeAttribute('open');
+}
+
+function renderCreateLabels() {
+  const title = $('#create-dialog-title');
+  if (title) title.textContent = t('landing.createDialogTitle');
+  const lead = $('#create-form > .muted');
+  if (lead) lead.textContent = t('landing.createDialogLead');
+  const nameLabel = $('#create-name-label');
+  if (nameLabel) nameLabel.textContent = t('room.nameLabel');
+  if (createNameInput) createNameInput.placeholder = t('room.namePlaceholder');
+  const passwordLabel = $('#create-password-label');
+  if (passwordLabel) passwordLabel.textContent = t('room.passwordLabel');
+  if (createPasswordInput) createPasswordInput.placeholder = t('room.passwordPlaceholder');
+  if (createPasswordHint) createPasswordHint.textContent = t('room.passwordHintDice');
+  if (createSubmit && !createSubmit.disabled) createSubmit.textContent = t('landing.openRoom');
+  if (createDiceBtn) {
+    createDiceBtn.title = t('room.diceTitle');
+    createDiceBtn.setAttribute('aria-label', t('room.diceTitle'));
+  }
+  if (createPasswordToggle) {
+    const show = createPasswordInput && createPasswordInput.type !== 'password';
+    createPasswordToggle.title = t(show ? 'password.hide' : 'password.show');
+    createPasswordToggle.setAttribute('aria-label', t(show ? 'password.hide' : 'password.show'));
   }
 }
 
 $$('[data-create-room]').forEach((button) => {
-  button.addEventListener('click', () => createRoom(button));
+  button.addEventListener('click', openCreateDialog);
 });
+
+$$('[data-close-create]').forEach((button) => {
+  button.addEventListener('click', closeCreateDialog);
+});
+
+if (createDialog) {
+  createDialog.addEventListener('click', (event) => {
+    if (event.target === createDialog) closeCreateDialog();
+  });
+}
+
+if (createForm) {
+  createForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+    void createRoom(createSubmit);
+  });
+}
+
+if (createPasswordToggle && createPasswordInput) {
+  createPasswordToggle.addEventListener('click', () => {
+    const show = createPasswordInput.type === 'password';
+    createPasswordInput.type = show ? 'text' : 'password';
+    createPasswordToggle.classList.toggle('is-visible', show);
+    createPasswordToggle.title = t(show ? 'password.hide' : 'password.show');
+    createPasswordToggle.setAttribute('aria-label', t(show ? 'password.hide' : 'password.show'));
+  });
+}
+
+if (createDiceBtn && createPasswordInput) {
+  createDiceBtn.addEventListener('click', () => {
+    animateDiceRoll(createDiceBtn, createPasswordInput);
+  });
+}
+
+onLanguageChange(renderCreateLabels);
 
 function openJoinDialog() {
   if (!joinDialog) return;

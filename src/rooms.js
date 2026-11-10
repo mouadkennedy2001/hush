@@ -1,10 +1,13 @@
-import { randomUUID, randomInt } from 'node:crypto';
+import { randomUUID, randomInt, scrypt, randomBytes, timingSafeEqual, createHmac } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import {
   MAX_MESSAGE_LENGTH,
   MAX_NAME_LENGTH,
   MAX_ROOM_MESSAGES,
+  MAX_ROOM_NAME_LENGTH,
+  MIN_ROOM_PASSWORD_LENGTH,
+  MAX_ROOM_PASSWORD_LENGTH,
   REACTION_EMOJIS,
   CUSTOM_EMOJI_SET,
   MAX_CUSTOM_SOUNDS_PER_ROOM,
@@ -49,6 +52,53 @@ export function cleanName(value) {
     .slice(0, MAX_NAME_LENGTH)
     .trim();
   return name || 'Guest';
+}
+
+// Optional room title. Same hardening as names: strip control + bidi
+// tricks, collapse whitespace, cap length. Empty string = untitled room.
+export function cleanRoomName(value) {
+  return String(value ?? '')
+    .replace(/[\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, MAX_ROOM_NAME_LENGTH)
+    .trim();
+}
+
+// Optional room password. Never stored in the clear — only a scrypt hash.
+// null/'' = no password (the room stays open). 4..128 chars after trim.
+export function cleanRoomPassword(value) {
+  const password = String(value ?? '').replace(/[\u0000-\u001f\u007f]/g, '').trim();
+  if (!password) return null;
+  if (password.length < MIN_ROOM_PASSWORD_LENGTH || password.length > MAX_ROOM_PASSWORD_LENGTH) return undefined; // invalid
+  return password;
+}
+
+// Client-declared device class (shown next to names). Whitelist only —
+// never trust arbitrary strings into broadcasts.
+export function cleanDeviceType(value) {
+  return ['phone', 'pc', 'tablet'].includes(value) ? value : '';
+}
+
+const scryptAsync = (password, salt) =>
+  new Promise((resolve, reject) => {
+    scrypt(password, salt, 64, { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 }, (error, key) => {
+      if (error) reject(error);
+      else resolve(key);
+    });
+  });
+
+async function hashPassword(password) {
+  const salt = randomBytes(16);
+  const key = await scryptAsync(password, salt.toString('hex'));
+  return { passwordSalt: salt.toString('hex'), passwordHash: key.toString('hex') };
+}
+
+function buffersEqual(a, b) {
+  const left = Buffer.from(String(a ?? ''), 'hex');
+  const right = Buffer.from(String(b ?? ''), 'hex');
+  if (!left.length || left.length !== right.length) return false;
+  return timingSafeEqual(left, right);
 }
 
 export function cleanMessageText(value) {
@@ -132,6 +182,8 @@ function normalizeStoredMessage(raw, code) {
     attachment,
     authorId: typeof raw.authorId === 'string' ? raw.authorId : '',
     authorName: typeof raw.authorName === 'string' ? raw.authorName.slice(0, MAX_NAME_LENGTH) : 'Guest',
+    // Device icon survives reloads; whitelist so stored junk never broadcasts.
+    authorDeviceType: ['phone', 'pc', 'tablet'].includes(raw.authorDeviceType) ? raw.authorDeviceType : '',
     createdAt: Number.isFinite(raw.createdAt) ? raw.createdAt : Date.now(),
     editedAt: Number.isFinite(raw.editedAt) ? raw.editedAt : undefined,
     reactions
@@ -204,6 +256,9 @@ export class RoomManager {
         customSounds: [],
         pinnedMessageId: null,
         hostId: null,
+        name: '',
+        passwordSalt: '',
+        passwordHash: '',
         banned: [],
         loaded: false,
         saveChain: Promise.resolve()
@@ -329,6 +384,52 @@ export class RoomManager {
     await this.#queueSave(room);
   }
 
+  /* -------- Room title + password (v15) -------- */
+
+  // Host-visible room title. Returns the cleaned name ('' = untitled).
+  async setRoomName(room, name) {
+    room.name = cleanRoomName(name);
+    room.lastActivity = this.now();
+    await this.#queueSave(room);
+    return room.name;
+  }
+
+  // Set or replace the password. Only a scrypt hash + salt is ever stored.
+  // Throws 'invalid-room-password' for out-of-range values; empty -> remove.
+  async setPassword(room, password) {
+    const cleaned = cleanRoomPassword(password);
+    if (cleaned === undefined) throw new Error('invalid-room-password');
+    if (cleaned === null) return this.removePassword(room);
+    const { passwordSalt, passwordHash } = await hashPassword(cleaned);
+    room.passwordSalt = passwordSalt;
+    room.passwordHash = passwordHash;
+    room.lastActivity = this.now();
+    await this.#queueSave(room);
+    return true;
+  }
+
+  async removePassword(room) {
+    room.passwordSalt = '';
+    room.passwordHash = '';
+    room.lastActivity = this.now();
+    await this.#queueSave(room);
+    return true;
+  }
+
+  hasPassword(room) {
+    return Boolean(room.passwordHash && room.passwordSalt);
+  }
+
+  // Constant-work comparison: scrypt cost is paid whether or not the guess
+  // matches, and the final compare is timing-safe on fixed-size buffers.
+  async verifyPassword(room, password) {
+    if (!this.hasPassword(room)) return true;
+    const cleaned = cleanRoomPassword(password);
+    if (!cleaned) return false;
+    const key = await scryptAsync(cleaned, room.passwordSalt);
+    return buffersEqual(key.toString('hex'), room.passwordHash);
+  }
+
   async toggleReaction(room, messageId, emoji, participantId) {
     const message = room.messages.find((item) => item.id === messageId);
     if (!message) return null;
@@ -434,6 +535,16 @@ export class RoomManager {
       if (Number.isFinite(data.createdAt)) room.createdAt = data.createdAt;
       if (typeof data.pinnedMessageId === 'string') room.pinnedMessageId = data.pinnedMessageId;
       if (typeof data.hostId === 'string') room.hostId = data.hostId;
+      if (typeof data.name === 'string') room.name = cleanRoomName(data.name);
+      // Only accept well-formed hex pair; corrupt data = open room is unsafe,
+      // so a malformed hash disables the password (user can re-set it).
+      if (
+        typeof data.passwordHash === 'string' && /^[0-9a-f]{128}$/.test(data.passwordHash) &&
+        typeof data.passwordSalt === 'string' && /^[0-9a-f]{32}$/.test(data.passwordSalt)
+      ) {
+        room.passwordSalt = data.passwordSalt;
+        room.passwordHash = data.passwordHash;
+      }
       if (Array.isArray(data.banned)) {
         const now = Date.now();
         room.banned = data.banned
@@ -473,6 +584,9 @@ export class RoomManager {
       updatedAt: this.now(),
       pinnedMessageId: room.pinnedMessageId ?? null,
       hostId: room.hostId ?? null,
+      name: room.name ?? '',
+      passwordSalt: room.passwordHash ? room.passwordSalt : '',
+      passwordHash: room.passwordHash ?? '',
       banned: room.banned ?? [],
       messages: room.messages,
       customSounds: room.customSounds ?? []

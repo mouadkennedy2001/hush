@@ -13,6 +13,8 @@ export const staticAr = {
   Connection: 'الاتصال',
   Average: 'المتوسط',
   Jitter: 'الاهتزاز',
+  Median: 'الوسيط',
+  Trend: 'الاتجاه',
   Features: 'المميزات',
   'How it works': 'كيف يعمل',
   Privacy: 'الخصوصية',
@@ -142,6 +144,21 @@ export const staticAr = {
   "You'll pick a display name and your mic/camera settings next.":
     'ستختار بعد ذلك اسمًا معروضًا وإعدادات الميكروفون والكاميرا.',
 
+  // Create room dialog (landing)
+  'Both fields are optional — as the host you can change them any time.':
+    'كلا الحقلين اختياري — وبصفتك المضيف يمكنك تغييرهما في أي وقت.',
+  'Room name': 'اسم الغرفة',
+  'Optional room name': 'اسم اختياري للغرفة',
+  'Room password': 'كلمة مرور الغرفة',
+  'Leave empty for no password': 'اتركه فارغًا من دون كلمة مرور',
+  'Show password': 'إظهار كلمة المرور',
+  'Generate a strong password': 'إنشاء كلمة مرور قوية',
+  '4–128 characters. Tap the dice to generate a strong one.':
+    'من 4 إلى 128 حرفًا. اضغط زر النرد لإنشاء كلمة قوية.',
+  'Open room': 'افتح الغرفة',
+  'Media is peer-to-peer. The room closes when everyone leaves.':
+    'الوسائط مباشرة بين المشاركين. وتُغلق الغرفة عند مغادرة الجميع.',
+
   // Room chrome
   'Copy invite link': 'نسخ رابط الدعوة',
   Room: 'الغرفة',
@@ -188,6 +205,9 @@ export const staticAr = {
   'Anyone with this link can join the room.':
     'أي شخص لديه هذا الرابط يمكنه الانضمام إلى الغرفة.',
   'People in this room': 'الأشخاص في هذه الغرفة',
+  'Close panel': 'إغلاق اللوحة',
+  'Open chat': 'فتح الدردشة',
+  'Open chat (C)': 'فتح الدردشة (C)',
 
   // Join gate
   'Join the room.': 'انضم إلى الغرفة.',
@@ -202,6 +222,8 @@ export const staticAr = {
   'Join with your mic on': 'انضم والميكروفون مفعّل',
   'Start with video on': 'ابدأ والفيديو مفعّل',
   'Join room': 'انضم إلى الغرفة',
+  'This room is protected. Enter the password the host shared with you.':
+    'هذه الغرفة محمية. أدخل كلمة المرور التي شاركها معك المضيف.',
   'Media is peer-to-peer. Chat history is stored on this server. Anyone with the link can join.':
     'الوسائط مباشرة بين المشاركين. ويُحفظ سجل الدردشة على هذا الخادم. أي شخص لديه الرابط يمكنه الانضمام.',
 
@@ -211,6 +233,14 @@ export const staticAr = {
   'Search sounds…': 'ابحث في الأصوات…',
   'Cover image (optional)': 'صورة غلاف (اختياري)',
   'Enlarge screen': 'تكبير الشاشة',
+  'Stop watching': 'إيقاف المشاهدة',
+  'Zoom out': 'تصغير',
+  'Zoom out (-)': 'تصغير (-)',
+  'Zoom in': 'تكبير',
+  'Zoom in (+)': 'تكبير (+)',
+  'Reset zoom': 'إعادة ضبط التكبير',
+  'Reset zoom (0)': 'إعادة ضبط التكبير (0)',
+  'Zoom the shared screen': 'تكبير/تصغير الشاشة المشتركة',
   'Clear search': 'مسح البحث',
   'No messages yet. Say hello.': 'لا توجد رسائل بعد. ألقِ تحية.',
   'Room tools': 'أدوات الغرفة',
@@ -317,6 +347,15 @@ export const staticAr = {
   Microphone: 'الميكروفون',
   Reset: 'إعادة تعيين',
   Close: 'إغلاق',
+
+  // Room settings dialog (host only, static labels)
+  'Room settings': 'إعدادات الغرفة',
+  'Only the host can change these. Everyone sees updates instantly.':
+    'المضيف وحده يستطيع تغيير هذه الإعدادات. ويرى الجميع التحديثات فورًا.',
+  'Shown to everyone in the room. Leave empty to use the room code.':
+    'يظهر لكل من في الغرفة. اتركه فارغًا لاستخدام رمز الغرفة.',
+  'Leave empty to remove the password': 'اتركه فارغًا لإزالة كلمة المرور',
+  'Save changes': 'حفظ التغييرات',
 
   // Log / admin (static)
   Log: 'السجل',

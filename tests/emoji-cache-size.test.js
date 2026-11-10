@@ -42,7 +42,7 @@ test('v12.3: emojis are larger and the picker is wider/cleaner', async () => {
 
 test('v12.3 changelog documents the cache fix', async () => {
   const changelog = JSON.parse(await readFile(path.join(PUBLIC, 'changelog.json'), 'utf8'));
-  assert.equal(changelog.version, '14.0.0');
+  assert.equal(changelog.version, '15.0.0');
   const cacheFix = changelog.entries.find((e) => /Emojis now actually update/.test(e.titleEn));
   assert.ok(cacheFix, 'v12.3 cache-fix entry still present');
   assert.ok(cacheFix.pointsEn.length >= 3 && cacheFix.pointsAr.length >= 3);

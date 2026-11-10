@@ -1,44 +1,43 @@
 import { t, onLanguageChange } from './i18n.js';
 import { createPingOp, PING_OP_VERSION } from './ping-op/ping-op.js';
 
-// Live latency ("ping") meter — powered by PING OP v1.0 (see PING OP/src/client.js):
+// Live latency ("ping") meter — powered by PING OP v1.4 (see PING OP/src/client.js):
 // - 2 parallel probes per round, take the MIN (best) RTT — kills
 //   polling/queue jitter without flooding the server (v3 used 3, which
 //   added contention and raised the very ping it was measuring)
-// - displayed value = min of last 4 rounds, updated every ~3s when good
-//   (v3 waited 5s, so improvements showed late)
+// - one shared engine for the badge AND the stats (v1.3): displayed value,
+//   average, median, jitter, quality and score all come from the same model,
+//   so the Connection card can never disagree with the badge
+// - displayed value = min of last 4 rounds; "average" is an EWMA and jitter
+//   is the MAD of the last 12 samples (v1.4) — a single wild round no longer
+//   inflates the reading, which is what recent instability actually feels like
+// - clock-drift guard: rounds that arrive > 30s apart (tab suspension,
+//   system sleep, throttled timers) re-anchor the stats instead of blending
+//   two eras — no stale pre-suspension value, no poisoned averages
+// - adaptive interval from quality AND trend AND loss: up to ~2x faster
+//   probing while the link degrades (floored at 800ms)
 // - monotonic clock (performance.now), only 1 warmup round discarded
 // - paused while the tab is hidden (no wasted probes / battery)
-// - chart only redraws when the People panel is actually visible
+// - chart only redraws when the People panel is visible, is coalesced into
+//   one requestAnimationFrame per update, and uses quadratic smoothing (v1.4)
+// - DOM writes are cached: text nodes change only when the value changed
 // Prefers Socket.IO round-trip; falls back to GET /api/ping.
 // NOTE: ping measures real network RTT — it cannot go below physics.
 // The server-side wins (TCP_NODELAY, 5s heartbeat) are in src/app.js.
-// Statistics (min/avg/jitter/loss/score) come from the PING OP core engine.
+// Statistics (min/avg/median/jitter/loss/score/trend) come from the PING OP core engine.
 
 const TIMEOUT_MS = 1500;
-const MAX_SAMPLES = 24;
+const CHART_SAMPLES = 24;
 const PROBES = 2;
 
 let started = false;
 let getSocket = () => null;
 let timer = null;
-let lastSample = null;
-let displayed = null;
-let samples = [];
-let rounds = []; // min per round
 let seq = 0;
-let warmup = 0;
 const pingOp = createPingOp({ maxSamples: 60 });
 export const PING_OP_UI_VERSION = PING_OP_VERSION;
 
 function nowMono() { return performance.now(); }
-
-function qualityFor(ms) {
-  if (ms == null) return 'offline';
-  if (ms < 80) return 'good';
-  if (ms < 180) return 'fair';
-  return 'poor';
-}
 
 function qualityLabel(quality) {
   switch (quality) {
@@ -49,23 +48,10 @@ function qualityLabel(quality) {
   }
 }
 
-function median(values) {
-  if (!values.length) return null;
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
-}
-
-function average() {
-  if (!samples.length) return null;
-  return Math.round(samples.reduce((sum, v) => sum + v, 0) / samples.length);
-}
-
-function jitter() {
-  if (samples.length < 2) return null;
-  const deltas = [];
-  for (let i = 1; i < samples.length; i += 1) deltas.push(Math.abs(samples[i] - samples[i - 1]));
-  return Math.round(deltas.reduce((sum, v) => sum + v, 0) / deltas.length);
+function trendLabel(trend) {
+  if (trend === 'improving') return t('ping.improving');
+  if (trend === 'worsening') return t('ping.worsening');
+  return t('ping.stable');
 }
 
 function probeOnce(socket, mySeq) {
@@ -119,40 +105,59 @@ async function measure() {
     if (socket?.connected) ms = await measureViaSocket(socket);
     else ms = await measureViaHttp();
   } catch { ms = null; }
-  lastSample = ms;
-  // Feed the PING OP core engine so server/client share one stats model.
+  // No meta needed: the core stamps arrivals itself (Date.now) and its
+  // clock-drift guard re-anchors the stats when a gap > 30s is detected
+  // (tab suspension / throttled timers / system sleep).
   pingOp.sample(ms);
-  // During heavy media (screen share) the signaling socket queues behind
-  // media packets — the HTTP probe is not suppressed, but don't let one
-  // burst round poison the displayed value.
-  if (ms != null) {
-    if (warmup < 1) { warmup += 1; samples.push(ms); if (displayed == null) displayed = ms; }
-    else {
-      samples.push(ms);
-      if (samples.length > MAX_SAMPLES) samples.shift();
-      rounds.push(ms);
-      if (rounds.length > 4) rounds.shift();
-      // Displayed = recent best (min of last 4 rounds): drops show
-      // immediately, a single spike cannot poison the badge.
-      displayed = Math.min(...rounds);
-    }
-  }
   render();
   scheduleNext();
-}
-
-function nextInterval() {
-  const q = qualityFor(displayed);
-  if (q === 'good') return 3000;
-  if (q === 'fair') return 2000;
-  if (q === 'poor') return 1200;
-  return 900;
 }
 
 function scheduleNext() {
   if (!started) return;
   if (timer) clearTimeout(timer);
-  timer = setTimeout(() => void measure(), nextInterval());
+  // v1.3: cadence comes from the engine — quality + trend + loss aware.
+  timer = setTimeout(() => void measure(), pingOp.nextIntervalMs());
+}
+
+// v1.4: cache DOM writes — render() runs every probe round but text nodes
+// only change when the number/word really changed.
+const textCache = new WeakMap();
+const badgeCache = new WeakMap();
+
+function setText(node, value) {
+  if (textCache.get(node) === value) return;
+  textCache.set(node, value);
+  node.textContent = value;
+}
+
+function setBadgeState(badge, quality, trend, label) {
+  const prev = badgeCache.get(badge);
+  if (prev?.quality !== quality) badge.dataset.quality = quality;
+  if (prev?.trend !== trend) badge.dataset.trend = trend;
+  if (prev?.label !== label) {
+    badge.title = label;
+    badge.setAttribute('aria-label', label);
+  }
+  badgeCache.set(badge, { quality, trend, label });
+}
+
+// v1.4: coalesce chart painting into one animation frame (dirty flag).
+let chartFrame = 0;
+let chartDirty = false;
+
+function requestChartDraw() {
+  chartDirty = true;
+  if (chartFrame) return;
+  const schedule = typeof requestAnimationFrame === 'function'
+    ? requestAnimationFrame
+    : (fn) => setTimeout(fn, 16);
+  chartFrame = schedule(() => {
+    chartFrame = 0;
+    if (!chartDirty) return;
+    chartDirty = false;
+    drawChart();
+  });
 }
 
 function drawChart() {
@@ -162,6 +167,7 @@ function drawChart() {
   if (canvas.offsetParent === null && !canvas.closest('.panel-people')) return;
   const panel = canvas.closest('.panel-people');
   if (panel && panel.hidden) return;
+  const samples = pingOp.getSamples().slice(-CHART_SAMPLES);
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   const width = canvas.clientWidth || 300;
   const height = canvas.clientHeight || 56;
@@ -184,83 +190,93 @@ function drawChart() {
     ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke();
   }
   if (samples.length < 2) return;
-  const stepX = width / (MAX_SAMPLES - 1);
+  const stepX = width / (CHART_SAMPLES - 1);
   const startX = width - stepX * (samples.length - 1);
+  const points = samples.map((value, index) => ({
+    x: startX + stepX * index,
+    y: height - 4 - (value / max) * (height - 10)
+  }));
+  // v1.4: quadratic midpoint smoothing — soft curve instead of a jagged
+  // polyline, without any extra dependency (classic canvas smoothing pass).
   ctx.beginPath();
-  samples.forEach((value, index) => {
-    const x = startX + stepX * index;
-    const y = height - 4 - (value / max) * (height - 10);
-    if (index === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-  });
+  ctx.moveTo(points[0].x, points[0].y);
+  for (let i = 1; i < points.length - 1; i += 1) {
+    const midX = (points[i].x + points[i + 1].x) / 2;
+    const midY = (points[i].y + points[i + 1].y) / 2;
+    ctx.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+  }
+  const lastPoint = points[points.length - 1];
+  const prevPoint = points[points.length - 2];
+  ctx.quadraticCurveTo(prevPoint.x, prevPoint.y, lastPoint.x, lastPoint.y);
   ctx.strokeStyle = line;
   ctx.lineWidth = 1.8;
   ctx.lineJoin = 'round';
   ctx.stroke();
-  const lastIndex = samples.length - 1;
-  const lx = startX + stepX * lastIndex;
-  const ly = height - 4 - (samples[lastIndex] / max) * (height - 10);
   ctx.beginPath();
-  ctx.arc(lx, ly, 2.6, 0, Math.PI * 2);
+  ctx.arc(lastPoint.x, lastPoint.y, 2.6, 0, Math.PI * 2);
   ctx.fillStyle = line;
   ctx.fill();
 }
 
 function render() {
-  const quality = qualityFor(displayed);
-  const avg = average();
-  const med = median(samples);
-  const jit = jitter();
-  reportStatsThrottled({ avg, med, jit, quality });
+  // v1.3: one stats snapshot feeds the badge, the card and the report —
+  // the Connection card can never disagree with the badge again.
+  const stats = pingOp.getStats();
+  const quality = stats.quality;
+  const trend = trendLabel(stats.trend);
+  const qualityText = `${qualityLabel(quality)} · ${trend}`;
+  const badgeLabel = `${t('ping.label')}: ${qualityText}`;
+  reportStatsThrottled(stats);
   for (const badge of document.querySelectorAll('[data-ping-badge]')) {
-    badge.dataset.quality = quality;
-    badge.title = `${t('ping.label')}: ${qualityLabel(quality)}`;
-    badge.setAttribute('aria-label', `${t('ping.label')}: ${qualityLabel(quality)}`);
+    setBadgeState(badge, quality, stats.trend, badgeLabel);
   }
   for (const node of document.querySelectorAll('[data-ping-value]')) {
-    node.textContent = displayed == null ? '-- ms' : `${displayed} ms`;
+    setText(node, stats.current == null ? '-- ms' : `${stats.current} ms`);
   }
   for (const node of document.querySelectorAll('[data-ping-quality]')) {
-    node.textContent = qualityLabel(quality);
+    setText(node, qualityLabel(quality));
+  }
+  for (const node of document.querySelectorAll('[data-ping-trend]')) {
+    setText(node, trend);
   }
   for (const node of document.querySelectorAll('[data-ping-avg]')) {
-    node.textContent = avg == null ? '--' : `${avg} ms`;
+    setText(node, stats.avg == null ? '--' : `${stats.avg} ms`);
   }
   for (const node of document.querySelectorAll('[data-ping-median]')) {
-    node.textContent = med == null ? '--' : `${med} ms`;
+    setText(node, stats.median == null ? '--' : `${stats.median} ms`);
   }
   for (const node of document.querySelectorAll('[data-ping-jitter]')) {
-    node.textContent = jit == null ? '--' : `${jit} ms`;
+    setText(node, stats.jitter == null ? '--' : `${stats.jitter} ms`);
   }
-  drawChart();
+  requestChartDraw();
 }
 
 let lastReportAt = 0;
-function reportStatsThrottled({ avg, med, jit, quality } = {}) {
-  // PING OP 1.1: tell the server our aggregated latency so /api/health
+function reportStatsThrottled(stats) {
+  // PING OP 1.1+: tell the server our aggregated latency so /api/health
   // shows real client-measured stats (numbers only, server clamps).
   const now = Date.now();
   if (now - lastReportAt < 30_000) return;
   lastReportAt = now;
   try {
-    const op = pingOp.getStats();
     fetch('/api/ping/stats', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        current: displayed, avg, median: med, jitter: jit,
-        lossRate: op.lossRate, score: op.score, quality, samplesCount: samples.length
+        current: stats.current, avg: stats.avg, median: stats.median, jitter: stats.jitter,
+        lossRate: stats.lossRate, score: stats.score, quality: stats.quality, samplesCount: stats.samplesCount
       }),
       keepalive: true
     }).catch(() => {});
   } catch { /* best-effort */ }
 }
 
-export function refreshPing() { warmup = 0; pingOp.reset(); if (timer) clearTimeout(timer); void measure(); }
-export function getPingSamples() { return [...samples]; }
+export function refreshPing() { pingOp.reset(); if (timer) clearTimeout(timer); void measure(); }
+export function getPingSamples() { return pingOp.getSamples(); }
 export function getPingOpStats() { return pingOp.getStats(); }
 export function getPingModel() {
   const op = pingOp.getStats();
-  return { last: lastSample, displayed, median: median(samples), avg: average(), jitter: jitter(), quality: qualityFor(displayed), score: op.score, version: PING_OP_VERSION };
+  return { last: op.last, displayed: op.current, median: op.median, avg: op.avg, jitter: op.jitter, quality: op.quality, score: op.score, trend: op.trend, version: PING_OP_VERSION };
 }
 
 export function startPing({ socketGetter = () => null } = {}) {

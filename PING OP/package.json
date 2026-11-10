@@ -1,7 +1,7 @@
 {
   "name": "ping-op",
-  "version": "1.2.0",
-  "description": "PING OP v1.2 — from-scratch latency library: adaptive probing, jitter/loss scoring, and server hardening for Hush rooms and servers.",
+  "version": "1.4.0",
+  "description": "PING OP v1.4 — from-scratch latency library: adaptive probing, MAD jitter, clock-drift guard, rAF chart rendering, and server hardening for Hush rooms and servers.",
   "type": "module",
   "main": "src/server.js",
   "exports": {

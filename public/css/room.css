@@ -572,6 +572,57 @@ html[data-theme="dark"] .control[aria-pressed="true"] {
 .screen-watch-chip { flex: none; }
 .screen-watch-chip[hidden] { display: none; }
 
+/* ---------- Screen-share zoom bar (v15) ---------- */
+.screen-zoom-bar {
+  position: absolute;
+  top: 10px;
+  right: 52px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 9px;
+  background: rgba(10, 13, 20, 0.66);
+  backdrop-filter: blur(6px);
+  direction: ltr;
+}
+.screen-zoom-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+.screen-zoom-btn:hover { background: rgba(255, 255, 255, 0.18); }
+.screen-zoom-btn:active { transform: scale(.94); }
+.screen-zoom-btn:disabled { opacity: .45; cursor: default; background: transparent; }
+.screen-zoom-btn .icon { width: 16px; height: 16px; }
+.screen-zoom-level {
+  min-width: 46px;
+  color: #fff;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+/* Zoom / pan interaction states (wheel, pinch, drag, double-click). */
+.screen-stage { touch-action: pan-y; }
+.screen-stage.is-zoomed { touch-action: none; cursor: grab; }
+.screen-stage.is-panning { cursor: grabbing; }
+.screen-stage.is-zoomed video { will-change: transform; transform-origin: 50% 50%; }
+.screen-stage.is-enlarged .screen-zoom-bar,
+.screen-stage:fullscreen .screen-zoom-bar { top: 14px; right: 58px; }
+
 /* Presence dot on people avatars: green online / red offline. */
 .person-avatar { position: relative; }
 .presence-dot {
@@ -884,6 +935,14 @@ html[data-theme="dark"] .control[aria-pressed="true"] {
   bottom: -1px;
   height: 2px;
   background: var(--color-signal-blue);
+}
+
+/* ---------- Phone layout helpers (visible <= 700px only) ----------
+   Desktop keeps the sidebar docked, so the sheet affordances stay hidden. */
+.chat-fab,
+.sheet-close,
+.sheet-scrim {
+  display: none;
 }
 
 .tab-badge {
@@ -1670,7 +1729,8 @@ html[data-theme="dark"] .control[aria-pressed="true"] {
 
 .ping-card-stats {
   display: flex;
-  gap: 14px;
+  flex-wrap: wrap;
+  gap: 6px 14px;
   margin-top: 8px;
   color: var(--color-slate);
   font-size: 0.6875rem;
@@ -2335,6 +2395,151 @@ html[data-theme="dark"] .control[aria-pressed="true"] {
 }
 
 @media (max-width: 700px) {
+  /* iOS/Android browsers auto-zoom the page when an input smaller than
+     16px receives focus — the #1 "broken phone screen" report. Every
+     field gets a true 16px floor, so focus never zooms. */
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+
+  /* App-like layout: the stage owns the screen, the control bar is
+     thumb-reachable at the bottom, and chat/people live in a bottom
+     sheet instead of being buried under the stage. */
+  .room-body,
+  .room-shell {
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  .room-main {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    min-height: 0;
+    padding: 0;
+  }
+
+  .stage {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 8px 8px 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .control-bar {
+    position: sticky;
+    bottom: 0;
+    z-index: 6;
+    flex: none;
+    gap: 6px;
+    padding: 10px 0 calc(8px + env(safe-area-inset-bottom));
+    background: var(--color-paper);
+    border-radius: 0;
+  }
+
+  /* The soundboard expands as an overlay above the controls instead of
+     scrolling off-screen behind the sticky bar. */
+  .soundboard-panel {
+    position: fixed;
+    inset-inline: 8px;
+    bottom: calc(84px + env(safe-area-inset-bottom));
+    z-index: 7;
+    max-height: min(52dvh, 420px);
+    box-shadow: var(--shadow-md);
+  }
+
+  /* Bottom sheet: hidden off-screen, .is-open slides it up. */
+  .side-panel {
+    position: fixed;
+    inset-inline: 0;
+    bottom: 0;
+    top: auto;
+    height: min(78dvh, 600px);
+    min-height: 0;
+    max-height: none;
+    margin: 0;
+    z-index: 40;
+    border-radius: 16px 16px 0 0;
+    border-bottom: 0;
+    transform: translateY(105%);
+    visibility: hidden;
+    transition: transform 260ms ease, visibility 260ms;
+    box-shadow: 0 -18px 44px -20px rgba(0, 0, 0, 0.45);
+  }
+
+  .side-panel.is-open {
+    transform: translateY(0);
+    visibility: visible;
+  }
+
+  .side-tabs {
+    position: relative;
+    align-items: center;
+    padding-top: calc(6px + env(safe-area-inset-top));
+    cursor: default;
+  }
+
+  /* Grab handle above the tab row. */
+  .side-tabs::before {
+    content: "";
+    position: absolute;
+    top: calc(5px + env(safe-area-inset-top));
+    left: 50%;
+    width: 44px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--color-border-strong);
+    transform: translateX(-50%);
+  }
+
+  .side-tab {
+    padding-top: calc(16px + env(safe-area-inset-top));
+  }
+
+  .sheet-close {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    margin-inline-end: 6px;
+    margin-top: calc(8px + env(safe-area-inset-top));
+    align-self: flex-start;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--color-slate);
+  }
+
+  .chat-fab {
+    display: inline-flex;
+  }
+
+  .sheet-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 35;
+    border: 0;
+    padding: 0;
+    background: rgba(10, 14, 22, 0.38);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 200ms ease;
+  }
+
+  .sheet-scrim.is-open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
   .room-bar {
     min-height: 58px;
     gap: 8px;
@@ -2379,11 +2584,6 @@ html[data-theme="dark"] .control[aria-pressed="true"] {
     padding: 7px 9px;
   }
 
-  .stage {
-    min-height: 460px;
-    padding: 10px;
-  }
-
   .stage-topline {
     padding-bottom: 8px;
   }
@@ -2401,11 +2601,6 @@ html[data-theme="dark"] .control[aria-pressed="true"] {
     grid-template-columns: 1fr;
   }
 
-  .control-bar {
-    gap: 6px;
-    padding-top: 10px;
-  }
-
   .control-group {
     gap: 2px;
     padding: 4px;
@@ -2413,6 +2608,7 @@ html[data-theme="dark"] .control[aria-pressed="true"] {
 
   .control {
     min-width: 46px;
+    min-height: 44px;
     padding: 8px 7px;
   }
 
@@ -2430,10 +2626,22 @@ html[data-theme="dark"] .control[aria-pressed="true"] {
     height: 19px;
   }
 
-  .side-panel {
-    min-height: 430px;
-    max-height: none;
+  .side-panel .messages {
+    /* The sheet keeps its own scroll; page scroll stays locked. */
+    min-height: 0;
   }
+
+  /* Mobile screen-share: compact zoom bar + smaller device icons. */
+  .screen-zoom-bar { top: 8px; right: 50px; padding: 2px; }
+  .screen-zoom-btn { width: 28px; height: 28px; }
+  .screen-zoom-level { min-width: 40px; font-size: 0.625rem; }
+  .tile-device { width: 19px; height: 19px; }
+  .tile-device .icon, .device-badge .icon { width: 11px; height: 11px; }
+  .person-device .icon { width: 12px; height: 12px; }
+  /* 48px+ targets and >= 16px text on every touch field (see input rule). */
+  .name-field .text-input { height: 48px; font-size: 16px; }
+  .name-field #name-input { font-size: 16px; }
+  .password-toggle { width: 32px; }
 
   .join-card {
     padding: 24px;
@@ -2445,6 +2653,23 @@ html[data-theme="dark"] .control[aria-pressed="true"] {
 
   .floating-reaction {
     bottom: 70px;
+  }
+}
+
+@media (max-width: 480px) {
+  /* Keep the header one calm row: icon-only toggles, compact meta. */
+  .room-bar [data-theme-label],
+  .room-bar [data-lang-label] {
+    display: none;
+  }
+
+  .ping-op-badge,
+  .session-timer {
+    display: none;
+  }
+
+  .room-bar-actions .btn {
+    padding: 7px;
   }
 }
 
@@ -2616,6 +2841,99 @@ html[dir="rtl"] .gate-code code {
 .name-field-hint { color: var(--color-text-2); font-size: .6875rem; line-height: 1.4; }
 .sound-volume-row { margin-top: 10px; }
 .sound-volume-row input { flex: 1; accent-color: var(--color-accent); }
+
+/* ---------- Room password fields (join gate + host dialog) ----------
+   Same look as the display-name field, with an eye toggle and (in the
+   host dialog) the dice generator nested inside the wrap. */
+.name-field .text-input {
+  width: 100%;
+  height: 52px;
+  padding: 0 14px;
+  padding-inline-start: 44px;
+  border: 1.5px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  text-align: start;
+  box-sizing: border-box;
+  transition: border-color 140ms ease, box-shadow 140ms ease, background-color 140ms ease;
+}
+.name-field .text-input::placeholder { color: color-mix(in srgb, var(--color-text-2) 60%, transparent); font-weight: 500; }
+.name-field .text-input:focus { outline: none; border-color: var(--color-accent); background: var(--color-surface); box-shadow: 0 0 0 3px var(--wash-sky); }
+.name-field .text-input:disabled { opacity: .55; }
+.name-field .text-input[dir="ltr"] { font-family: var(--font-mono); letter-spacing: .04em; }
+.name-field .text-input.has-toggle { padding-inline-end: 48px; }
+.name-field .text-input.has-dice { padding-inline-end: 88px; }
+
+.password-toggle {
+  position: absolute;
+  inset-inline-end: 7px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 38px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--color-text-2);
+  cursor: pointer;
+  transition: color 120ms ease, background 120ms ease;
+}
+.password-toggle:hover { color: var(--color-text); background: var(--wash-sky); }
+.password-toggle .icon { width: 17px; height: 17px; }
+.password-toggle .icon-eye-off { display: none; }
+.password-toggle.is-visible .icon-eye-on { display: none; }
+.password-toggle.is-visible .icon-eye-off { display: block; }
+
+/* Dice button — generates a strong password with a roll animation. */
+.dice-btn { inset-inline-end: 45px; color: var(--color-accent-2); }
+.dice-btn:hover { color: var(--color-accent-2); }
+.dice-btn .icon { width: 18px; height: 18px; }
+.dice-btn.is-rolling { pointer-events: none; }
+.dice-btn.is-rolling .icon {
+  animation: dice-roll 560ms cubic-bezier(.36, .07, .19, .97);
+  transform-origin: 50% 50%;
+}
+@keyframes dice-roll {
+  0% { transform: rotate(0deg) scale(1); }
+  30% { transform: rotate(-160deg) scale(1.25); }
+  55% { transform: rotate(-300deg) scale(.92); }
+  80% { transform: rotate(-430deg) scale(1.12); }
+  100% { transform: rotate(-480deg) scale(1); }
+}
+
+/* ---------- Device-type icons (phone / PC / tablet) ----------
+   Shown next to names everywhere: video tiles, people list, chat. */
+.device-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  color: var(--color-text-2);
+}
+.device-badge .icon { width: 13px; height: 13px; }
+.tile-device {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--color-white) 82%, transparent);
+  color: var(--color-ink);
+  backdrop-filter: blur(6px);
+}
+.tile-device .icon { width: 13px; height: 13px; }
+.person-device { margin-inline-start: 2px; }
+.message-device { align-self: center; }
 
 /* ---------- Soundboard (compact: the old layout was gigantic) ---------- */
 .soundboard-panel { flex: none; margin-top: 10px; padding: 10px; border: 1px solid var(--color-border-strong); border-radius: 12px; background: var(--color-surface); box-shadow: var(--shadow-md); max-height: 42vh; overflow-y: auto; scrollbar-width: thin; }

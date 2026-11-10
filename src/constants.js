@@ -4,6 +4,13 @@ export const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 export const MAX_ROOM_MESSAGES = 200;
 export const MAX_PARTICIPANTS = 12;
 
+// Optional room title / password (v15). Room names are capped tighter than
+// chat names so tiles and headers stay readable. Passwords are 4..128 chars
+// after trim; an empty password means the room stays open.
+export const MAX_ROOM_NAME_LENGTH = 60;
+export const MIN_ROOM_PASSWORD_LENGTH = 4;
+export const MAX_ROOM_PASSWORD_LENGTH = 128;
+
 // Anti-spam / anti-abuse
 export const MAX_MESSAGES_PER_10S = 8;
 export const MIN_MESSAGE_INTERVAL_MS = 700;

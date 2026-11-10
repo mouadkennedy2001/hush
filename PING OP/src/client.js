@@ -1,10 +1,17 @@
 /**
- * PING OP v1.1 — browser client (written from scratch, zero deps).
+ * PING OP v1.4 — browser client (written from scratch, zero deps).
  * v1.1 adds: periodic stats reporting to POST /api/ping/stats.
+ * v1.3 adds: trend-aware quality display and the core's clock-drift guard —
+ * rounds measured across a tab suspension / throttled timer no longer blend
+ * with the pre-suspension era (the engine re-anchors via arrival gaps).
+ * v1.4 adds: requestAnimationFrame chart with a dirty flag (one draw per
+ * frame at most), quadratic midpoint smoothing, and cached DOM writes
+ * (textContent/dataset/title only change when the value really changed).
  *
  * - 2 parallel probes per round, take the MIN (kills polling jitter)
  * - displayed value = min of last 4 rounds, adaptive interval
- *   (good 3s / fair 2s / poor 1.2s / offline 0.9s)
+ *   (good 3s / fair 2s / poor 1.2s / offline 0.9s — up to ~2x faster while
+ *   the trend is worsening or loss >= 20%, floored at 800ms)
  * - monotonic clock (performance.now), 1 warmup round discarded
  * - paused while the tab is hidden, chart only redraws when visible
  * - prefers Socket.IO round-trip (`ping:request`), falls back to
@@ -14,9 +21,9 @@
  * from the repo-root folder, the server only serves public/).
  */
 
-import { createPingOp } from './ping-op.js';
+import { createPingOp, PING_OP_VERSION } from './ping-op.js';
 
-export const PING_OP_VERSION = '1.1.0';
+export { PING_OP_VERSION };
 
 const TIMEOUT_MS = 1500;
 const MAX_SAMPLES = 60;
@@ -39,6 +46,13 @@ function qualityLabel(quality) {
     offline: 'Offline'
   };
   return labels[quality] ?? labels.offline;
+}
+
+// v1.3: one plain word for the trend, shown next to the quality label.
+function trendLabel(trend) {
+  if (trend === 'improving') return 'Improving';
+  if (trend === 'worsening') return 'Worsening';
+  return 'Stable';
 }
 
 function probeOnce(socket, mySeq) {
@@ -92,6 +106,8 @@ async function measure() {
     if (socket?.connected) ms = await measureViaSocket(socket);
     else ms = await measureViaHttp();
   } catch { ms = null; }
+  // No meta needed: the core stamps arrivals itself (Date.now) and its
+  // clock-drift guard re-anchors stats when a gap > 30s is detected.
   engine.sample(ms);
   render();
   scheduleNext();
@@ -101,6 +117,47 @@ function scheduleNext() {
   if (!started) return;
   if (timer) clearTimeout(timer);
   timer = setTimeout(() => void measure(), engine.nextIntervalMs());
+}
+
+// v1.4: cache DOM writes — render() runs every probe round but text nodes
+// only change when the number/word really changed. A WeakMap keeps this
+// allocation-free and lets the nodes be collected normally.
+const textCache = new WeakMap();
+const badgeCache = new WeakMap();
+
+function setText(node, value) {
+  if (textCache.get(node) === value) return;
+  textCache.set(node, value);
+  node.textContent = value;
+}
+
+function setBadgeState(badge, quality, trend, label) {
+  const prev = badgeCache.get(badge);
+  if (prev?.quality !== quality) badge.dataset.quality = quality;
+  if (prev?.trend !== trend) badge.dataset.trend = trend;
+  if (prev?.label !== label) {
+    badge.title = label;
+    badge.setAttribute('aria-label', label);
+  }
+  badgeCache.set(badge, { quality, trend, label });
+}
+
+// v1.4: coalesce chart painting into one animation frame (dirty flag).
+let chartFrame = 0;
+let chartDirty = false;
+
+function requestChartDraw() {
+  chartDirty = true;
+  if (chartFrame) return;
+  const schedule = typeof requestAnimationFrame === 'function'
+    ? requestAnimationFrame
+    : (fn) => setTimeout(fn, 16);
+  chartFrame = schedule(() => {
+    chartFrame = 0;
+    if (!chartDirty) return;
+    chartDirty = false;
+    drawChart();
+  });
 }
 
 function drawChart() {
@@ -134,21 +191,28 @@ function drawChart() {
   if (samples.length < 2) return;
   const stepX = width / (MAX_SAMPLES - 1);
   const startX = width - stepX * (samples.length - 1);
+  const points = samples.map((value, index) => ({
+    x: startX + stepX * index,
+    y: height - 4 - (value / max) * (height - 10)
+  }));
+  // v1.4: quadratic midpoint smoothing — soft curve instead of a jagged
+  // polyline, without any extra dependency (classic canvas smoothing pass).
   ctx.beginPath();
-  samples.forEach((value, index) => {
-    const x = startX + stepX * index;
-    const y = height - 4 - (value / max) * (height - 10);
-    if (index === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-  });
+  ctx.moveTo(points[0].x, points[0].y);
+  for (let i = 1; i < points.length - 1; i += 1) {
+    const midX = (points[i].x + points[i + 1].x) / 2;
+    const midY = (points[i].y + points[i + 1].y) / 2;
+    ctx.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+  }
+  const lastPoint = points[points.length - 1];
+  const prevPoint = points[points.length - 2];
+  ctx.quadraticCurveTo(prevPoint.x, prevPoint.y, lastPoint.x, lastPoint.y);
   ctx.strokeStyle = line;
   ctx.lineWidth = 1.8;
   ctx.lineJoin = 'round';
   ctx.stroke();
-  const lastIndex = samples.length - 1;
-  const lx = startX + stepX * lastIndex;
-  const ly = height - 4 - (samples[lastIndex] / max) * (height - 10);
   ctx.beginPath();
-  ctx.arc(lx, ly, 2.6, 0, Math.PI * 2);
+  ctx.arc(lastPoint.x, lastPoint.y, 2.6, 0, Math.PI * 2);
   ctx.fillStyle = line;
   ctx.fill();
 }
@@ -156,25 +220,31 @@ function drawChart() {
 function render() {
   const stats = engine.getStats();
   const quality = stats.quality;
+  const trend = trendLabel(stats.trend);
+  const qualityText = `${qualityLabel(quality)} · ${trend}`;
+  const badgeLabel = `Ping: ${qualityText}`;
   for (const badge of document.querySelectorAll('[data-ping-badge]')) {
-    badge.dataset.quality = quality;
+    setBadgeState(badge, quality, stats.trend, badgeLabel);
   }
   for (const node of document.querySelectorAll('[data-ping-value]')) {
-    node.textContent = stats.current == null ? '-- ms' : `${stats.current} ms`;
+    setText(node, stats.current == null ? '-- ms' : `${stats.current} ms`);
   }
   for (const node of document.querySelectorAll('[data-ping-quality]')) {
-    node.textContent = qualityLabel(quality);
+    setText(node, qualityLabel(quality));
+  }
+  for (const node of document.querySelectorAll('[data-ping-trend]')) {
+    setText(node, trend);
   }
   for (const node of document.querySelectorAll('[data-ping-avg]')) {
-    node.textContent = stats.avg == null ? '--' : `${stats.avg} ms`;
+    setText(node, stats.avg == null ? '--' : `${stats.avg} ms`);
   }
   for (const node of document.querySelectorAll('[data-ping-median]')) {
-    node.textContent = stats.median == null ? '--' : `${stats.median} ms`;
+    setText(node, stats.median == null ? '--' : `${stats.median} ms`);
   }
   for (const node of document.querySelectorAll('[data-ping-jitter]')) {
-    node.textContent = stats.jitter == null ? '--' : `${stats.jitter} ms`;
+    setText(node, stats.jitter == null ? '--' : `${stats.jitter} ms`);
   }
-  drawChart();
+  requestChartDraw();
 }
 
 export function refreshPing() { engine.reset(); if (timer) clearTimeout(timer); void measure(); }

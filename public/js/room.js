@@ -12,6 +12,7 @@ setStickerMenuDeps({ CUSTOM_STICKERS, STICKER_CATEGORIES, customStickerImage, se
 import { playSound, getSoundsEnabled, setSoundsEnabled, getSoundVolume, setSoundVolume } from './sounds.js';
 import { initChangelog } from './changelog.js';
 import { initLibraries } from './libraries-log.js';
+import { animateDiceRoll } from './dice-password.js';
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -28,6 +29,17 @@ const CODE_RE = /^[A-Z0-9]{4,12}$/;
 const NAME_KEY = 'hush:name';
 const SOUND_KEY = 'hush:sounds';
 const DEVICE_KEY = 'hush:device';
+const ROOM_PASSWORD_MIN = 4;
+const ROOM_PASSWORD_MAX = 128;
+const ROOM_NAME_MAX = 60;
+// Device icons (phone / pc / tablet) shown next to names everywhere.
+const DEVICE_ICONS = { phone: 'i-phone', pc: 'i-pc', tablet: 'i-tablet' };
+
+// Screen-share zoom/pan (wheel, pinch, drag, buttons, double-click).
+const ZOOM_MIN = 1;
+const ZOOM_MAX = 5;
+const ZOOM_STEP = 1.25;
+const screenZoom = { scale: 1, x: 0, y: 0 };
 
 function getOrCreateDeviceId() {
   try {
@@ -89,6 +101,57 @@ function applySavedPeerVolumes() {
   }
 }
 
+/* ---------------- Device type + password helpers ---------------- */
+
+// Best-effort client classification; the server whitelists the value
+// (phone | pc | tablet) before storing it on the participant.
+function detectDeviceType() {
+  const ua = navigator.userAgent || '';
+  const touchPoints = navigator.maxTouchPoints ?? 0;
+  if (/iPhone|iPod|Windows Phone|IEMobile/i.test(ua)) return 'phone';
+  if (/Android/i.test(ua)) return /Mobile/i.test(ua) ? 'phone' : 'tablet';
+  if (/iPad|Tablet|PlayBook|Silk|Kindle/i.test(ua)) return 'tablet';
+  // iPadOS 13+ pretends to be desktop Safari — it is the only "Mac" with
+  // multi-touch, so use that to unmask it.
+  if (/Macintosh/i.test(ua) && touchPoints > 1) return 'tablet';
+  return 'pc';
+}
+
+// Small labeled icon (title/aria-label) shown next to a person's name.
+function deviceBadge(type, className = 'device-badge') {
+  const key = DEVICE_ICONS[type] ? type : 'pc';
+  const node = el('span', className);
+  node.title = t(`device.${key}`);
+  node.setAttribute('aria-label', t(`device.${key}`));
+  node.append(icon(DEVICE_ICONS[key]));
+  return node;
+}
+
+// Remembered room password — entering it once must survive a page refresh
+// on this device (per room). Stored raw client-side, verified server-side.
+function roomPassKey() { return `hush:roompass:${state.code || 'room'}`; }
+function getStoredRoomPassword() {
+  try { return localStorage.getItem(roomPassKey()) || ''; } catch { return ''; }
+}
+function saveRoomPassword(password) {
+  try {
+    if (password) localStorage.setItem(roomPassKey(), password);
+    else localStorage.removeItem(roomPassKey());
+  } catch { /* storage may be blocked; joining still works */ }
+}
+function forgetRoomPassword() { saveRoomPassword(''); }
+
+// Passwords sent to the server are trimmed the same way the server trims
+// them, so the remembered value always matches what was verified.
+function normalizeRoomPassword(value) {
+  return String(value ?? '').trim();
+}
+
+function validRoomPassword(value) {
+  const password = normalizeRoomPassword(value);
+  return password.length >= ROOM_PASSWORD_MIN && password.length <= ROOM_PASSWORD_MAX;
+}
+
 const els = {
   gate: $('#join-gate'),
   joinForm: $('#join-form'),
@@ -127,6 +190,12 @@ const els = {
   leaveTop: $('#leave-btn-top'),
   tabChat: $('#tab-chat'),
   tabPeople: $('#tab-people'),
+  sidePanel: $('#side-panel'),
+  chatFab: $('#chat-fab'),
+  chatFabLabel: $('#chat-fab-label'),
+  chatFabBadge: $('#chat-fab-badge'),
+  sheetClose: $('#sheet-close'),
+  sheetScrim: $('#sheet-scrim'),
   panelChat: $('#panel-chat'),
   panelPeople: $('#panel-people'),
   unreadBadge: $('#unread-badge'),
@@ -234,8 +303,34 @@ const els = {
   screenStopWatching: $('#screen-stop-watching'),
   screenStopLabel: $('#screen-stop-label'),
   screenEnlarge: $('#screen-enlarge'),
+  screenZoomBar: $('#screen-zoom-bar'),
+  screenZoomIn: $('#screen-zoom-in'),
+  screenZoomOut: $('#screen-zoom-out'),
+  screenZoomReset: $('#screen-zoom-reset'),
+  screenZoomLevel: $('#screen-zoom-level'),
   screenWatchBtn: $('#screen-watch-btn'),
   screenWatchLabel: $('#screen-watch-label'),
+  joinPasswordField: $('#join-password-field'),
+  joinPassword: $('#join-password'),
+  joinPasswordToggle: $('#join-password-toggle'),
+  joinPasswordHint: $('#join-password-hint'),
+  roomSettingsBtn: $('#room-settings-btn'),
+  roomSettingsBtnLabel: $('#room-settings-btn-label'),
+  roomSettingsDialog: $('#room-settings-dialog'),
+  roomSettingsClose: $('#room-settings-close'),
+  roomSettingsCancel: $('#room-settings-cancel'),
+  roomSettingsSave: $('#room-settings-save'),
+  roomSettingsError: $('#room-settings-error'),
+  roomSettingsLead: $('#room-settings-lead'),
+  roomSettingsTitle: $('#room-settings-title'),
+  roomNameLabel: $('#room-name-label'),
+  roomNameInput: $('#room-name-input'),
+  roomNameHint: $('#room-name-hint'),
+  roomPasswordLabel: $('#room-password-label'),
+  roomPasswordInput: $('#room-password-input'),
+  roomPasswordHint: $('#room-password-hint'),
+  roomPasswordToggle: $('#room-password-toggle'),
+  roomDiceBtn: $('#room-dice-btn'),
   imageLightbox: $('#image-lightbox'),
   imageLightboxBackdrop: $('#image-lightbox-backdrop'),
   imageLightboxImg: $('#image-lightbox-img'),
@@ -259,6 +354,7 @@ const state = {
   joiningOnce: false,
   reconnecting: false,
   activeTab: 'chat',
+  sheetOpen: false, // phone layout: chat/people bottom sheet visibility
   activeScreenId: null,
   unread: 0,
   lastDay: null,
@@ -291,6 +387,10 @@ const state = {
   personalSounds: [], // IndexedDB sounds on this device only
   boardQuery: '',
   hiddenScreenId: null, // screen id the user stopped watching (Discord-style)
+  roomName: '', // optional host-set room name (falls back to the code)
+  roomHasPassword: false, // server truth, refreshed on join/password-changed
+  roomPasswordTouched: false, // host typed in the password field of the dialog
+  deviceType: detectDeviceType(), // 'phone' | 'pc' | 'tablet' (sent on join)
 };
 
 initI18n();
@@ -359,7 +459,32 @@ function init() {
   updateDropLabel();
   updateSearchUi();
   updateChatEmpty(0);
+  updateZoomLabels();
+  void prefetchRoomInfo();
   setTimeout(() => els.nameInput.focus(), 120);
+}
+
+// Ask the server whether this room needs a password (and its name) before
+// the user types anything, so the gate can show the password field early
+// and prefill the remembered value. Join still re-validates everything.
+async function prefetchRoomInfo() {
+  if (!state.code || !CODE_RE.test(state.code)) return;
+  try {
+    const response = await fetch(`/api/rooms/${encodeURIComponent(state.code)}`);
+    if (!response.ok) return;
+    const data = await response.json().catch(() => null);
+    if (!data?.exists) return;
+    state.roomName = data.name || '';
+    state.roomHasPassword = Boolean(data.passwordRequired);
+    if (state.roomHasPassword) {
+      els.joinPasswordField.hidden = false;
+      const stored = getStoredRoomPassword();
+      if (stored) els.joinPassword.value = stored;
+      renderJoinGateLabels();
+    }
+  } catch {
+    // Offline / blocked — the join flow surfaces password errors itself.
+  }
 }
 
 function startSessionTimer() {
@@ -422,6 +547,17 @@ function bindEvents() {
 
   els.tabChat.addEventListener('click', () => switchTab('chat'));
   els.tabPeople.addEventListener('click', () => switchTab('people'));
+  els.chatFab?.addEventListener('click', () => {
+    if (state.sheetOpen && state.activeTab === 'chat') closeSheet();
+    else { switchTab('chat'); openSheet(); }
+  });
+  els.sheetClose?.addEventListener('click', closeSheet);
+  els.sheetScrim?.addEventListener('click', closeSheet);
+  // Leaving the phone layout (rotate / resize to desktop): drop sheet state
+  // so the sidebar returns to its docked position cleanly.
+  window.matchMedia?.(PHONE_LAYOUT_QUERY)?.addEventListener?.('change', (event) => {
+    if (!event.matches) closeSheet();
+  });
   els.focusToggle?.addEventListener('click', () => toggleFocusMode());
   els.focusModeBtn?.addEventListener('click', () => toggleFocusMode());
   els.pinnedClear?.addEventListener('click', unpinMessage);
@@ -525,9 +661,21 @@ function bindEvents() {
       event.preventDefault();
       event.stopPropagation();
       els.screenStage.classList.remove('is-enlarged');
+      resetScreenZoom();
       syncScreenEnlarge();
     }
   });
+
+  // ---- Screen-share zoom / pan (wheel, pinch, drag, buttons, double-click) ----
+  els.screenZoomIn?.addEventListener('click', (event) => { event.stopPropagation(); zoomByStep(1 / ZOOM_STEP); });
+  els.screenZoomOut?.addEventListener('click', (event) => { event.stopPropagation(); zoomByStep(ZOOM_STEP); });
+  els.screenZoomReset?.addEventListener('click', (event) => { event.stopPropagation(); resetScreenZoom(); });
+  els.screenZoomIn?.addEventListener('dblclick', stopPropagationOnEvent);
+  els.screenZoomOut?.addEventListener('dblclick', stopPropagationOnEvent);
+  els.screenZoomReset?.addEventListener('dblclick', stopPropagationOnEvent);
+  els.screenStage?.addEventListener('wheel', handleStageWheel, { passive: false });
+  els.screenStage?.addEventListener('dblclick', handleStageDoubleClick);
+  bindStagePointers();
   // Autoplay policy: AudioContexts created outside a gesture stay
   // suspended (silent remote audio + silent mic processing). Any pointer
   // or key gesture resumes them — this is what makes voice audible.
@@ -606,6 +754,25 @@ function bindEvents() {
   els.micDialog?.addEventListener('click', (event) => {
     if (event.target === els.micDialog) closeMicSettings();
   });
+  // ---- Host room settings (name + password + dice generator) ----
+  els.roomSettingsBtn?.addEventListener('click', openRoomSettings);
+  els.roomSettingsClose?.addEventListener('click', closeRoomSettings);
+  els.roomSettingsCancel?.addEventListener('click', closeRoomSettings);
+  els.roomSettingsSave?.addEventListener('click', () => { void saveRoomSettings(); });
+  els.roomNameInput?.addEventListener('input', hideRoomSettingsError);
+  els.roomPasswordInput?.addEventListener('input', () => {
+    state.roomPasswordTouched = true;
+    hideRoomSettingsError();
+  });
+  els.roomDiceBtn?.addEventListener('click', () => {
+    animateDiceRoll(els.roomDiceBtn, els.roomPasswordInput);
+    state.roomPasswordTouched = true;
+  });
+  bindPasswordToggle(els.joinPasswordToggle, els.joinPassword);
+  bindPasswordToggle(els.roomPasswordToggle, els.roomPasswordInput);
+  els.roomSettingsDialog?.addEventListener('click', (event) => {
+    if (event.target === els.roomSettingsDialog) closeRoomSettings();
+  });
   els.shortcutsBtn?.addEventListener('click', openShortcuts);
   els.shortcutsClose?.addEventListener('click', closeShortcuts);
 
@@ -644,7 +811,10 @@ function bindEvents() {
     }
   }
 
-  els.screenStage.addEventListener('click', cycleScreenShare);
+  // Single click cycles between sharers — but only after a short debounce,
+  // so a double-click (zoom toggle) never triggers a cycle, and only when
+  // the previous gesture was not a pan-drag.
+  els.screenStage.addEventListener('click', handleStageClick);
   els.screenVideo?.addEventListener('playing', () => { els.screenPlaceholder.hidden = true; });
   els.screenVideo?.addEventListener('loadeddata', () => { els.screenPlaceholder.hidden = true; });
 
@@ -721,12 +891,26 @@ async function joinRoom(event) {
   try {
     const socket = ensureSocket();
     await waitForConnection(socket);
-    const response = await emitAck('room:join', { code: state.code, name, deviceId: state.deviceId });
+    // The gate shows the field after prefetch; if that fetch failed we
+    // still try the remembered password (server decides if it is needed).
+    const password = els.joinPasswordField.hidden
+      ? getStoredRoomPassword()
+      : normalizeRoomPassword(els.joinPassword.value);
+    const response = await emitAck('room:join', {
+      code: state.code,
+      name,
+      deviceId: state.deviceId,
+      deviceType: state.deviceType,
+      ...(password ? { password } : {})
+    });
     if (!response?.ok) {
+      handleJoinPasswordError(response?.error);
       showJoinError(joinErrorKey(response?.error));
       setStatus('offline', 'status.notConnected');
       return;
     }
+    // Correct password (or none needed): remember it for refreshes.
+    saveRoomPassword(response.room?.hasPassword && password ? password : '');
 
     state.joiningOnce = true;
     applyJoinState(response);
@@ -835,6 +1019,9 @@ function applyJoinState(response) {
   state.selfName = response.self.name;
   state.hostId = response.hostId || response.self.id;
   state.isHost = Boolean(response.isHost || response.self?.isHost || state.hostId === state.selfId);
+  state.roomName = response.room?.name || '';
+  state.roomHasPassword = Boolean(response.room?.hasPassword);
+  updateRoomSettingsVisibility();
   playSound(state.isHost ? 'success' : 'join');
   if (state.isHost) setTimeout(() => toast(t('admin.youHost'), 'info', 4200), 600);
   state.participants = new Map(
@@ -847,7 +1034,8 @@ function applyJoinState(response) {
       micOn: false,
       cameraOn: false,
       screenOn: false,
-      handRaised: false
+      handRaised: false,
+      deviceType: state.deviceType
     });
   }
 
@@ -957,14 +1145,20 @@ async function rejoin() {
 
   try {
     state.mesh?.closeAll();
+    const storedPassword = getStoredRoomPassword();
     const response = await emitAck('room:join', {
       code: state.code,
       name: state.selfName,
-      deviceId: state.deviceId
+      deviceId: state.deviceId,
+      deviceType: state.deviceType,
+      ...(storedPassword ? { password: storedPassword } : {})
     });
     if (!response?.ok) throw new Error(joinErrorKey(response?.error));
 
     applyJoinState(response);
+    // The host may have changed the password while we were offline: keep
+    // the remembered value in sync with what the server just verified.
+    saveRoomPassword(response.room?.hasPassword && storedPassword ? storedPassword : '');
     updatePresence();
     setStatus('online', 'status.connected');
     state.online = true;
@@ -973,12 +1167,38 @@ async function rejoin() {
     await Promise.allSettled(existingIds.map((id) => state.mesh.connectToPeer(id)));
     toast(t('toast.reconnected'), 'info', 2400);
   } catch (error) {
+    const key = error?.message?.startsWith?.('error.') ? error.message : '';
+    if (key === 'error.passwordRequired' || key === 'error.wrongPassword') {
+      // The remembered password is stale (or the host just added one): drop
+      // it and let the user re-enter it through the join gate.
+      forgetRoomPassword();
+      state.online = false;
+      setStatus('offline', 'status.offline');
+      showGateForPassword(key === 'error.wrongPassword' ? 'error.wrongPassword' : 'error.passwordRequired');
+      return;
+    }
     setStatus('offline', 'status.offline');
     state.online = false;
     toast(errorText(error, 'error.reconnectFailed'), 'error', 5000);
   } finally {
     state.reconnecting = false;
   }
+}
+
+// Re-show the join gate mid-session (stale password): the room stays
+// running in the background — submitting the gate rejoins it.
+function showGateForPassword(errorKey) {
+  try {
+    state.mesh?.closeAll();
+    renderTiles();
+  } catch { /* ignore */ }
+  try { document.querySelector('#room-shell')?.setAttribute('inert', ''); } catch { /* ignore */ }
+  if (els.gate) els.gate.hidden = false;
+  if (els.joinPasswordField) els.joinPasswordField.hidden = false;
+  renderJoinGateLabels();
+  showJoinError(errorKey);
+  setStatus('offline', 'status.notConnected');
+  setTimeout(() => { try { els.joinPassword?.focus(); } catch { /* ignore */ } }, 120);
 }
 
 function setJoinBusy(busy) {
@@ -1000,6 +1220,40 @@ function applyJoinError() {
     els.joinError.textContent = '';
     els.joinError.hidden = true;
   }
+}
+
+// Password gate failures reveal the field (if the prefetch missed it) and,
+// for a wrong value, drop the stale remembered password — the user's typed
+// value is kept so they can fix a typo without retyping.
+function handleJoinPasswordError(code) {
+  if (code !== 'password-required' && code !== 'wrong-password') return;
+  if (els.joinPasswordField) els.joinPasswordField.hidden = false;
+  renderJoinGateLabels();
+  if (code === 'wrong-password') forgetRoomPassword();
+  try { els.joinPassword?.focus(); els.joinPassword?.select(); } catch { /* ignore */ }
+}
+
+function renderJoinGateLabels() {
+  if (els.joinPassword) els.joinPassword.placeholder = t('join.passwordPlaceholder');
+  if (els.joinPasswordHint) els.joinPasswordHint.textContent = t('join.passwordHint');
+  if (els.joinPasswordToggle) {
+    const show = els.joinPassword.type !== 'password';
+    els.joinPasswordToggle.title = t(show ? 'password.hide' : 'password.show');
+    els.joinPasswordToggle.setAttribute('aria-label', t(show ? 'password.hide' : 'password.show'));
+  }
+}
+
+function bindPasswordToggle(button, input) {
+  if (!button || !input) return;
+  button.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const show = input.type === 'password';
+    input.type = show ? 'text' : 'password';
+    button.classList.toggle('is-visible', show);
+    button.title = t(show ? 'password.hide' : 'password.show');
+    button.setAttribute('aria-label', t(show ? 'password.hide' : 'password.show'));
+  });
 }
 
 function hideGate() {
@@ -1046,6 +1300,16 @@ function joinErrorKey(code) {
       return 'error.userNotFound';
     case 'cannot-target-self':
       return 'error.cannotTargetSelf';
+    case 'password-required':
+      return 'error.passwordRequired';
+    case 'wrong-password':
+      return 'error.wrongPassword';
+    case 'invalid-room-password':
+      return 'error.invalidRoomPassword';
+    case 'rename-failed':
+      return 'error.renameFailed';
+    case 'password-failed':
+      return 'error.passwordFailed';
     default:
       return 'error.generic';
   }
@@ -1193,9 +1457,32 @@ function bindRoomEvents(socket) {
     if (!hostId) return;
     state.hostId = hostId;
     state.isHost = hostId === state.selfId;
+    updateRoomSettingsVisibility();
     renderPeople();
     renderTiles();
     if (state.isHost) toast(t('admin.youHost'), 'info', 3600);
+  });
+
+  // Host renamed the room — everyone updates the stage + document title.
+  socket.on('room:renamed', ({ name, by } = {}) => {
+    state.roomName = String(name ?? '').slice(0, ROOM_NAME_MAX);
+    updateStageHeader();
+    updateDocumentTitle();
+    toast(t('toast.roomRenamed', { name: state.roomName || formatCode(state.code), by: by || '' }), 'info', 3400);
+  });
+
+  // Host added/changed/removed the password — non-hosts with a stale
+  // remembered value will re-enter it on their next rejoin.
+  socket.on('room:password-changed', ({ hasPassword, by } = {}) => {
+    state.roomHasPassword = Boolean(hasPassword);
+    // The old password is useless now — dropping it prevents a confusing
+    // "wrong password" on the next reconnect.
+    if (!state.roomHasPassword) forgetRoomPassword();
+    toast(
+      t(hasPassword ? 'toast.roomPasswordSet' : 'toast.roomPasswordRemoved', { by: by || '' }),
+      'info',
+      3600
+    );
   });
 
   socket.on('admin:action', ({ type, targetName, by } = {}) => {
@@ -1348,7 +1635,6 @@ function createTile(participant) {
   you.className = 'tile-you';
   you.textContent = t('chat.you');
   foot.append(name, you);
-
   tile.append(video, avatar, badges, foot);
   updateTile(tile, participant);
   return tile;
@@ -1366,6 +1652,23 @@ function updateTile(tile, participant) {
   if (you) {
     you.hidden = !isSelf;
     you.textContent = t('chat.you');
+  }
+
+  // Device-type icon (phone / PC / tablet) next to the name.
+  const deviceType = participant.deviceType && DEVICE_ICONS[participant.deviceType]
+    ? participant.deviceType
+    : '';
+  let deviceEl = $('.tile-device', tile);
+  if (deviceType) {
+    if (!deviceEl) {
+      deviceEl = el('span', 'tile-device');
+      (you || $('.tile-foot', tile))?.before(deviceEl);
+    }
+    deviceEl.title = t(`device.${deviceType}`);
+    deviceEl.setAttribute('aria-label', t(`device.${deviceType}`));
+    deviceEl.replaceChildren(icon(DEVICE_ICONS[deviceType]));
+  } else {
+    deviceEl?.remove();
   }
 
   const avatar = $('.tile-avatar', tile);
@@ -1478,6 +1781,9 @@ function renderPeople() {
       you.textContent = t('chat.you');
       nameRow.append(you);
     }
+    if (participant.deviceType && DEVICE_ICONS[participant.deviceType]) {
+      nameRow.append(deviceBadge(participant.deviceType, 'device-badge person-device'));
+    }
     if (state.hostId === participant.id) {
       const host = document.createElement('span');
       host.className = 'host-badge';
@@ -1535,9 +1841,12 @@ function updateStageHeader() {
   const count = state.participants.size;
   const formatted = formatCode(state.code);
   if (els.stageTitle) {
-    els.stageTitle.textContent = formatted
-      ? t('screen.stageRoom', { code: formatted })
-      : t('screen.room');
+    // A host-set room name replaces the raw code everywhere it is shown.
+    els.stageTitle.textContent = state.roomName
+      ? state.roomName
+      : formatted
+        ? t('screen.stageRoom', { code: formatted })
+        : t('screen.room');
   }
   if (els.stageCount) {
     els.stageCount.textContent =
@@ -1557,8 +1866,9 @@ function updateScreenStage() {
     els.stage.classList.remove('is-sharing');
     els.screenVideo.srcObject = null;
     state.activeScreenId = null;
-    // Sharing ended while enlarged: shrink back cleanly.
+    // Sharing ended while enlarged: shrink back cleanly + drop zoom state.
     els.screenStage.classList.remove('is-enlarged');
+    resetScreenZoom();
     syncScreenEnlarge();
     return;
   }
@@ -1627,7 +1937,10 @@ function cycleScreenShare() {
   const sharers = sortedParticipants().filter((participant) => participant.screenOn);
   if (sharers.length < 2) return;
   const index = sharers.findIndex((participant) => participant.id === state.activeScreenId);
-  state.activeScreenId = sharers[(index + 1) % sharers.length].id;
+  const nextId = sharers[(index + 1) % sharers.length].id;
+  // Switching to a different sharer: their layout differs, so drop zoom.
+  if (nextId !== state.activeScreenId) resetScreenZoom();
+  state.activeScreenId = nextId;
   updateScreenStage();
 }
 
@@ -1858,10 +2171,11 @@ function createMessageNode(message) {
   const body = el('div', 'message-body');
 
   const head = el('div', 'message-head');
-  head.append(
-    el('span', 'message-author', message.authorName || t('chat.guest')),
-    el('time', 'message-time', formatTime(message.createdAt))
-  );
+  head.append(el('span', 'message-author', message.authorName || t('chat.guest')));
+  if (message.authorDeviceType && DEVICE_ICONS[message.authorDeviceType]) {
+    head.append(deviceBadge(message.authorDeviceType, 'device-badge message-device'));
+  }
+  head.append(el('time', 'message-time', formatTime(message.createdAt)));
 
   const bubble = el('div', 'message-bubble');
   if (message.text) {
@@ -3058,6 +3372,132 @@ function updateMicOutputs() {
   }
 }
 
+/* ---------------- Host room settings (name + password) ---------------- */
+
+function updateRoomSettingsVisibility() {
+  if (!els.roomSettingsBtn) return;
+  els.roomSettingsBtn.hidden = !state.isHost;
+}
+
+function openRoomSettings() {
+  if (!els.roomSettingsDialog || !state.isHost) return;
+  state.roomPasswordTouched = false;
+  if (els.roomNameInput) els.roomNameInput.value = state.roomName || '';
+  // Never echo the current password (only its hash exists server-side);
+  // empty + untouched = "leave the password as it is".
+  if (els.roomPasswordInput) {
+    els.roomPasswordInput.value = '';
+    els.roomPasswordInput.type = 'password';
+  }
+  els.roomPasswordToggle?.classList.remove('is-visible');
+  hideRoomSettingsError();
+  renderRoomSettingsLabels();
+  if (typeof els.roomSettingsDialog.showModal === 'function') {
+    if (!els.roomSettingsDialog.open) els.roomSettingsDialog.showModal();
+  } else {
+    els.roomSettingsDialog.setAttribute('open', '');
+  }
+  setTimeout(() => { try { els.roomNameInput?.focus(); } catch { /* ignore */ } }, 60);
+}
+
+function closeRoomSettings() {
+  if (!els.roomSettingsDialog) return;
+  if (typeof els.roomSettingsDialog.close === 'function') {
+    if (els.roomSettingsDialog.open) els.roomSettingsDialog.close();
+  } else {
+    els.roomSettingsDialog.removeAttribute('open');
+  }
+}
+
+function renderRoomSettingsLabels() {
+  if (els.roomSettingsTitle) els.roomSettingsTitle.textContent = t('room.settingsTitle');
+  if (els.roomSettingsLead) els.roomSettingsLead.textContent = t('room.settingsLead');
+  if (els.roomSettingsBtnLabel) els.roomSettingsBtnLabel.textContent = t('room.settingsBtn');
+  if (els.roomNameLabel) els.roomNameLabel.textContent = t('room.nameLabel');
+  if (els.roomNameInput) els.roomNameInput.placeholder = t('room.namePlaceholder');
+  if (els.roomNameHint) els.roomNameHint.textContent = t('room.nameHint');
+  if (els.roomPasswordLabel) els.roomPasswordLabel.textContent = t('room.passwordLabel');
+  if (els.roomPasswordInput) els.roomPasswordInput.placeholder = t('room.passwordPlaceholder');
+  if (els.roomPasswordHint) {
+    els.roomPasswordHint.textContent = t(state.roomHasPassword ? 'room.passwordHintSet' : 'room.passwordHintNone');
+  }
+  if (els.roomSettingsCancel) els.roomSettingsCancel.textContent = t('room.cancel');
+  if (els.roomSettingsSave) els.roomSettingsSave.textContent = t('room.save');
+  if (els.roomDiceBtn) {
+    els.roomDiceBtn.title = t('room.diceTitle');
+    els.roomDiceBtn.setAttribute('aria-label', t('room.diceTitle'));
+  }
+  if (els.roomPasswordToggle) {
+    const show = els.roomPasswordInput && els.roomPasswordInput.type !== 'password';
+    els.roomPasswordToggle.title = t(show ? 'password.hide' : 'password.show');
+    els.roomPasswordToggle.setAttribute('aria-label', t(show ? 'password.hide' : 'password.show'));
+  }
+  if (els.roomSettingsClose) {
+    els.roomSettingsClose.title = t('room.close');
+    els.roomSettingsClose.setAttribute('aria-label', t('room.close'));
+  }
+}
+
+function showRoomSettingsError(key) {
+  if (!els.roomSettingsError) return;
+  els.roomSettingsError.textContent = t(key);
+  els.roomSettingsError.hidden = false;
+}
+
+function hideRoomSettingsError() {
+  if (!els.roomSettingsError) return;
+  els.roomSettingsError.textContent = '';
+  els.roomSettingsError.hidden = true;
+}
+
+async function saveRoomSettings() {
+  if (!state.isHost) return;
+  const name = (els.roomNameInput?.value ?? '').trim().slice(0, ROOM_NAME_MAX);
+  const password = normalizeRoomPassword(els.roomPasswordInput?.value ?? '');
+  const passwordTouched = state.roomPasswordTouched;
+
+  if (passwordTouched && password && !validRoomPassword(password)) {
+    showRoomSettingsError('error.invalidRoomPassword');
+    try { els.roomPasswordInput?.focus(); } catch { /* ignore */ }
+    return;
+  }
+
+  if (els.roomSettingsSave) els.roomSettingsSave.disabled = true;
+  try {
+    if (name !== state.roomName) {
+      const response = await emitAck('room:rename', { name });
+      if (!response?.ok) {
+        showRoomSettingsError(joinErrorKey(response?.error));
+        return;
+      }
+      state.roomName = response.name ?? name;
+      updateStageHeader();
+      updateDocumentTitle();
+    }
+
+    if (passwordTouched) {
+      const response = await emitAck('room:password', { password });
+      if (!response?.ok) {
+        showRoomSettingsError(joinErrorKey(response?.error));
+        return;
+      }
+      state.roomHasPassword = Boolean(response.hasPassword);
+      // The host's own device remembers the new password: refreshing the
+      // page must not prompt them for it.
+      saveRoomPassword(password);
+      renderRoomSettingsLabels();
+    }
+
+    closeRoomSettings();
+    toast(t('room.saved'), 'info', 2400);
+  } catch (error) {
+    const message = error?.message || '';
+    showRoomSettingsError(message.startsWith('error.') ? message : 'error.generic');
+  } finally {
+    if (els.roomSettingsSave) els.roomSettingsSave.disabled = false;
+  }
+}
+
 async function applyMicPreset() {
   const preset = MIC_PRESETS[els.micPreset?.value];
   if (!preset || !state.mesh) return;
@@ -3154,6 +3594,40 @@ function switchTab(tab) {
     setUnread(0);
     if (!state.searchQuery.trim()) scrollToLatest('auto');
   }
+
+  // On phones the tabs live inside the bottom sheet: picking a tab means
+  // the user wants to see it, so lift the sheet if it is still closed.
+  if (isPhoneLayout() && !state.sheetOpen) openSheet();
+}
+
+/* ---------------- Phone bottom sheet ----------------
+   <= 700px the side panel becomes a draggable-style bottom sheet over
+   the stage. Desktop keeps the docked sidebar and never opens it. */
+
+const PHONE_LAYOUT_QUERY = '(max-width: 700px)';
+
+function isPhoneLayout() {
+  return window.matchMedia?.(PHONE_LAYOUT_QUERY)?.matches ?? false;
+}
+
+function openSheet() {
+  if (!els.sidePanel) return;
+  state.sheetOpen = true;
+  els.sidePanel.classList.add('is-open');
+  els.sheetScrim?.classList.add('is-open');
+  els.chatFab?.setAttribute('aria-pressed', 'true');
+  syncChatFab();
+}
+
+function closeSheet() {
+  if (!els.sidePanel) return;
+  state.sheetOpen = false;
+  els.sidePanel.classList.remove('is-open');
+  els.sheetScrim?.classList.remove('is-open');
+  els.chatFab?.setAttribute('aria-pressed', 'false');
+  syncChatFab();
+  // Keep whatever tab was active so reopening continues where the user left off.
+  if (els.messageInput) els.messageInput.blur();
 }
 
 function setUnread(count) {
@@ -3162,13 +3636,35 @@ function setUnread(count) {
     els.unreadBadge.hidden = state.unread === 0;
     els.unreadBadge.textContent = state.unread > 99 ? '99+' : String(state.unread);
   }
+  syncChatFabBadge();
   if (els.jumpLatest) els.jumpLatest.hidden = state.unread === 0;
   updateDocumentTitle();
 }
 
+function syncChatFabBadge() {
+  if (!els.chatFabBadge) return;
+  // On phones the sheet hides the tab badge, so the FAB mirrors unread count.
+  const show = state.unread > 0 && !state.sheetOpen;
+  els.chatFabBadge.hidden = !show;
+  els.chatFabBadge.textContent = state.unread > 99 ? '99+' : String(state.unread);
+}
+
+function syncChatFab() {
+  if (!els.chatFab) return;
+  const label = state.sheetOpen ? t('chat.closeChat') : t('chat.openChat');
+  els.chatFab.title = label;
+  els.chatFab.setAttribute('aria-label', label);
+  if (els.chatFabLabel) els.chatFabLabel.textContent = t('chat.panelLabel');
+  syncChatFabBadge();
+}
+
 function updateDocumentTitle() {
   const code = formatCode(state.code);
-  let title = code ? t('meta.roomTitle', { code }) : t('meta.roomUntitled');
+  let title = state.roomName
+    ? t('meta.roomNameTitle', { name: state.roomName })
+    : code
+      ? t('meta.roomTitle', { code })
+      : t('meta.roomUntitled');
   if (state.unread > 0) {
     title = t('meta.unreadTitle', { count: state.unread, title });
   }
@@ -3290,7 +3786,9 @@ function handleLanguageChange() {
   }
   closeReactionPopover();
   if (els.micDialog?.open) renderMicSettings();
-  renderServerPanel();
+  renderRoomSettingsLabels();
+  renderJoinGateLabels();
+  updateZoomLabels();
   // v12.1: picker tabs/labels are language-dependent — rebuild them.
   if (els.emojiMenu) buildRoomEmojiMenu();
   if (els.gifMenu) buildGifMenu();
@@ -3307,10 +3805,17 @@ function handleShortcut(event) {
   if (event.key === 'Escape') {
     if (els.screenStage?.classList.contains('is-enlarged')) {
       els.screenStage.classList.remove('is-enlarged');
+      resetScreenZoom();
       syncScreenEnlarge();
       return;
     }
+    if (isScreenZoomed() && !els.screenStage?.hidden) {
+      resetScreenZoom();
+      return;
+    }
+    if (stageClickTimer) cancelPendingStageClick();
     closeShortcuts();
+    closeRoomSettings();
     closeMicSettings();
     closeReactionMenu();
     closeReactionPopover();
@@ -3318,10 +3823,11 @@ function handleShortcut(event) {
     closeImageLightbox();
     closeAllPickers();
     toggleSoundboard(false);
+    closeSheet();
     return;
   }
 
-  if (els.shortcutsDialog?.open || els.micDialog?.open) return;
+  if (els.shortcutsDialog?.open || els.micDialog?.open || els.roomSettingsDialog?.open) return;
 
   const target = event.target;
   const inField =
@@ -3384,6 +3890,26 @@ function handleShortcut(event) {
     case 'd':
       event.preventDefault();
       toggleDeafen();
+      break;
+    case '-':
+    case '_':
+      if (!els.screenStage?.hidden) {
+        event.preventDefault();
+        zoomByStep(1 / ZOOM_STEP);
+      }
+      break;
+    case '+':
+    case '=':
+      if (!els.screenStage?.hidden) {
+        event.preventDefault();
+        zoomByStep(ZOOM_STEP);
+      }
+      break;
+    case '0':
+      if (!els.screenStage?.hidden && isScreenZoomed()) {
+        event.preventDefault();
+        resetScreenZoom();
+      }
       break;
     default:
       break;
@@ -3550,11 +4076,14 @@ function stopWatchingScreen() {
 
 // Enlarge = a fixed overlay layer over everything (always works, no
 // Fullscreen-API dependency — the old fullscreen attempt was invisible/
-// janky in Brave). Esc or the button shrinks back.
+// janky in Brave). Esc or the button shrinks back; zoom/pan computed for
+// the enlarged layout would misplace the smaller view, so it resets.
 function toggleScreenEnlarge() {
   const stage = els.screenStage;
   if (!stage || stage.hidden) return;
+  const shrinking = stage.classList.contains('is-enlarged');
   stage.classList.toggle('is-enlarged');
+  if (shrinking) resetScreenZoom();
   syncScreenEnlarge();
 }
 
@@ -3567,6 +4096,217 @@ function syncScreenEnlarge() {
     els.screenEnlarge.title = t(enlarged ? 'screen.shrink' : 'screen.enlarge');
     els.screenEnlarge.setAttribute('aria-label', t(enlarged ? 'screen.shrink' : 'screen.enlarge'));
   }
+}
+
+/* ---------------- Screen-share zoom & pan (v15) ----------------
+   Wheel + pinch zoom, drag-to-pan while zoomed, double-click toggles 2x,
+   live zoom % indicator, reset button, keyboard +/-/0. A pan-drag never
+   fires the click-to-cycle handler, and double-click coexists with the
+   single click (debounced) — see handleStageClick. */
+
+function stopPropagationOnEvent(event) { event.stopPropagation(); }
+
+function isScreenZoomed() {
+  return screenZoom.scale !== 1 || screenZoom.x !== 0 || screenZoom.y !== 0;
+}
+
+function applyScreenTransform() {
+  if (!els.screenVideo) return;
+  els.screenVideo.style.transform = isScreenZoomed()
+    ? `translate(${Math.round(screenZoom.x)}px, ${Math.round(screenZoom.y)}px) scale(${screenZoom.scale})`
+    : '';
+  els.screenStage?.classList.toggle('is-zoomed', isScreenZoomed());
+  if (els.screenZoomLevel) {
+    els.screenZoomLevel.textContent = `${Math.round(screenZoom.scale * 100)}%`;
+  }
+  if (els.screenZoomReset) els.screenZoomReset.disabled = !isScreenZoomed();
+}
+
+function clampPan() {
+  const rect = els.screenStage?.getBoundingClientRect();
+  if (!rect) return;
+  // Keep the visible content inside the stage: the video box may zoom up to
+  // (scale - 1) * half the stage beyond each edge.
+  const maxX = Math.max(0, (rect.width * (screenZoom.scale - 1)) / 2);
+  const maxY = Math.max(0, (rect.height * (screenZoom.scale - 1)) / 2);
+  screenZoom.x = Math.min(maxX, Math.max(-maxX, screenZoom.x));
+  screenZoom.y = Math.min(maxY, Math.max(-maxY, screenZoom.y));
+}
+
+// Zoom while keeping the given viewport point stationary (wheel at the
+// cursor, pinch at the midpoint, double-click at the click point).
+function zoomAtPoint(clientX, clientY, nextScale) {
+  const rect = els.screenStage?.getBoundingClientRect();
+  if (!rect) return;
+  const next = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, nextScale));
+  const prev = screenZoom.scale;
+  if (next === ZOOM_MIN) {
+    resetScreenZoom();
+    return;
+  }
+  if (next === prev) {
+    clampPan();
+    applyScreenTransform();
+    return;
+  }
+  const ratio = next / prev;
+  const dx = clientX - rect.left - rect.width / 2;
+  const dy = clientY - rect.top - rect.height / 2;
+  screenZoom.x = dx - (dx - screenZoom.x) * ratio;
+  screenZoom.y = dy - (dy - screenZoom.y) * ratio;
+  screenZoom.scale = next;
+  clampPan();
+  applyScreenTransform();
+}
+
+function zoomByStep(factor) {
+  const rect = els.screenStage?.getBoundingClientRect();
+  if (!rect) return;
+  zoomAtPoint(rect.left + rect.width / 2, rect.top + rect.height / 2, screenZoom.scale * factor);
+}
+
+function resetScreenZoom() {
+  screenZoom.scale = 1;
+  screenZoom.x = 0;
+  screenZoom.y = 0;
+  applyScreenTransform();
+}
+
+function updateZoomLabels() {
+  if (els.screenZoomIn) {
+    els.screenZoomIn.title = t('screen.zoomIn');
+    els.screenZoomIn.setAttribute('aria-label', t('screen.zoomIn'));
+  }
+  if (els.screenZoomOut) {
+    els.screenZoomOut.title = t('screen.zoomOut');
+    els.screenZoomOut.setAttribute('aria-label', t('screen.zoomOut'));
+  }
+  if (els.screenZoomReset) {
+    els.screenZoomReset.title = t('screen.zoomReset');
+    els.screenZoomReset.setAttribute('aria-label', t('screen.zoomReset'));
+  }
+  applyScreenTransform();
+}
+
+function handleStageWheel(event) {
+  if (!els.screenStage || els.screenStage.hidden) return;
+  // Wheel over the shared screen always zooms (Ctrl+wheel included).
+  event.preventDefault();
+  const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 100 : 1;
+  const delta = -event.deltaY * unit;
+  zoomAtPoint(event.clientX, event.clientY, screenZoom.scale * Math.exp(delta * 0.0022));
+}
+
+function handleStageDoubleClick(event) {
+  if (!els.screenStage || els.screenStage.hidden) return;
+  if (event.target.closest?.('.screen-zoom-bar, .screen-enlarge-btn, .screen-stop-btn')) return;
+  event.preventDefault();
+  cancelPendingStageClick();
+  if (screenZoom.scale > 1) resetScreenZoom();
+  else zoomAtPoint(event.clientX, event.clientY, 2);
+}
+
+let stageClickTimer = null;
+function cancelPendingStageClick() {
+  if (stageClickTimer) {
+    clearTimeout(stageClickTimer);
+    stageClickTimer = null;
+  }
+}
+
+// Single click cycles between sharers — debounced so double-click zoom
+// never triggers a cycle, and skipped right after a pan-drag.
+function handleStageClick(event) {
+  if (!els.screenStage || els.screenStage.hidden) return;
+  if (screenPanDragged) {
+    screenPanDragged = false;
+    return;
+  }
+  cancelPendingStageClick();
+  stageClickTimer = setTimeout(() => {
+    stageClickTimer = null;
+    cycleScreenShare();
+  }, 240);
+}
+
+// Pointer tracking: one pointer + zoomed = drag-pan, two pointers = pinch.
+const stagePointers = new Map();
+let pinchBase = null;
+let panGesture = null;
+let screenPanDragged = false;
+
+function isStageControl(event) {
+  return Boolean(event.target.closest?.('.screen-zoom-bar, .screen-enlarge-btn, .screen-stop-btn'));
+}
+
+function pinchInfo() {
+  const [a, b] = [...stagePointers.values()];
+  if (!a || !b) return null;
+  return {
+    dist: Math.hypot(a.x - b.x, a.y - b.y) || 1,
+    cx: (a.x + b.x) / 2,
+    cy: (a.y + b.y) / 2
+  };
+}
+
+function bindStagePointers() {
+  if (!els.screenStage) return;
+  els.screenStage.addEventListener('pointerdown', (event) => {
+    if (els.screenStage.hidden) return;
+    if (isStageControl(event)) return;
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    stagePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (stagePointers.size === 1) {
+      screenPanDragged = false;
+      panGesture = screenZoom.scale > 1
+        ? { startX: event.clientX, startY: event.clientY, baseX: screenZoom.x, baseY: screenZoom.y, moved: false }
+        : null;
+      try { els.screenStage.setPointerCapture(event.pointerId); } catch { /* ignore */ }
+    } else if (stagePointers.size === 2) {
+      panGesture = null;
+      pinchBase = pinchInfo();
+      screenPanDragged = false;
+    }
+  });
+  els.screenStage.addEventListener('pointermove', (event) => {
+    if (!stagePointers.has(event.pointerId)) return;
+    stagePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (stagePointers.size >= 2 && pinchBase) {
+      const info = pinchInfo();
+      if (info) zoomAtPoint(info.cx, info.cy, pinchBase.scale * (info.dist / pinchBase.dist));
+      screenPanDragged = true;
+      return;
+    }
+    if (panGesture) {
+      const dx = event.clientX - panGesture.startX;
+      const dy = event.clientY - panGesture.startY;
+      if (!panGesture.moved && Math.hypot(dx, dy) > 6) {
+        panGesture.moved = true;
+        screenPanDragged = true;
+        els.screenStage.classList.add('is-panning');
+      }
+      if (panGesture.moved) {
+        screenZoom.x = panGesture.baseX + dx;
+        screenZoom.y = panGesture.baseY + dy;
+        clampPan();
+        applyScreenTransform();
+      }
+    }
+  });
+  const endPointer = (event) => {
+    stagePointers.delete(event.pointerId);
+    if (stagePointers.size < 2) pinchBase = null;
+    els.screenStage.classList.remove('is-panning');
+    if (stagePointers.size === 1 && screenZoom.scale > 1) {
+      // Finger lifted mid-pinch: continue as a pan with the remaining one.
+      const [only] = [...stagePointers.values()];
+      panGesture = { startX: only.x, startY: only.y, baseX: screenZoom.x, baseY: screenZoom.y, moved: screenPanDragged };
+    } else if (stagePointers.size === 0) {
+      panGesture = null;
+    }
+  };
+  els.screenStage.addEventListener('pointerup', endPointer);
+  els.screenStage.addEventListener('pointercancel', endPointer);
 }
 
 function renderSoundboardGrid() {
@@ -3724,6 +4464,11 @@ function renderSoundboardLabels() {
     els.soundboardBtn.title = t('soundboard.title');
     els.soundboardBtn.setAttribute('aria-label', t('soundboard.title'));
   }
+  if (els.sheetClose) {
+    els.sheetClose.title = t('chat.closePanel');
+    els.sheetClose.setAttribute('aria-label', t('chat.closePanel'));
+  }
+  syncChatFab();
   if (els.deafenLabel) els.deafenLabel.textContent = t(state.deafened ? 'deafen.on' : 'deafen.off');
   if (els.deafenBtn) {
     els.deafenBtn.title = t(state.deafened ? 'deafen.on' : 'deafen.off');

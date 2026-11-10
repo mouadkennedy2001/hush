@@ -1,6 +1,37 @@
 {
-  "version": "14.0.0",
+  "version": "15.0.0",
   "entries": [
+    {
+      "date": "2026-11-10",
+      "ts": 1763800900000,
+      "kind": "update",
+      "kindEn": "Update",
+      "kindAr": "تحديث",
+      "titleEn": "v15: room names + password protection, full screen-share zoom, dice passwords, device icons, PING OP 1.3",
+      "titleAr": "v15: أسماء الغرف + الحماية بكلمة مرور، تكبير كامل لمشاركة الشاشة، كلمات مرور النرد، أيقونات الأجهزة، PING OP 1.3",
+      "pointsEn": [
+        "NEW room names: optional when opening a room, and the host can edit the name later (Room settings in the tools panel) — the rename broadcasts to everyone instantly, and the stage header, tab title and invite card follow it.",
+        "NEW room passwords: optional when opening a room (empty field = no password). The host can change or remove it any time from Room settings; it is hashed with scrypt server-side. Joiners get a password field in the join gate, with clear wrong-password vs password-required errors.",
+        "NEW password stays remembered: after you enter the right password once, your device stores it per room (localStorage), so a page refresh rejoins without asking again. A wrong/stale password is forgotten and the gate re-opens.",
+        "NEW dice button: tap it in the create dialog or host Room settings to generate a strong password (word-word-digits-word) with a roll animation, plus show/hide toggle on every password field.",
+        "FIX all screen-share zoom problems: the shared screen now has a full zoom engine — mouse wheel and pinch zoom around your pointer/fingers, drag to pan when zoomed in, double-click to zoom in/out, a zoom toolbar (zoom out, live percentage, zoom in, reset) on the stage, and keyboard + / - / 0. Zoom resets on Esc, shrink, sharer switch or share end; panning no longer triggers sharer cycling, and single-click cycling waits for the double-click window.",
+        "NEW device icons: every name now carries a device badge — phone, PC or tablet — on video tiles, the people list and chat messages (detected from the device itself, not self-reported).",
+        "UPDATED PING OP 1.3.0: the average is now an EWMA (a spike fades in a few rounds), jitter only reads the last 12 samples, a clock-drift guard re-anchors stats after tab suspension/system sleep (no stale pre-sleep values), probing gets ~2x faster while the link degrades (trend/loss aware, 800ms floor), and the badge + Connection card + stats all come from one engine with a new Trend readout (improving/worsening/stable).",
+        "IMPROVED mobile/small screens: zoom toolbar and captions fit small stages, password/dice fields stack cleanly, and the join gate and settings dialogs are comfortable on phones.",
+        "All new UI strings are bilingual (English/Arabic), including the shortcuts dialog which now lists the screen zoom keys."
+      ],
+      "pointsAr": [
+        "جديد أسماء الغرف: اختيارية عند فتح الغرفة، والمضيف يستطيع تعديل الاسم لاحقًا (إعدادات الغرفة في لوحة الأدوات) — يُبَث التغيير للجميع فورًا، ويتبعه عنوان المسرح وعنوان التبويب وبطاقة الدعوة.",
+        "جديد كلمة مرور الغرفة: اختيارية عند الفتح (الحقل الفارغ = بلا كلمة مرور). يستطيع المضيف تغييرها أو إزالتها متى شاء من إعدادات الغرفة؛ وتُخزَّن مُبعثرة بـ scrypt على الخادم. يحصل الداخلون على حقل كلمة مرور في بوابة الانضمام، مع رسائل خطأ واضحة بين كلمة خاطئة وكلمة مطلوبة.",
+        "جديد تذكّر كلمة المرور: بعد إدخال الكلمة الصحيحة مرة واحدة يخزّنها جهازك لكل غرفة (localStorage)، فتحديث الصفحة يعيدك للدخول دون سؤال مجددًا. الكلمة الخاطئة/القديمة تُنسى وتُفتح البوابة من جديد.",
+        "جديد زر النرد: اضغطه في نافذة الإنشاء أو إعدادات الغرفة للمضيف لتوليد كلمة مرور قوية (كلمة-كلمة-أرقام-كلمة) مع حركة تدوير النرد، مع زر إظهار/إخفاء في كل حقول كلمات المرور.",
+        "إصلاح كل مشاكل تكبير مشاركة الشاشة: للشاشة المشتركة الآن محرك تكبير كامل — عجلة الفأرة والتدوير بالأصابع يكبّران حول مؤشرك/أصابعك، السحب يحرك العرض عند التكبير، النقر المزدوج يكبّر/يصغّر، وشريط تكبير على المسرح (تصغير، نسبة حية، تكبير، إعادة تعيين)، ومفاتيح + / - / 0. يُعاد ضبط التكبير عند Esc أو التصغير أو تبديل المشارك أو انتهاء المشاركة؛ السحب لم يعد يبدّل المشاركين، والنقرة الواحدة تنتظر نافذة النقر المزدوج.",
+        "جديد أيقونات الأجهزة: كل اسم يحمل الآن شارة جهاز — هاتف أو حاسوب أو جهاز لوحي — على بلاطات الفيديو وقائمة الأشخاص ورسائل الدردشة (تُكشف من الجهاز نفسه، لا من إدعاء المستخدم).",
+        "محدّث PING OP 1.3.0: المتوسط أصبح EWMA (القفزة تتلاشى في جولات قليلة)، الاهتزاز يقرأ آخر 12 عينة فقط، حارس انحراض الساعة يعيد ارتكاز الإحصاءات بعد تعليق التبويب/نوم النظام (بلا قيم قديمة من قبل الانقطاع)، الاستطلاع يتسارع حتى ضعفين أثناء تدهور الرابط (يراعي الاتجاه والفقدان بأرضية 800ms)، والشارة وبطاقة الاتصال والإحصاءات كلها من محرك واحد مع قراءة اتجاه جديدة (يتحسن/يسوء/مستقر).",
+        "تحسين الشاشات الصغيرة/الجوال: شريط التكبير والتسميات تناسب المسارح الصغيرة، وحقول كلمة المرور والنرد تترتب بوضوح، وبوابة الانضمام ونوافذ الإعدادات مريحة على الهواتف.",
+        "كل نصوص الواجهة الجديدة ثنائية اللغة (إنجليزي/عربي)، بما فيها نافذة الاختصارات التي تعرض الآن مفاتيح تكبير الشاشة."
+      ]
+    },
     {
       "date": "2026-11-09",
       "ts": 1763800800000,
