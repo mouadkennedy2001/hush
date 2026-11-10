@@ -21,6 +21,8 @@ export const staticAr = {
   'Join with a code': 'انضم برمز',
   'Open a room': 'افتح غرفة',
   'Support Hush on Buy Me a Coffee': 'ادعم تطوير Hush عبر Buy Me a Coffee',
+  'Support Hush': 'ادعم Hush',
+  Support: 'ادعمنا',
 
   // Hero
   'Private rooms for small groups': 'غرف خاصة للمجموعات الصغيرة',
