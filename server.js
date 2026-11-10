@@ -1,4 +1,13 @@
+import dotenv from 'dotenv';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createHushServer } from './src/app.js';
+
+const ROOT = path.dirname(fileURLToPath(import.meta.url));
+for (const file of ['.env.local', '.env']) {
+  const { error } = dotenv.config({ path: path.join(ROOT, file) });
+  if (error && error.code !== 'ENOENT') throw error;
+}
 
 const hush = await createHushServer();
 

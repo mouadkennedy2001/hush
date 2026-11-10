@@ -5,12 +5,14 @@
 import { MediaMesh, streamHasVideo } from './room/media.js';
 import { initI18n, onLanguageChange, t, locale } from './i18n.js';
 import { initTheme } from './theme.js';
+import { getSettings, initSettings } from './settings.js';
 import { startPing } from './ping.js';
 import { SOUNDBOARD_SOUNDS, SOUNDBOARD_CATEGORIES, playSoundboard, playCustomSound, playBlobSound, getSoundboardVolume, setSoundboardVolume, isSoundboardId, soundboardEmojiId } from './soundboard.js';
 import { listPersonalSounds, putPersonalSound, deletePersonalSound, clearPersonalSounds, readIndex, personalBlobUrl, imageFileToDataUrl, validatePersonalAudio, MAX_PERSONAL_SOUNDS } from './soundboard-store.js';
 import { CUSTOM_EMOJIS, CUSTOM_STICKERS, STICKER_CATEGORIES, EMOJI_CATEGORIES, customEmojiImage, customStickerImage, isCustomSticker, isGifUrl, gifImage, splitEmojiShortcodes, preloadCustomEmojis, pushRecentEmoji, getRecentEmojis, searchEmojis, searchStickers, isEmojiOnlyMessage, emojiLabel, stickerLabel } from './emoji.js';
 import { buildGifPanel, buildStickerMenu, setStickerMenuDeps, openStickerCreator } from './gif-panel.js';
 setStickerMenuDeps({ CUSTOM_STICKERS, STICKER_CATEGORIES, customStickerImage, searchStickers, stickerLabel });
+
 const REACTIONS = ['thumbsup', 'heart', 'laugh', 'tada', 'eyes', 'applause', 'fire', 'check'];
 import { playSound, getSoundsEnabled, setSoundsEnabled } from './sounds.js';
 import { getDeviceId, serverIconUrl } from './servers.js';
@@ -102,6 +104,7 @@ function isOwner() {
 
 initI18n();
 initTheme();
+initSettings();
 initLibraries();
 startPing({ socketGetter: () => state.socket });
 onLanguageChange(handleLanguageChange);
@@ -1720,7 +1723,9 @@ async function kickMember(member, name) {
 
 function bindSocketEvents(socket) {
   socket.on('server:chat:message', (message) => {
-    if (!message?.id || message.channelId !== state.channelId) return;
+    if (!message?.id) return;
+    maybeNotifyMention(message);
+    if (message.channelId !== state.channelId) return;
     state.messages.push(message);
     els.messages.append(createMessageNode(message));
     scrollLatest('smooth');
@@ -1872,6 +1877,22 @@ function bindSocketEvents(socket) {
     toast(t('server.deletedNotice'), 'error', 4200);
     setTimeout(() => { window.location.href = '/'; }, 1200);
   });
+}
+
+function maybeNotifyMention(message) {
+  try {
+    if (!getSettings().notifications || !('Notification' in window) || Notification.permission !== 'granted' || !document.hidden) return;
+    const self = String(state.selfName || '').toLowerCase();
+    const text = String(message?.text || '');
+    if (!self || !text.toLowerCase().includes(`@${self}`)) return;
+    new Notification(`Hush — ${state.server?.name || 'server'} · ${message.authorName || ''}`, {
+      body: text.slice(0, 140),
+      tag: `hush-server-mention-${message.id || Date.now()}`,
+      silent: !getSoundsEnabled()
+    });
+  } catch (error) {
+    console.warn('Desktop notification failed:', error);
+  }
 }
 
 function scrollLatest(behavior) {

@@ -165,3 +165,15 @@ test('rooms and servers are separate pages/systems', async () => {
   assert.match(roomCss, /minmax\(56px/, 'soundboard grid does not overlap');
   assert.match(roomCss, /max-height: 42vh/, 'soundboard panel is compact and scrolls');
 });
+
+test('server desktop mention notifications use the shared opt-in setting', async () => {
+  const [serverHtml, serverJs] = await Promise.all([
+    readFile(path.join(PUBLIC, 'server.html'), 'utf8'),
+    readFile(path.join(PUBLIC, 'js', 'server.js'), 'utf8')
+  ]);
+  assert.match(serverHtml, /data-notifications-toggle/, 'server exposes notification permission control');
+  assert.match(serverJs, /initSettings\(\)/, 'server initializes the shared notification preference');
+  assert.match(serverJs, /maybeNotifyMention\(message\);\s*if \(message\.channelId !== state\.channelId\)/,
+    'mentions in other channels notify while the user is away');
+  assert.match(serverJs, /Notification\.permission !== 'granted'/, 'desktop permission is respected');
+});

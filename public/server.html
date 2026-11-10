@@ -11,8 +11,7 @@
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600&family=Inter:wght@400;600;800&display=swap" onload="this.onload=null;this.rel='stylesheet'" />
-  <noscript><link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600&family=Inter:wght@400;600;800&display=swap" rel="stylesheet" /></noscript>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600&family=Inter:wght@400;600;800&display=swap" />
   <link rel="stylesheet" href="/css/tokens.css" />
   <link rel="stylesheet" href="/css/base.css" />
   <link rel="stylesheet" href="/css/room.css" />
@@ -105,6 +104,9 @@
           </div>
           <p class="invite-note">Anyone with this link can join the server.</p>
           <button class="btn btn-quiet btn-sm" id="regen-invite" type="button" hidden>Regenerate invite</button>
+          <button class="btn btn-quiet btn-sm" type="button" data-notifications-toggle aria-pressed="false">
+            <span data-notifications-label>Notifications off</span>
+          </button>
         </div>
         <p class="server-group-kicker" id="text-kicker">Text channels</p>
         <ul class="server-channel-list" id="text-channels"></ul>

@@ -24,3 +24,19 @@ test('v14: gestures resume mesh audio in rooms + servers', async () => {
     assert.match(src, /state\.mesh\?\.resumeAudio\(\)/, `${file} calls mesh.resumeAudio`);
   }
 });
+
+test('room controls initialize without a temporal-dead-zone failure', async () => {
+  const src = await readFile(path.join(PUBLIC, 'js', 'room.js'), 'utf8');
+  const queryDeclaration = src.indexOf("const PHONE_LAYOUT_QUERY = '(max-width: 700px)'");
+  const initCall = src.indexOf('\n  init();', src.indexOf('try {', src.indexOf('onLanguageChange(handleLanguageChange)')));
+  assert.ok(queryDeclaration >= 0, 'phone layout query exists');
+  assert.ok(initCall > queryDeclaration, 'layout query is initialized before event binding');
+});
+
+test('public pages do not rely on CSP-blocked inline font handlers', async () => {
+  for (const file of ['index.html', 'room.html', 'server.html', '404.html']) {
+    const html = await readFile(path.join(PUBLIC, file), 'utf8');
+    assert.doesNotMatch(html, /onload=/i, `${file} has no blocked inline onload`);
+    assert.match(html, /<link rel="stylesheet" href="https:\/\/fonts\.googleapis\.com/, `${file} loads fonts through an allowed stylesheet`);
+  }
+});

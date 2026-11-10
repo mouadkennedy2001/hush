@@ -12,6 +12,7 @@ import { RoomManager, formatCode, isValidCode, normalizeCode } from './rooms.js'
 import { ServerManager, cleanServerName, cleanChannelName, cleanChannelType, cleanEmojiId, cleanDeviceId, cleanInviteCode, isValidServerId, isValidChannelId, normalizeServerCustomSound } from './servers.js';
 import { attachRealtime } from './realtime.js';
 import { SessionStore, sessions as defaultSessionsStore } from './sessions.js';
+import { createSupabaseServerStore } from './supabase-server-store.js';
 import { createPingServer } from '../PING OP/src/server.js';
 import { isGiphyConfigured, searchGifs, trendingGifs, randomGif, getGifById } from './giphy.js';
 import {
@@ -74,6 +75,44 @@ function cleanUploadName(name) {
     .slice(0, 120) || 'File';
 }
 
+async function migrateLocalServerFiles(uploadsDir, serverStore) {
+  if (!serverStore) return;
+  const contentTypes = new Map([
+    ['.png', 'image/png'], ['.jpg', 'image/jpeg'], ['.jpeg', 'image/jpeg'],
+    ['.gif', 'image/gif'], ['.webp', 'image/webp'], ['.avif', 'image/avif'],
+    ['.pdf', 'application/pdf'], ['.txt', 'text/plain'], ['.md', 'text/markdown'],
+    ['.csv', 'text/csv'], ['.zip', 'application/zip'],
+    ['.mp3', 'audio/mpeg'], ['.wav', 'audio/wav'], ['.ogg', 'audio/ogg'],
+    ['.oga', 'audio/ogg'], ['.opus', 'audio/opus'], ['.m4a', 'audio/mp4'],
+    ['.webm', 'video/webm']
+  ]);
+  for (const entry of await fs.readdir(uploadsDir, { withFileTypes: true })) {
+    const match = /^server-(srv_[a-z0-9]{6,20})$/i.exec(entry.name);
+    if (!match || !entry.isDirectory()) continue;
+    const serverId = match[1];
+    const root = path.join(uploadsDir, entry.name);
+    const walk = async (directory, relativeDirectory = '') => {
+      for (const child of await fs.readdir(directory, { withFileTypes: true })) {
+        const relativePath = relativeDirectory ? `${relativeDirectory}/${child.name}` : child.name;
+        const localPath = path.join(directory, child.name);
+        if (child.isDirectory()) {
+          await walk(localPath, relativePath);
+        } else if (child.isFile()) {
+          const extension = path.extname(child.name).toLowerCase();
+          await serverStore.uploadFile(
+            serverId,
+            relativePath,
+            localPath,
+            contentTypes.get(extension) || 'application/octet-stream'
+          );
+          await fs.unlink(localPath);
+        }
+      }
+    };
+    await walk(root);
+  }
+}
+
 export async function createHushServer({
   port = Number(process.env.PORT) || 3000,
   host = process.env.HOST || '0.0.0.0',
@@ -82,17 +121,22 @@ export async function createHushServer({
   uploadsDir = process.env.UPLOADS_DIR || path.join(ROOT, 'uploads'),
   idleTtlMs,
   historyTtlMs,
-  log = console
+  log = console,
+  serverStore: injectedServerStore
 } = {}) {
   await fs.mkdir(dataDir, { recursive: true });
   await fs.mkdir(uploadsDir, { recursive: true });
 
+  const serverStore = injectedServerStore === undefined
+    ? await createSupabaseServerStore({ log })
+    : injectedServerStore;
   const rooms = new RoomManager({ dataDir, uploadsDir, idleTtlMs, historyTtlMs, log });
   await rooms.init();
   // Servers are a SEPARATE system from rooms: own manager, own storage,
   // own chat files. No room codes involved.
-  const servers = new ServerManager({ dataDir, uploadsDir, log });
+  const servers = new ServerManager({ dataDir, uploadsDir, log, serverStore });
   await servers.init();
+  await migrateLocalServerFiles(uploadsDir, serverStore);
   // Full sessions (A1): opaque tokens bound to deviceId+serverId. Tests may
   // inject their own store; production uses a process-global store.
   const sessions = defaultSessionsStore;
@@ -648,6 +692,12 @@ export async function createHushServer({
     } catch { return 0; }
   }
 
+  async function persistServerUpload(serverId, relativePath, file) {
+    if (!serverStore) return;
+    await serverStore.uploadFile(serverId, relativePath, file.path, file.mimetype);
+    await fs.unlink(file.path);
+  }
+
   app.post('/api/servers/:id/upload', serverUploadLimit, async (req, res, next) => {
     const serverId = String(req.params.id || '');
     if (!isValidServerId(serverId)) { req.resume(); return res.status(404).json({ error: 'server-not-found' }); }
@@ -682,8 +732,22 @@ export async function createHushServer({
       if (!channel) { await cleanup(); return res.status(404).json({ error: 'channel-not-found' }); }
       if (!req.file) return res.status(400).json({ error: 'missing-file' });
       // Quota: refuse if this server already exceeds its storage budget.
-      const used = await dirSizeBytes(path.join(uploadsDir, `server-${serverId}`));
-      if (used >= UPLOAD_QUOTA_BYTES) { await cleanup(); return res.status(413).json({ error: 'upload-quota-exceeded' }); }
+      let used;
+      try {
+        used = serverStore
+          ? await serverStore.getServerFileBytes(serverId)
+          : await dirSizeBytes(path.join(uploadsDir, `server-${serverId}`));
+      } catch (error) {
+        await cleanup();
+        return next(error);
+      }
+      if (used + req.file.size > UPLOAD_QUOTA_BYTES) { await cleanup(); return res.status(413).json({ error: 'upload-quota-exceeded' }); }
+      try {
+        await persistServerUpload(serverId, `${channelId}/${req.file.filename}`, req.file);
+      } catch (error) {
+        await cleanup();
+        return next(error);
+      }
       res.status(201).json({
         url: `/uploads/server-${req.params.id}/${channelId}/${req.file.filename}`,
         name: cleanUploadName(req.file.originalname),
@@ -909,7 +973,18 @@ export async function createHushServer({
         }
       } catch { /* ignore */ }
       const iconUrl = `/uploads/server-${serverId}/${req.file.filename}`;
-      const updated = await servers.updateSettings(serverId, actor, { iconUrl });
+      try {
+        await persistServerUpload(serverId, req.file.filename, req.file);
+      } catch (error) {
+        try { await fs.unlink(req.file.path); } catch { /* ignore */ }
+        return next(error);
+      }
+      let updated;
+      try {
+        updated = await servers.updateSettings(serverId, actor, { iconUrl });
+      } catch (error) {
+        return next(error);
+      }
       if (!updated) {
         try { await fs.unlink(req.file.path); } catch { /* ignore */ }
         return res.status(403).json({ error: 'not-admin' });
@@ -944,18 +1019,31 @@ export async function createHushServer({
       if (imageFile && imageFile.size > MAX_BOARD_IMAGE_BYTES) { await cleanup(); return res.status(413).json({ error: 'limit_file_size' }); }
       if (!req.file) { await cleanup(); return res.status(400).json({ error: 'missing-file' }); }
       if ((server.customSounds || []).length >= MAX_CUSTOM_SOUNDS_PER_SERVER) { await cleanup(); return res.status(409).json({ error: 'board-full' }); }
-      const sound = await servers.addCustomSound(serverId, {
-        id: randomUUID(),
-        name: cleanUploadName(req.body?.name || req.file.originalname).slice(0, 40),
-        emojiId: cleanEmojiId(req.body?.emojiId),
-        url: `/uploads/server-${serverId}/board/${req.file.filename}`,
-        imageUrl: imageFile ? `/uploads/server-${serverId}/board/${imageFile.filename}` : '',
-        size: req.file.size,
-        mime: req.file.mimetype,
-        addedById: actor,
-        addedBy: String(req.body?.addedBy || '').slice(0, 32),
-        createdAt: Date.now()
-      });
+      try {
+        await persistServerUpload(serverId, `board/${req.file.filename}`, req.file);
+        if (imageFile) await persistServerUpload(serverId, `board/${imageFile.filename}`, imageFile);
+      } catch (error) {
+        await cleanup();
+        return next(error);
+      }
+      let sound;
+      try {
+        sound = await servers.addCustomSound(serverId, {
+          id: randomUUID(),
+          name: cleanUploadName(req.body?.name || req.file.originalname).slice(0, 40),
+          emojiId: cleanEmojiId(req.body?.emojiId),
+          url: `/uploads/server-${serverId}/board/${req.file.filename}`,
+          imageUrl: imageFile ? `/uploads/server-${serverId}/board/${imageFile.filename}` : '',
+          size: req.file.size,
+          mime: req.file.mimetype,
+          addedById: actor,
+          addedBy: String(req.body?.addedBy || '').slice(0, 32),
+          createdAt: Date.now()
+        });
+      } catch (error) {
+        await cleanup();
+        return next(error);
+      }
       if (!sound) { await cleanup(); return res.status(400).json({ error: 'invalid-sound' }); }
       io.to(`server:${serverId}`).emit('server:soundboard:added', { sound });
       res.status(201).json({ sound });
@@ -969,6 +1057,34 @@ export async function createHushServer({
   // Servers are a separate page/system from rooms.
   app.get('/s/:id', (req, res) => {
     res.sendFile(path.join(publicDir, 'server.html'));
+  });
+
+  app.use('/uploads', async (req, res, next) => {
+    if (!serverStore || (req.method !== 'GET' && req.method !== 'HEAD')) return next();
+    const match = /^\/(server-srv_[a-z0-9]{6,20})\/(.+)$/i.exec(req.path);
+    if (!match) return next();
+    let relativePath;
+    try {
+      relativePath = match[2].split('/').map((segment) => decodeURIComponent(segment)).join('/');
+    } catch {
+      return res.status(400).end();
+    }
+    try {
+      const file = await serverStore.downloadFile(match[1].slice('server-'.length), relativePath);
+      if (!file) return res.status(404).end();
+      res.setHeader('Content-Type', file.contentType);
+      res.setHeader('Content-Length', file.buffer.length);
+      res.setHeader('Cache-Control', 'private, max-age=3600');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader(
+        'Content-Security-Policy',
+        "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'"
+      );
+      if (req.method === 'HEAD') return res.end();
+      return res.send(file.buffer);
+    } catch (error) {
+      return next(error);
+    }
   });
 
   app.use(
@@ -1034,6 +1150,7 @@ export async function createHushServer({
 
   let started = false;
   let cleanupStarted = false;
+  let serverCleanupTimer = null;
 
   return {
     app,
@@ -1061,12 +1178,24 @@ export async function createHushServer({
         rooms.startCleanup();
         cleanupStarted = true;
       }
+      if (serverStore && !serverCleanupTimer) {
+        const runFileCleanup = () => {
+          serverStore.cleanupOrphans().catch((error) => {
+            log.error?.('Supabase orphan-file cleanup failed:', error);
+          });
+        };
+        runFileCleanup();
+        serverCleanupTimer = setInterval(runFileCleanup, 24 * 60 * 60 * 1000);
+        serverCleanupTimer.unref?.();
+      }
       started = true;
       return server.address();
     },
     async stop() {
       rooms.stopCleanup();
       cleanupStarted = false;
+      if (serverCleanupTimer) clearInterval(serverCleanupTimer);
+      serverCleanupTimer = null;
       if (started) {
         // io.close() already closes the HTTP server; never wait forever.
         const withTimeout = (promise, ms) =>

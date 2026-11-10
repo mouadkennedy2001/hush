@@ -217,12 +217,13 @@ export class ServerManager {
   #messageLoads = new Map(); // single-flight load promises (C3) — one load per key at a time
   #channelTombstones = new Set(); // deleted keys: pending writes must not resurrect dirs (H5)
 
-  constructor({ dataDir, uploadsDir = null, now = () => Date.now(), log = console } = {}) {
+  constructor({ dataDir, uploadsDir = null, now = () => Date.now(), log = console, serverStore = null } = {}) {
     if (!dataDir) throw new Error('ServerManager requires a dataDir');
     this.dataDir = dataDir;
     this.uploadsDir = uploadsDir;
     this.now = now;
     this.log = log;
+    this.serverStore = serverStore;
   }
 
   #file() { return path.join(this.dataDir, 'servers.json'); }
@@ -274,17 +275,39 @@ export class ServerManager {
     } catch (error) {
       if (error.code !== 'ENOENT') throw error;
     }
+    if (this.serverStore) {
+      const remoteServers = await this.serverStore.loadServers();
+      if (remoteServers === null) {
+        const localServers = [...this.#servers.values()];
+        if (localServers.length) await this.serverStore.saveServers(localServers);
+      } else {
+        if (!Array.isArray(remoteServers)) throw new Error('Supabase server state must be an array');
+        this.#servers.clear();
+        const seenInvites = new Set();
+        for (const item of remoteServers) {
+          const server = normalizeServer(item);
+          if (!server) continue;
+          if (seenInvites.has(server.inviteCode)) server.inviteCode = generateInviteCode();
+          while (seenInvites.has(server.inviteCode)) server.inviteCode = generateInviteCode();
+          seenInvites.add(server.inviteCode);
+          this.#servers.set(server.id, server);
+        }
+        await this.#write();
+      }
+    }
   }
 
   async #queueSave() {
-    this.#saveChain = this.#saveChain.then(() => this.#write()).catch((error) => {
+    const write = this.#saveChain.then(() => this.#write());
+    this.#saveChain = write.catch((error) => {
       this.log.warn?.('Could not persist servers:', error.message);
     });
-    return this.#saveChain;
+    return write;
   }
 
   async #write() {
     const payload = JSON.stringify({ servers: [...this.#servers.values()] }, null, 2);
+    if (this.serverStore) await this.serverStore.saveServers([...this.#servers.values()]);
     const file = this.#file();
     const temp = `${file}.${randomUUID()}.tmp`;
     await fs.writeFile(temp, payload, 'utf8');
@@ -306,13 +329,17 @@ export class ServerManager {
     const prev = this.#messageChains.get(key) ?? Promise.resolve();
     const run = prev.then(() => job()).then(
       () => { if (this.#messageChains.get(key) === run) this.#messageChains.delete(key); },
-      () => { if (this.#messageChains.get(key) === run) this.#messageChains.delete(key); }
+      (error) => {
+        if (this.#messageChains.get(key) === run) this.#messageChains.delete(key);
+        throw error;
+      }
     );
     this.#messageChains.set(key, run);
     return run;
   }
 
   async #writeMessagesFile(serverId, channelId, messages) {
+    if (this.serverStore) await this.serverStore.saveMessages(serverId, channelId, messages);
     const file = this.#chatFile(serverId, channelId);
     await fs.mkdir(path.dirname(file), { recursive: true });
     const temp = `${file}.${randomUUID()}.tmp`;
@@ -713,10 +740,12 @@ export class ServerManager {
     // Permanent means permanent until the owner deletes it — then everything goes.
     try { await fs.rm(path.join(this.dataDir, 'server-chats', id), { recursive: true, force: true }); } catch { /* ignore */ }
     try { await fs.rm(path.join(this.uploadsDir ?? path.join(this.dataDir, '..', 'uploads'), `server-${id}`), { recursive: true, force: true }); } catch { /* ignore */ }
+    if (this.serverStore) await this.serverStore.deleteServerMessages(id);
     return server;
   }
 
   async #deleteChannelData(serverId, channelId) {
+    if (this.serverStore) await this.serverStore.deleteMessages(serverId, channelId);
     try { await fs.rm(this.#chatDir(serverId, channelId), { recursive: true, force: true }); } catch { /* ignore */ }
     try { await fs.rm(path.join(this.uploadsDir ?? path.join(this.dataDir, '..', 'uploads'), `server-${serverId}`, channelId), { recursive: true, force: true }); } catch { /* ignore */ }
     this.#messages.delete(`${serverId}/${channelId}`);
@@ -739,23 +768,29 @@ export class ServerManager {
     if (this.#messageLoads.has(key)) return this.#messageLoads.get(key);
     const load = (async () => {
       let messages = [];
-      let raw = null;
-      try {
-        raw = await fs.readFile(this.#chatFile(serverId, channelId), 'utf8');
-      } catch (e) {
-        if (e && e.code === 'ENOENT') { this.#messages.set(key, messages); return messages; }
-        throw e;
-      }
-      let data;
-      try {
-        data = JSON.parse(raw);
-      } catch {
-        const bad = `${this.#chatFile(serverId, channelId)}.corrupt-${this.now()}.json`;
-        try { await fs.mkdir(path.dirname(bad), { recursive: true }); await fs.writeFile(bad, raw, 'utf8'); } catch { /* ignore */ }
-        this.log?.warn?.(`messages.json corrupt — quarantined to ${bad}`);
-        messages = [];
-        this.#messages.set(key, messages);
-        return messages;
+      let data = this.serverStore ? await this.serverStore.loadMessages(serverId, channelId) : null;
+      const remoteMissing = Boolean(this.serverStore && data === null);
+      if (data === null) {
+        let raw;
+        try {
+          raw = await fs.readFile(this.#chatFile(serverId, channelId), 'utf8');
+        } catch (error) {
+          if (error?.code === 'ENOENT') {
+            this.#messages.set(key, messages);
+            return messages;
+          }
+          throw error;
+        }
+        try {
+          data = JSON.parse(raw);
+        } catch {
+          const bad = `${this.#chatFile(serverId, channelId)}.corrupt-${this.now()}.json`;
+          try { await fs.mkdir(path.dirname(bad), { recursive: true }); await fs.writeFile(bad, raw, 'utf8'); } catch { /* ignore */ }
+          this.log?.warn?.(`messages.json corrupt — quarantined to ${bad}`);
+          messages = [];
+          this.#messages.set(key, messages);
+          return messages;
+        }
       }
       if (Array.isArray(data)) {
         messages = data
@@ -774,6 +809,11 @@ export class ServerManager {
             channelId: typeof m.channelId === 'string' ? m.channelId : channelId
           }))
           .slice(-MAX_SERVER_MESSAGES);
+      } else {
+        throw new Error(`Supabase channel history must be an array (${serverId}/${channelId})`);
+      }
+      if (remoteMissing && messages.length) {
+        await this.serverStore.saveMessages(serverId, channelId, messages);
       }
       this.#messages.set(key, messages);
       return messages;

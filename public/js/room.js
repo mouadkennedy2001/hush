@@ -26,6 +26,7 @@ const ALLOWED_EXTENSIONS = new Set([
 ]);
 const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 const CODE_RE = /^[A-Z0-9]{4,12}$/;
+const PHONE_LAYOUT_QUERY = '(max-width: 700px)';
 const NAME_KEY = 'hush:name';
 const SOUND_KEY = 'hush:sounds';
 const DEVICE_KEY = 'hush:device';
@@ -3603,8 +3604,6 @@ function switchTab(tab) {
 /* ---------------- Phone bottom sheet ----------------
    <= 700px the side panel becomes a draggable-style bottom sheet over
    the stage. Desktop keeps the docked sidebar and never opens it. */
-
-const PHONE_LAYOUT_QUERY = '(max-width: 700px)';
 
 function isPhoneLayout() {
   return window.matchMedia?.(PHONE_LAYOUT_QUERY)?.matches ?? false;

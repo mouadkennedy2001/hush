@@ -24,7 +24,7 @@ Built by **Zerouki Ahmed Mouad** (زروقي احمد معاذ).
 - **Sounds (10)** — `public/sounds/` ships `message, mention, join, leave, error, kick, ban, success, click, blip` (WAV). Played via `public/js/sounds.js` with WebAudio fallback, volume slider + test button, saved in `hush:sounds` / `hush:sound-volume`. Joins/leaves/kicks/bans/mentions all have sounds.
 - **Two SEPARATE systems — Rooms and Servers**
   - **Rooms (standalone)** — `/r/<code>`: quick rooms with a short code (open a room, join with a code). Nothing server-related appears here.
-  - **Servers (permanent)** — `/s/<id>`: a completely separate system with its own page (`server.html`), its own chat storage (`data/server-chats/<id>/`), its own uploads (`uploads/server-<id>/`) and its own voice relay. Channels carry **no room codes**.
+  - **Servers (permanent)** — `/s/<id>`: a completely separate system with its own page (`server.html`), chat storage, uploads (local by default; private encrypted Supabase Storage when configured) and its own voice relay. Channels carry **no room codes**.
     - **Invite link to join** — every server has a permanent 6-char invite code. Copy the invite link (`/s/<id>?invite=CODE`) or paste the code into "Join with an invite code" on the landing page. Non-members without the code are rejected (403); the owner can regenerate it.
     - **Channels** — text + voice groups, add a channel (any member), delete a channel / delete the server (owner), leave the server, members list with owner badge, member count.
     - **Server chat** — saved per channel and permanent (survives restarts), edit/delete your own messages, emoji shortcodes, attach files, **paste images (Ctrl+V)**, in-page image lightbox (no new tab, call keeps running), soundboard relayed to the whole server.
@@ -92,6 +92,10 @@ npm.cmd test       # unit + Socket.IO integration tests
 
 Environment variables (all optional):
 
+The server loads `.env.local` first, then `.env`; already-exported environment
+variables take precedence. Both local files are gitignored and are never sent
+to the browser.
+
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `PORT` | `3000` | HTTP port |
@@ -101,6 +105,23 @@ Environment variables (all optional):
 | `HUSH_TRUST_PROXY` | `0` | Set to `1` ONLY behind a known reverse proxy (else `X-Forwarded-For` is spoofable) |
 | `UPLOAD_QUOTA_BYTES` | `536870912` (512 MB) | Per-server upload storage budget |
 | `GIPHY_API_KEY` | *(none — GIF search disabled, direct .gif links still work)* | Giphy API key, **server-only**. Set it as an env var or in the gitignored `.env` file (`cp .env.example .env`). It is never served to browsers. |
+| `SUPABASE_URL` | *(none — local server storage)* | Supabase project URL. Set together with `SUPABASE_SECRET_KEY` to enable cloud server storage. |
+| `SUPABASE_SECRET_KEY` | *(none — local server storage)* | Server-only Supabase secret key. Never put it in `public/` or browser code. |
+| `SUPABASE_PUBLISHABLE_KEY` | *(unused by the server)* | Optional publishable key; Hush server operations use the secret key only. |
+| `HUSH_FILE_ENCRYPTION_KEY` | *(required when Supabase is enabled)* | Base64-encoded 32-byte AES-256-GCM key for server files. Back it up securely; without it encrypted files cannot be recovered. |
+
+### Supabase server storage
+
+1. Apply [`supabase/migrations/20260321000000_hush_server_storage.sql`](./supabase/migrations/20260321000000_hush_server_storage.sql) in the Supabase SQL Editor (or with the Supabase CLI).
+2. Set `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, and `HUSH_FILE_ENCRYPTION_KEY` in the gitignored `.env.local` or `.env`. Generate the file key with:
+
+   ```powershell
+   node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"
+   ```
+
+3. Start Hush. On first startup, local server metadata is copied to Supabase if the cloud has no server state, local server files are encrypted and migrated, and channel histories are migrated as they are opened. Once cloud state exists it is authoritative.
+
+The Supabase secret key is used only by the Node server. Server metadata and chat history are stored in the database; server uploads are AES-256-GCM encrypted before entering a private Storage bucket. Unreferenced files are marked by a daily scan and deleted after 30 days. Keep the encryption key in a secure backup—rotating or losing it without re-encrypting existing files makes those files unreadable. Room data remains local. This setup expects one Hush server process; it does not provide cross-instance write coordination or end-to-end encryption for chat.
 
 Example:
 
@@ -154,7 +175,7 @@ STUN servers are configured, but there is **no TURN server**. Peers behind stric
 ## Privacy notes
 
 - Media is encrypted in transit by WebRTC (DTLS-SRTP) and travels peer-to-peer.
-- **Chat is not end-to-end encrypted.** Messages and files are stored on the server that runs Hush.
+- **Chat is not end-to-end encrypted.** Messages are stored on the Hush server or in Supabase when configured. Server uploads are AES-GCM encrypted in Supabase Storage; room uploads remain on the Hush server.
 - There is no authentication. Anyone with the room link can join, and history is readable by anyone who joins that room.
 - Room history is capped at 200 messages per room and is purged after 7 days of file inactivity. Empty rooms are dropped after 30 minutes of inactivity.
 - Uploaded files are served from `/uploads` with a restrictive content security policy.
