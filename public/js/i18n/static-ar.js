@@ -20,6 +20,7 @@ export const staticAr = {
   Privacy: 'الخصوصية',
   'Join with a code': 'انضم برمز',
   'Open a room': 'افتح غرفة',
+  'Support Hush on Buy Me a Coffee': 'ادعم تطوير Hush عبر Buy Me a Coffee',
 
   // Hero
   'Private rooms for small groups': 'غرف خاصة للمجموعات الصغيرة',
