@@ -3,6 +3,7 @@ import { initTheme } from './theme.js';
 import { startPing } from './ping.js';
 import { initChangelog } from './changelog.js';
 import { initLibraries } from './libraries-log.js';
+import { initFeedback } from './feedback.js';
 import { CUSTOM_EMOJIS, customEmojiImage } from './emoji.js';
 import { fetchServers, createServer, serverIconUrl, serverUrl, inviteUrl, lookupInvite, uploadServerIcon, getDeviceId } from './servers.js';
 import { animateDiceRoll, isValidRoomPassword } from './dice-password.js';
@@ -23,6 +24,7 @@ initTheme();
 startPing();
 initChangelog();
 initLibraries();
+initFeedback();
 applyPageMeta();
 onLanguageChange(applyPageMeta);
 

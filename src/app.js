@@ -15,6 +15,7 @@ import { attachRealtime } from './realtime.js';
 import { SessionStore, sessions as defaultSessionsStore } from './sessions.js';
 import { createSupabaseServerStore } from './supabase-server-store.js';
 import { createPingServer } from '../PING OP/src/server.js';
+import { FeedbackStore, DEFAULT_CYCLE_DAYS, DEFAULT_GRACE_DAYS, DEFAULT_MAX_CHECKED, cleanVoterId } from './feedback.js';
 import { isGiphyConfigured, searchGifs, trendingGifs, randomGif, getGifById } from './giphy.js';
 import {
   MAX_UPLOAD_BYTES,
@@ -156,7 +157,8 @@ export async function createHushServer({
   idleTtlMs,
   historyTtlMs,
   log = console,
-  serverStore: injectedServerStore
+  serverStore: injectedServerStore,
+  feedbackStore: injectedFeedbackStore
 } = {}) {
   await fs.mkdir(dataDir, { recursive: true });
   await fs.mkdir(uploadsDir, { recursive: true });
@@ -171,6 +173,20 @@ export async function createHushServer({
   const servers = new ServerManager({ dataDir, uploadsDir, log, serverStore });
   await servers.init();
   await migrateLocalServerFiles(uploadsDir, serverStore);
+  // Public feedback board: bug reports + feature suggestions, stored on the
+  // server (data/feedback.json) so votes are shared by every visitor.
+  // Lifecycle defaults: 30-day voting window, 2-day grace, one ✓ winner.
+  const feedback = injectedFeedbackStore === undefined
+    ? new FeedbackStore({
+        dataDir,
+        log,
+        cycleDays: process.env.HUSH_FEEDBACK_CYCLE_DAYS || DEFAULT_CYCLE_DAYS,
+        graceDays: process.env.HUSH_FEEDBACK_GRACE_DAYS || DEFAULT_GRACE_DAYS,
+        maxChecked: process.env.HUSH_FEEDBACK_MAX_CHECKED || DEFAULT_MAX_CHECKED,
+        adminToken: process.env.HUSH_FEEDBACK_ADMIN_TOKEN || ''
+      })
+    : injectedFeedbackStore;
+  if (feedback && typeof feedback.init === 'function') await feedback.init();
   // Full sessions (A1): opaque tokens bound to deviceId+serverId. Tests may
   // inject their own store; production uses a process-global store.
   const sessions = defaultSessionsStore;
@@ -353,6 +369,59 @@ export async function createHushServer({
     } catch {
       res.json({ version: 'libraries-1.0.0', entries: [] });
     }
+  });
+
+  /* -------- Feedback board: bug reports + feature suggestions -------- */
+  // Server-backed so every visitor sees the same votes and the same ✓.
+  // User text is sanitized on the way in and rendered with textContent in
+  // the browser; it is never interpreted as HTML here.
+  const feedbackBody = (req) =>
+    (req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : {});
+  const feedbackCreateLimit = rateLimiter({ windowMs: 10 * 60_000, max: 12 });
+  const feedbackVoteLimit = rateLimiter({ windowMs: 60_000, max: 90 });
+  const feedbackAdminLimit = rateLimiter({ windowMs: 60_000, max: 30 });
+
+  app.get('/api/feedback', (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({
+      ok: true,
+      ...feedback.list({ voterId: cleanVoterId(req.query?.voterId) })
+    });
+  });
+
+  app.post('/api/feedback/suggestions', feedbackCreateLimit, async (req, res, next) => {
+    try {
+      const result = await feedback.createSuggestion(feedbackBody(req));
+      if (result.error) return res.status(result.status || 400).json({ error: result.error });
+      res.status(201).json({ ok: true, ...result });
+    } catch (error) { next(error); }
+  });
+
+  app.post('/api/feedback/reports', feedbackCreateLimit, async (req, res, next) => {
+    try {
+      const result = await feedback.createReport(feedbackBody(req));
+      if (result.error) return res.status(result.status || 400).json({ error: result.error });
+      res.status(201).json({ ok: true, ...result });
+    } catch (error) { next(error); }
+  });
+
+  app.post('/api/feedback/vote', feedbackVoteLimit, async (req, res, next) => {
+    try {
+      const result = await feedback.vote(feedbackBody(req));
+      if (result.error) return res.status(result.status || 400).json({ error: result.error });
+      res.json({ ok: true, ...result });
+    } catch (error) { next(error); }
+  });
+
+  // Admin actions are disabled unless HUSH_FEEDBACK_ADMIN_TOKEN is set.
+  app.post('/api/feedback/admin', feedbackAdminLimit, async (req, res, next) => {
+    try {
+      const body = feedbackBody(req);
+      const token = req.get('X-Feedback-Token') || body.token || '';
+      const result = await feedback.admin({ ...body, token });
+      if (result.error) return res.status(result.status || 400).json({ error: result.error });
+      res.json({ ok: true, ...result });
+    } catch (error) { next(error); }
   });
 
   app.get('/api/sounds', (req, res) => {
@@ -1274,6 +1343,7 @@ export async function createHushServer({
   let started = false;
   let cleanupStarted = false;
   let serverCleanupTimer = null;
+  let feedbackTimer = null;
 
   return {
     app,
@@ -1281,6 +1351,7 @@ export async function createHushServer({
     io,
     rooms,
     servers,
+    feedback,
     config: { publicDir, dataDir, uploadsDir },
     async start(listenPort = port, listenHost = host) {
       if (started) return server.address();
@@ -1311,6 +1382,18 @@ export async function createHushServer({
         serverCleanupTimer = setInterval(runFileCleanup, 24 * 60 * 60 * 1000);
         serverCleanupTimer.unref?.();
       }
+      if (feedback && typeof feedback.maintain === 'function' && !feedbackTimer) {
+        const runFeedbackMaintenance = () => {
+          Promise.resolve(feedback.maintain()).catch((error) => {
+            log.error?.('Feedback maintenance failed:', error);
+          });
+        };
+        runFeedbackMaintenance();
+        // Hourly is enough: the lifecycle is measured in days, and every
+        // read also refreshes the ✓ ranking.
+        feedbackTimer = setInterval(runFeedbackMaintenance, 60 * 60 * 1000);
+        feedbackTimer.unref?.();
+      }
       started = true;
       return server.address();
     },
@@ -1319,6 +1402,8 @@ export async function createHushServer({
       cleanupStarted = false;
       if (serverCleanupTimer) clearInterval(serverCleanupTimer);
       serverCleanupTimer = null;
+      if (feedbackTimer) clearInterval(feedbackTimer);
+      feedbackTimer = null;
       if (started) {
         // io.close() already closes the HTTP server; never wait forever.
         const withTimeout = (promise, ms) =>

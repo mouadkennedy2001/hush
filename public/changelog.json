@@ -3,6 +3,29 @@
   "entries": [
     {
       "date": "2026-11-11",
+      "ts": 1763890900000,
+      "kind": "feature",
+      "kindEn": "Feature",
+      "kindAr": "ميزة",
+      "titleEn": "v15: feedback board — bug reports + feature voting",
+      "titleAr": "v15: لوحة الملاحظات — بلاغات الأخطاء + تصويت الميزات",
+      "pointsEn": [
+        "NEW two separate buttons: Report a bug (describe an error and paste the console output or the code that broke) and Suggest a feature (share an idea and vote). They sit on the landing page, in every room bar and on every server bar.",
+        "NEW server-backed board: posts and votes are stored on the server (data/feedback.json) so every visitor sees the same board. Each device gets one vote per suggestion (click again to remove it), and the most-voted open suggestion carries a check mark.",
+        "NEW 30-day lifecycle: suggestions collect votes for 30 days, then are reviewed. The checked/most-voted ones are approved and stay; the rest get a 2-day grace period and are deleted. Bug reports stay until the maintainer marks them fixed.",
+        "NEW admin controls: a maintainer token (HUSH_FEEDBACK_ADMIN_TOKEN) can mark reports fixed/reopened, approve/reopen/delete suggestions and run maintenance on demand. Admin routes stay disabled until the token is set.",
+        "HARDENED + bilingual: text is stripped of control/bidi characters and capped, rate limits protect the endpoints, and the whole dialog renders user text with textContent (never HTML) in English and Arabic."
+      ],
+      "pointsAr": [
+        "جديد زرّان منفصلان: الإبلاغ عن خطأ (صف الخطأ والصق مخرجات وحدة التحكم أو الكود الذي انكسر) واقترح ميزة (شارك فكرة وصوّت). يظهران في الصفحة الرئيسية وفي شريط كل غرفة وكل خادم.",
+        "جديد لوحة على الخادم: المنشورات والأصوات تُخزَّن على الخادم (data/feedback.json) فيرى كل الزوار نفس اللوحة. لكل جهاز صوت واحد لكل اقتراح (انقر مجددًا لإزالته)، والاقتراح المفتوح الأكثر تصويتًا يحمل علامة صح.",
+        "جديد دورة حياة 30 يومًا: تجمع الاقتراحات الأصوات 30 يومًا ثم تُراجع. التي عليها علامة صح أو الأكثر تصويتًا تُعتمد وتبقى، والبقية تحصل على مهلة يومين ثم تُحذف. بلاغات الأخطاء تبقى حتى يعلّمها المشرف كمُصلحة.",
+        "جديد أدوات الإدارة: رمز مشرف (HUSH_FEEDBACK_ADMIN_TOKEN) يستطيع تعليم البلاغات كمُصلحة/معاد فتحها، واعتماد/إعادة فتح/حذف الاقتراحات، وتشغيل الصيانة عند الطلب. مسارات الإدارة تبقى معطّلة حتى يُضبط الرمز.",
+        "تقوية + ثنائية اللغة: يُطهَّر النص من أحرف التحكم والاتجاه ويُحدّ طوله، وحدود المعدل تحمي المسارات، والنافذة كلها تعرض نص المستخدم بـ textContent (لا HTML أبدًا) بالإنجليزية والعربية."
+      ]
+    },
+    {
+      "date": "2026-11-11",
       "ts": 1763887300000,
       "kind": "feature",
       "kindEn": "Feature",

@@ -17,6 +17,7 @@ const REACTIONS = ['thumbsup', 'heart', 'laugh', 'tada', 'eyes', 'applause', 'fi
 import { playSound, getSoundsEnabled, setSoundsEnabled } from './sounds.js';
 import { getDeviceId, serverIconUrl } from './servers.js';
 import { initLibraries } from './libraries-log.js';
+import { initFeedback } from './feedback.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -106,6 +107,7 @@ initI18n();
 initTheme();
 initSettings();
 initLibraries();
+initFeedback();
 startPing({ socketGetter: () => state.socket });
 onLanguageChange(handleLanguageChange);
 init();

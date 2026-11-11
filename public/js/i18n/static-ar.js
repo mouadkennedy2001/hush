@@ -433,5 +433,7 @@ export const staticAr = {
   'Channels': 'القنوات',
   'Close image': 'إغلاق الصورة',
   'View image': 'عرض الصورة',
-  'Paste an image (Ctrl+V) to share it in chat': 'الصق صورة (Ctrl+V) لمشاركتها في الدردشة'
+  'Paste an image (Ctrl+V) to share it in chat': 'الصق صورة (Ctrl+V) لمشاركتها في الدردشة',
+  'Report a bug': 'الإبلاغ عن خطأ',
+  'Suggest a feature': 'اقترح ميزة'
 };

@@ -12,6 +12,7 @@ setStickerMenuDeps({ CUSTOM_STICKERS, STICKER_CATEGORIES, customStickerImage, se
 import { playSound, getSoundsEnabled, setSoundsEnabled, getSoundVolume, setSoundVolume } from './sounds.js';
 import { initChangelog } from './changelog.js';
 import { initLibraries } from './libraries-log.js';
+import { initFeedback } from './feedback.js';
 import { animateDiceRoll } from './dice-password.js';
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -406,6 +407,7 @@ initSettings();
 registerVolumeSink((volume) => state.mesh?.setMasterVolume(volume));
 initChangelog();
 initLibraries();
+initFeedback();
 startPing({ socketGetter: () => state.socket });
 onLanguageChange(handleLanguageChange);
 try {
