@@ -332,6 +332,13 @@ export const ui = {
   'tools.micGateThresholdValue': ['{value} dB', '{value} د.ب'],
   'tools.micDeDistort': ['De-distortion (soft clip)', 'منع التشويش (قصّ ناعم)'],
   'tools.micDeDistortValue': ['{value}%', '{value}٪'],
+  'tools.micEnhance': ['Adaptive noise filter (mic_ev2)', 'مرشّح ضوضاء تكيفي (mic_ev2)'],
+  'tools.micEnhanceNote': [
+    'STFT spectral removal on the audio thread — stronger than browser suppression alone.',
+    'إزالة طيفية (STFT) على خيط الصوت — أقوى من تنقية المتصفح وحدها.'
+  ],
+  'tools.micEnhanceStrength': ['Noise filter strength', 'قوة مرشّح الضوضاء'],
+  'tools.micEnhanceStrengthValue': ['{value}%', '{value}٪'],
   'tools.micNoiseSuppression': ['Noise suppression (browser / hardware)', 'تنقية الضوضاء (المتصفح / الأجهزة)'],
   'tools.micEcho': ['Echo cancellation', 'إلغاء الصدى'],
   'tools.micAutoGain': ['Auto gain', 'الكسب التلقائي'],

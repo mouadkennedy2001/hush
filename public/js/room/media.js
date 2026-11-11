@@ -111,7 +111,7 @@ export class MediaMesh {
     this._monitorStreams = new Map(); // monitor key -> stream
     this.micSettings = loadMicSettings();
     this.micFx = null;
-    this.micEnhancer = null; // mic_ev1 second stage (spectral suppressor) — fail-safe
+    this.micEnhancer = null; // mic_ev2 second stage (STFT suppressor) — fail-safe
     this.rawAudioTrack = null;
     this.processedAudioTrack = null;
     this._switchingMic = false;
@@ -326,7 +326,18 @@ export class MediaMesh {
   }
 
   getMicLevel() {
-    return this.micFx?.getLevel() ?? { rms: 0, db: -60, gateOpen: true };
+    const fxLevel = this.micFx?.getLevel() ?? { rms: 0, db: -60, gateOpen: true };
+    if (!this.micEnhancer) return fxLevel;
+    try {
+      // The enhancer's meter is tapped after suppression, so it reflects what
+      // peers actually hear (and owns the final gate state).
+      const stats = this.micEnhancer.getStats();
+      const rms = Math.max(0, Number(stats.level) || 0);
+      const db = rms > 0.0001 ? Math.max(-60, 20 * Math.log10(rms)) : -60;
+      return { rms, db, gateOpen: !stats.gated };
+    } catch {
+      return fxLevel;
+    }
   }
 
   async listMicDevices() {
@@ -349,36 +360,54 @@ export class MediaMesh {
     );
     const enabledChanged =
       'enabled' in partial && partial.enabled !== this.micSettings.enabled;
+    const enhanceChanged =
+      'enhance' in partial && partial.enhance !== this.micSettings.enhance;
     this.micSettings = { ...this.micSettings, ...partial };
     saveMicSettings(this.micSettings);
     if (nativeChanged && this.tracks.audio && !this._switchingMic) {
       await this.#refreshAudioTrack();
-    } else if (enabledChanged && this.tracks.audio && this.rawAudioTrack) {
+    } else if ((enabledChanged || enhanceChanged) && this.tracks.audio && this.rawAudioTrack) {
       // Rebuild (or bypass) the WebAudio chain on the same raw capture.
       await this.#attachAudioTrack(this.rawAudioTrack);
     } else {
       this.micFx?.update(this.micSettings);
+      this.#syncEnhancer();
     }
     return this.getMicSettings();
+  }
+
+  #syncEnhancer() {
+    const enhancer = this.micEnhancer;
+    if (!enhancer) return;
+    try {
+      enhancer.setStrength(this.micSettings.enhanceStrength ?? 0.85);
+      enhancer.setGate(this.micSettings.gate !== false);
+      enhancer.setGateThresholdDb(this.micSettings.gateThresholdDb ?? -42);
+    } catch { /* keep the previous live values */ }
   }
 
   async #attachAudioTrack(rawTrack) {
     const previousFx = this.micFx;
     const previousEnhancer = this.micEnhancer;
     const previousRaw = this.rawAudioTrack;
-    const fx = new MicFx(this.micSettings);
+    // Clear before rebuilding: if the new enhancer is skipped or fails, the
+    // old one must not stay referenced (its stream is about to leave the
+    // chain) — it is disposed with the previous pipeline below.
+    this.micEnhancer = null;
+    // One AudioContext for remote playback, MicFx and the enhancer: three
+    // contexts cost ~3x CPU and add three resume/latency paths.
+    const sharedCtx = this.#ensureAudioContext();
+    const fx = new MicFx(this.micSettings, sharedCtx ? { audioContext: sharedCtx } : {});
     const fxTrack = await fx.process(rawTrack);
-    // mic_ev1 second stage: spectral suppression on top of MicFx. Fail-safe —
-    // any failure returns the MicFx track (never breaks a call).
-    // Shares MediaMesh's AudioContext (one context, not three) for purity
-    // without extra CPU/latency. User chose max purity: gate stays on,
-    // strength defaults 0.8, no bypass.
+    // mic_ev2 second stage: STFT spectral suppression on top of MicFx.
+    // Fail-safe — any failure returns the MicFx track (never breaks a call).
     let processed = fxTrack;
     if (this.micSettings.enhance !== false && fxTrack && fxTrack !== rawTrack && window.AudioContext) {
       try {
-        const sharedCtx = this.#ensureAudioContext();
         const enhancer = createMicEnhancer({
-          strength: this.micSettings.enhanceStrength ?? 0.8,
+          strength: this.micSettings.enhanceStrength ?? 0.85,
+          gate: this.micSettings.gate !== false,
+          gateThresholdDb: this.micSettings.gateThresholdDb ?? -42,
           ...(sharedCtx ? { audioContext: sharedCtx } : {})
         });
         const result = await enhancer.attach(new MediaStream([fxTrack]));

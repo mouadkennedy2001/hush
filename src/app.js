@@ -242,6 +242,10 @@ export async function createHushServer({
       [
         "default-src 'self'",
         "script-src 'self'",
+        // AudioWorklet modules (mic ev2) are module scripts loaded from
+        // 'self'; the explicit worker-src keeps them allowed in browsers
+        // that classify worklets as workers.
+        "worker-src 'self'",
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
         "font-src 'self' https://fonts.gstatic.com",
         // v12: https: images ONLY (no script). This is the error/-folder

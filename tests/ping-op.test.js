@@ -9,25 +9,29 @@ const PUBLIC = path.join(ROOT, 'public');
 
 test('PING OP v1.1 library exists from scratch and is wired', async () => {
   const pkg = JSON.parse(await readFile(path.join(ROOT, 'PING OP', 'package.json'), 'utf8'));
-  assert.equal(pkg.version, '1.4.0');
+  assert.equal(pkg.version, '1.5.0');
   const ver = JSON.parse(await readFile(path.join(ROOT, 'PING OP', 'version.json'), 'utf8'));
-  assert.equal(ver.version, '1.4.0');
+  assert.equal(ver.version, '1.5.0');
   assert.equal(ver.status, 'active');
   assert.equal(ver.writtenFromScratch, true);
 
   const core = await readFile(path.join(ROOT, 'PING OP', 'src', 'ping-op.js'), 'utf8');
   assert.match(core, /createPingOp/);
-  assert.match(core, /PING_OP_VERSION = '1\.4\.0'/);
+  assert.match(core, /PING_OP_VERSION = '1\.5\.0'/);
   assert.match(core, /qualityFor/);
   assert.match(core, /getTrend/, 'v1.1 trend');
   assert.match(core, /getHealth/, 'v1.1 health');
   assert.match(core, /sanitizeStatsReport/, 'v1.1 stats sanitizer');
+  assert.match(core, /createPacketScheduler/, 'v1.5 packet scheduler');
+  assert.match(core, /PACKET_DEFER_MS/, 'v1.5 defer deadline');
   const server = await readFile(path.join(ROOT, 'PING OP', 'src', 'server.js'), 'utf8');
   assert.match(server, /createPingServer/);
   assert.match(server, /applyHardening/);
   assert.match(server, /reportStats/, 'v1.1 client stats reporting');
   const client = await readFile(path.join(ROOT, 'PING OP', 'src', 'client.js'), 'utf8');
   assert.match(client, /PROBES = 2/);
+  assert.match(client, /createPacketScheduler/, 'v1.5 client scheduler');
+  assert.match(client, /probeNeed/, 'v1.5 need-aware split');
   assert.match(client, /ping:request/);
   assert.match(client, /reportPingStats/, 'v1.1 client reporting');
 
@@ -64,26 +68,32 @@ test('server voice: text exit trap, occupants and temp tiles are fixed', async (
   assert.match(css, /\.server-voice-occupants/, 'occupant list styles');
 });
 
-test('mic ev1.2: settings sanitized, gate fixed, worklet suppresses, live API', async () => {
+test('mic ev2.0: settings sanitized, worklet in chain, live API', async () => {
   const sanitizer = await readFile(path.join(PUBLIC, 'js', 'room', 'mic-settings.js'), 'utf8');
   assert.match(sanitizer, /sanitizeMicSettings/);
   assert.match(sanitizer, /DEVICE_ID_RE/);
-  assert.match(sanitizer, /ev1\.2/, 'micVersion ev1.2 accepted');
+  assert.match(sanitizer, /ev2\.0/, 'micVersion ev2.0 accepted');
   const fx = await readFile(path.join(PUBLIC, 'js', 'room', 'mic-fx.js'), 'utf8');
   assert.match(fx, /sanitizeMicSettings/);
   assert.match(fx, /0\.4/, 'monitor capped against feedback');
+  assert.match(fx, /sharedContext/, 'shared AudioContext supported');
   const enhancer = await readFile(path.join(PUBLIC, 'js', 'room', 'mic-enhancer.js'), 'utf8');
   assert.match(enhancer, /Analyser/);
   assert.match(enhancer, /ownedCtx/);
-  assert.match(enhancer, /MIC_VERSION = 'ev1\.2'/, 'ev1.2 live');
+  assert.match(enhancer, /MIC_VERSION = 'ev2\.0'/, 'ev2.0 live');
   assert.match(enhancer, /getLevel/, 'live level API');
   assert.match(enhancer, /setBypass/, 'live bypass API');
+  assert.match(enhancer, /setStrength/, 'live strength API');
   assert.match(enhancer, /gateHoldMs/, 'gate hangover');
   assert.match(enhancer, /peak/, 'peak-hold meter');
+  assert.match(enhancer, /workletNode\.connect\(lowpass\)/, 'worklet is in the signal chain');
   const worklet = await readFile(path.join(PUBLIC, 'js', 'room', 'noise-suppress-processor.js'), 'utf8');
   assert.match(worklet, /hush-noise-suppress/);
-  assert.match(worklet, /MIN_GAIN/);
+  assert.match(worklet, /StftNoiseSuppressor/, 'STFT DSP imported');
   assert.doesNotMatch(worklet, /output\[i\] = s;\n/, 'worklet no longer a no-op copy');
+  const dsp = await readFile(path.join(PUBLIC, 'js', 'room', 'mic-dsp.js'), 'utf8');
+  assert.match(dsp, /StftNoiseSuppressor/);
+  assert.match(dsp, /fftSize = 512/);
   const media = await readFile(path.join(PUBLIC, 'js', 'room', 'media.js'), 'utf8');
   assert.match(media, /audioContext/, 'shared AudioContext');
   assert.match(media, /OverconstrainedError/, 'device fallback');

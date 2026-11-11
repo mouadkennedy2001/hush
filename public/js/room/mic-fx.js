@@ -33,10 +33,10 @@ export const DEFAULT_MIC_SETTINGS = Object.freeze({
   quality: 'auto', // auto | performance | quality
   deviceId: '',
   preset: 'voice',
-  // mic_ev1 second stage (mic/mic_ev1 spectral suppressor) — mic folder plan.
+  // mic_ev2 second stage (mic/mic_ev2 STFT suppressor).
   enhance: true,
-  enhanceStrength: 0.8, // 0..1
-  micVersion: 'ev1'
+  enhanceStrength: 0.85, // 0..1
+  micVersion: 'ev2.0'
 });
 
 export const MIC_PRESETS = Object.freeze({
@@ -86,9 +86,14 @@ function makeSoftClipCurve(drivePercent) {
 }
 
 export class MicFx {
-  constructor(settings) {
+  constructor(settings, options = {}) {
     this.settings = sanitizeMicSettings(settings, DEFAULT_MIC_SETTINGS);
     this.context = null;
+    // ev2: share MediaMesh's AudioContext instead of opening a second one.
+    // Two contexts cost ~2x CPU and add a second resume/latency path; a
+    // shared one is resumed by the same user gesture as remote audio.
+    this.sharedContext = options?.audioContext || null;
+    this.ownsContext = false;
     this.nodes = null;
     this.processedTrack = null;
     this.rawTrack = null;
@@ -117,8 +122,16 @@ export class MicFx {
     if (!AudioCtx || !rawTrack) return rawTrack;
 
     try {
-      this.context = new AudioCtx({ latencyHint: 'interactive' });
-      await this.context.resume().catch(() => {});
+      if (this.sharedContext && typeof this.sharedContext.createMediaStreamSource === 'function') {
+        this.context = this.sharedContext;
+        this.ownsContext = false;
+      } else {
+        this.context = new AudioCtx({ latencyHint: 'interactive' });
+        this.ownsContext = true;
+      }
+      if (this.context.state === 'suspended') {
+        await this.context.resume().catch(() => {});
+      }
 
       const ctx = this.context;
       const source = ctx.createMediaStreamSource(new MediaStream([rawTrack]));
@@ -179,11 +192,11 @@ export class MicFx {
     this.settings = sanitizeMicSettings(this.settings, DEFAULT_MIC_SETTINGS);
     if (!this.nodes || !this.context) return;
     const { preamp, compressor, shaper, gateGain, monitorGain } = this.nodes;
-    const performance = this.#isPerformance();
+    const lowPower = this.#isPerformance();
 
     preamp.gain.setTargetAtTime(dbToLinear(this.settings.amplificationDb), this.context.currentTime, 0.03);
-    compressor.ratio.setTargetAtTime(performance ? 1 : 3, this.context.currentTime, 0.03);
-    shaper.curve = makeSoftClipCurve(performance ? this.settings.deDistort * 0.5 : this.settings.deDistort);
+    compressor.ratio.setTargetAtTime(lowPower ? 1 : 3, this.context.currentTime, 0.03);
+    shaper.curve = makeSoftClipCurve(lowPower ? this.settings.deDistort * 0.5 : this.settings.deDistort);
     // Security: monitor is capped at 0.4 (was 0.9) — full-gain monitor
     // through speakers fed the mic and caused feedback howling.
     monitorGain.gain.setTargetAtTime(this.settings.monitor ? 0.4 : 0, this.context.currentTime, 0.03);
@@ -209,10 +222,12 @@ export class MicFx {
       }
       this.nodes = null;
     }
-    if (this.context) {
+    // Only close a context we created — never the shared MediaMesh one.
+    if (this.context && this.ownsContext) {
       this.context.close().catch(() => {});
-      this.context = null;
     }
+    this.context = null;
+    this.ownsContext = false;
     if (stopRaw && this.rawTrack && this.rawTrack !== this.processedTrack) {
       try { this.rawTrack.stop(); } catch { /* ignore */ }
     }

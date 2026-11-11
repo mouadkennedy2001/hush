@@ -1,12 +1,12 @@
 /**
- * Mic settings sanitizer — security boundary for mic_ev1.
+ * Mic settings sanitizer — security boundary for mic_ev2.
  *
  * localStorage and user input are untrusted: every numeric field is
  * clamped to the documented range, deviceId is shape-checked (it is
  * passed to getUserMedia as { exact } — an attacker-controlled string
  * must never reach it), and enums are whitelisted.
  *
- * mic_ev1 (public/js/room/mic-fx.js + mic-enhancer.js) uses this for
+ * mic_ev2 (public/js/room/mic-fx.js + mic-enhancer.js) uses this for
  * loadMicSettings(), constructor settings, and hot updates.
  */
 
@@ -43,11 +43,14 @@ export function sanitizeMicSettings(raw = {}, fallback = {}) {
   if ('gateThresholdDb' in raw) out.gateThresholdDb = clampNumber(raw.gateThresholdDb, -60, -20, base.gateThresholdDb ?? -42);
   if ('amplificationDb' in raw) out.amplificationDb = clampNumber(raw.amplificationDb, 0, 24, base.amplificationDb ?? 6);
   if ('deDistort' in raw) out.deDistort = clampNumber(raw.deDistort, 0, 100, base.deDistort ?? 25);
-  if ('enhanceStrength' in raw) out.enhanceStrength = clampNumber(raw.enhanceStrength, 0, 1, base.enhanceStrength ?? 0.8);
+  if ('enhanceStrength' in raw) out.enhanceStrength = clampNumber(raw.enhanceStrength, 0, 1, base.enhanceStrength ?? 0.85);
 
   if ('quality' in raw) out.quality = QUALITIES.has(raw.quality) ? raw.quality : (base.quality ?? 'auto');
   if ('preset' in raw) out.preset = PRESETS.has(raw.preset) ? raw.preset : (base.preset ?? 'voice');
-  if ('micVersion' in raw) out.micVersion = (raw.micVersion === 'ev1' || raw.micVersion === 'ev1.2') ? raw.micVersion : (base.micVersion ?? 'ev1');
+  if ('micVersion' in raw) {
+    const allowed = new Set(['ev1', 'ev1.2', 'ev2', 'ev2.0']);
+    out.micVersion = allowed.has(raw.micVersion) ? raw.micVersion : (base.micVersion ?? 'ev2.0');
+  }
 
   // deviceId goes into getUserMedia as { exact } — shape-check strictly.
   if ('deviceId' in raw) {

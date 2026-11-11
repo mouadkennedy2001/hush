@@ -57,8 +57,9 @@ test('frontend: nested buttons removed, emoji dialog+keyboard, tiles badges', as
 test('libraries: mic DSP wired + PING OP honest docs + changelogs bilingual', async () => {
   const liveEnhancer = await readFile(path.join(PUBLIC, 'js', 'room', 'mic-enhancer.js'), 'utf8');
   assert.match(liveEnhancer, /if \(cfg\.bypass\) return/, 'bypass honored live');
-  assert.match(liveEnhancer, /agcGain \* strengthTrim/, 'strength applied with AGC');
-  assert.match(liveEnhancer, /tapNode/, 'tap tracked for dispose');
+  assert.match(liveEnhancer, /workletNode\.connect\(lowpass\)/, 'worklet is in the chain');
+  assert.match(liveEnhancer, /setStrength/, 'live strength API');
+  assert.match(liveEnhancer, /ownedCtx/, 'shared context ownership tracked for dispose');
 
   const canonical = await readFile(path.join(ROOT, 'mic', 'mic_ev1', 'src', 'mic-enhancer.js'), 'utf8');
   assert.match(canonical, /gate\?\.update\?\.\(level\)/, 'canonical gate wired');

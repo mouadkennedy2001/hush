@@ -1,67 +1,71 @@
 /**
- * AudioWorkletProcessor — hush-noise-suppress (mic_ev1 browser runtime).
- * Canonical source: mic/mic_ev1/worklet/noise-suppress-processor.js
+ * AudioWorkletProcessor — hush-noise-suppress (mic ev2 browser runtime).
+ * Canonical source: mic/mic_ev2/worklet/noise-suppress-processor.js
  *
- * Real zero-allocation spectral-follow attenuator:
- * - per-sample noise-floor estimate adapts toward |x| slowly (0.02)
- * - gain = clamp(1 - strength * (floor / mag), minGain, 1) smoothed
- *   with attack/release so transients (speech onsets) stay intact
- * - strength is set via port message { type:'set', strength }
- * - stats { level, cpu } posted every 3rd frame for the UI meter
- * No allocations inside process() — all buffers preallocated.
+ * This is the real processing stage (ev1 accidentally loaded the worklet as
+ * a muted tap, so the main graph only had EQ + gate). It runs a 512-point
+ * STFT suppressor (see ./mic-dsp.js) on the audio thread:
+ *
+ *   input -> Hann analysis -> FFT -> adaptive noise floor ->
+ *   spectral subtraction + Wiener blend -> smooth gains ->
+ *   IFFT -> Hann synthesis -> overlap-add -> output
+ *
+ * Messages:
+ *   { type: 'set', strength?: 0..1, enabled?: boolean, minGain?: number }
+ *   { type: 'reset' }
+ * Stats are posted every 12 quanta (~35ms at 48kHz) for the UI meter:
+ *   { type: 'stats', level, noise, reductionDb, cpu, version }
+ *
+ * No allocations inside process() — the DSP module owns every buffer.
  */
-const FRAME = 128; // AudioWorklet standard quantum
-const MIN_GAIN = 0.08;
+import { StftNoiseSuppressor, MIC_DSP_VERSION } from './mic-dsp.js';
+
+const STATS_EVERY = 12;
 
 class HushNoiseSuppressProcessor extends AudioWorkletProcessor {
-  constructor() {
+  constructor(options) {
     super();
-    this._floor = 0.01;
-    this._gain = 1;
-    this._strength = 0.8;
-    this._level = 0;
+    const opts = options?.processorOptions || {};
+    this.dsp = new StftNoiseSuppressor({
+      sampleRate: opts.sampleRate || (typeof sampleRate !== 'undefined' ? sampleRate : 48000),
+      fftSize: opts.fftSize || 512,
+      hopSize: opts.hopSize || 128,
+      strength: opts.strength ?? 0.85,
+      minGain: opts.minGain ?? null,
+      enabled: opts.enabled !== false
+    });
     this._count = 0;
     this._cpu = 0;
-    this.port.onmessage = (e) => {
-      const d = e?.data;
-      if (d && d.type === 'set' && Number.isFinite(d.strength)) {
-        this._strength = Math.max(0, Math.min(1, d.strength));
-      }
+    this.port.onmessage = (event) => {
+      const data = event?.data;
+      if (!data || typeof data !== 'object') return;
+      if (data.type === 'set') this.dsp.setParams(data);
+      else if (data.type === 'reset') this.dsp.reset();
     };
   }
 
   process(inputs, outputs) {
-    const started = currentTime;
     const input = inputs[0]?.[0];
     const output = outputs[0]?.[0];
     if (!input || !output) return true;
-    let energy = 0;
-    const strength = this._strength;
-    let gain = this._gain;
-    for (let i = 0; i < input.length; i += 1) {
-      const s = input[i] ?? 0;
-      const mag = Math.abs(s);
-      // Track floor toward observed magnitude.
-      this._floor += (mag - this._floor) * 0.02;
-      // Desired gain: quiet (mag ≈ floor) -> deep cut; loud -> 1.
-      const ratio = this._floor / Math.max(mag, 0.0001);
-      let target = 1 - strength * Math.min(ratio, 1);
-      if (target < MIN_GAIN) target = MIN_GAIN;
-      // Smoothing: attack (opening) fast, release (closing) slower.
-      const coeff = target < gain ? 0.12 : 0.04;
-      gain += (target - gain) * coeff;
-      output[i] = s * gain;
-      energy += s * s;
-    }
-    this._gain = gain;
-    const rms = Math.sqrt(energy / Math.max(1, input.length));
-    this._level = 0.9 * this._level + 0.1 * rms;
+
+    const canTime = typeof performance !== 'undefined' && typeof performance.now === 'function';
+    const started = canTime ? performance.now() : 0;
+    this.dsp.process(input, output);
+    if (canTime) this._cpu = performance.now() - started;
+
     this._count += 1;
-    if (this._count % 3 === 0) {
+    if (this._count % STATS_EVERY === 0) {
       try {
-        this._cpu = currentTime - started;
-        this.port.postMessage({ type: 'stats', level: this._level, cpu: this._cpu });
-      } catch { /* ignore */ }
+        this.port.postMessage({
+          type: 'stats',
+          level: this.dsp.level,
+          noise: this.dsp.noiseLevel,
+          reductionDb: this.dsp.reductionDb,
+          cpu: this._cpu,
+          version: MIC_DSP_VERSION
+        });
+      } catch { /* port closed */ }
     }
     return true;
   }

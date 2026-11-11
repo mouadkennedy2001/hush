@@ -1,5 +1,5 @@
 /**
- * PING OP v1.4 — core statistics engine (written from scratch, zero deps).
+ * PING OP v1.5 — core statistics engine + packet scheduler (zero deps).
  * v1.1 adds: getTrend() (improving/worsening/stable), getHealth(),
  * and sanitizeStatsReport() for safe client -> server reporting.
  * v1.2 adds: trend rides along in getStats() (was getHealth-only).
@@ -7,6 +7,11 @@
  * (clock-drift guard), and trend/loss-aware adaptive probing.
  * v1.4 adds: MAD jitter (median absolute deviation) — a single spike can no
  * longer inflate the jitter figure for the whole window.
+ * v1.5 adds: createPacketScheduler() — probes are queued as packets, split
+ * randomly by need, only the useful ones are sent now, the rest are deferred
+ * with a deadline, and deferred packets that are no longer needed (or stale)
+ * are deleted instead of being sent. This cuts probe traffic while keeping
+ * the reading fresh exactly when the link is unstable.
  *
  * Pure math + adaptive scheduling used identically on server and client:
  * - sample(roundTripMs): records one round trip, or null for a loss/timeout
@@ -14,6 +19,7 @@
  * - getStats(): { current, min, avg, median, max, jitter, lossRate, quality, score, samples }
  * - getScore(): 0..100 (100 = perfect link)
  * - nextIntervalMs(): adaptive probe cadence from quality, trend and loss
+ * - createPacketScheduler(): need-aware random packet split/defer/drop
  * - reset(): clears all samples
  *
  * Design (highest purity / lowest noise):
@@ -40,7 +46,7 @@
  * No I/O, no timers, no DOM — unit-testable in plain Node.
  */
 
-export const PING_OP_VERSION = '1.4.0';
+export const PING_OP_VERSION = '1.5.0';
 export const PING_OP_NAME = 'ping-op';
 
 export const MAX_SAMPLES = 60;
@@ -51,6 +57,15 @@ export const EWMA_ALPHA = 0.25;
 export const JITTER_WINDOW = 12;
 export const SUSPENSION_GAP_MS = 30_000;
 export const MIN_INTERVAL_MS = 800;
+
+// v1.5 packet scheduler limits. A "packet" is one ping probe candidate.
+// The queue is deliberately tiny: latency probes are only useful while they
+// are fresh, so deferring forever would just waste bandwidth and battery.
+export const PACKET_MAX_QUEUE = 12;
+export const PACKET_DEFER_MS = 8_000;
+export const PACKET_MIN_TTL_MS = 500;
+export const PACKET_MAX_TTL_MS = 30_000;
+export const PACKET_MAX_SEND = 3;
 
 /** v1.1: validate a client-reported stats object. Numbers only, clamped —
  *  a malicious client can never store strings/HTML through this path. */
@@ -89,6 +104,162 @@ function median(values) {
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
   return sorted.length % 2 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
+}
+
+/**
+ * v1.5 packet scheduler.
+ *
+ * The client used to fire a fixed number of probes every round. That is
+ * wasteful on a rock-stable link and still too slow during a spike. This
+ * scheduler treats every probe as a packet with a priority and a deadline:
+ *
+ *   enqueue()  -> a candidate probe enters the small queue
+ *   plan()     -> randomly picks the packets that are worth sending NOW
+ *                 (more packets when `need` is high, usually one otherwise)
+ *   deferred   -> the rest stay queued for a later round
+ *   prune()    -> packets whose deadline passed are deleted, never sent
+ *   cancelAll()-> packets that are no longer useful are deleted immediately
+ *
+ * The randomness is intentional: a fixed "2 probes at t, 2 at t+3s" pattern
+ * is easy for a busy link/queue to synchronise with. A jittered subset keeps
+ * measurements representative without flooding the socket.
+ *
+ * Pure and injectable (`random`) so it is fully unit-testable.
+ */
+export function createPacketScheduler({
+  random = Math.random,
+  maxQueue = PACKET_MAX_QUEUE,
+  deferMs = PACKET_DEFER_MS
+} = {}) {
+  const safeMaxQueue = Math.max(1, Math.min(64, Math.round(Number(maxQueue) || PACKET_MAX_QUEUE)));
+  const safeDeferMs = clamp(deferMs, PACKET_MIN_TTL_MS, PACKET_MAX_TTL_MS) || PACKET_DEFER_MS;
+  let queue = [];
+  let nextId = 1;
+  const counters = {
+    queued: 0,
+    sent: 0,
+    deferrals: 0,
+    dropped: 0,
+    expired: 0,
+    cancelled: 0
+  };
+
+  function enqueue({ priority = 0.5, meta = null, now = Date.now(), ttlMs = safeDeferMs } = {}) {
+    const at = Number.isFinite(Number(now)) ? Number(now) : Date.now();
+    const ttl = clamp(ttlMs, PACKET_MIN_TTL_MS, PACKET_MAX_TTL_MS) || safeDeferMs;
+    const packet = {
+      id: nextId++,
+      priority: clamp(priority, 0, 1),
+      queuedAt: at,
+      deadline: at + ttl,
+      meta
+    };
+    queue.push(packet);
+    counters.queued += 1;
+    if (queue.length > safeMaxQueue) {
+      // Bounded memory: drop the least useful packet (lowest priority, then
+      // the oldest — it is the closest to expiry anyway).
+      let worst = 0;
+      for (let i = 1; i < queue.length; i += 1) {
+        const a = queue[i];
+        const b = queue[worst];
+        if (a.priority < b.priority || (a.priority === b.priority && a.queuedAt < b.queuedAt)) worst = i;
+      }
+      queue.splice(worst, 1);
+      counters.dropped += 1;
+    }
+    return packet;
+  }
+
+  function prune(now = Date.now()) {
+    if (!queue.length) return [];
+    const at = Number.isFinite(Number(now)) ? Number(now) : Date.now();
+    const dropped = [];
+    const keep = [];
+    for (const packet of queue) {
+      if (packet.deadline <= at) dropped.push(packet);
+      else keep.push(packet);
+    }
+    if (dropped.length) {
+      queue = keep;
+      counters.expired += dropped.length;
+    }
+    return dropped;
+  }
+
+  /**
+   * Split the queue into "send now" and "defer".
+   * @param {object} opts
+   * @param {number} opts.need 0..1 — how much fresh data the link needs
+   * @param {number} opts.budget max packets this round (hard-capped)
+   */
+  function plan({ need = 0.5, budget = PACKET_MAX_SEND, now = Date.now() } = {}) {
+    const dropped = prune(now);
+    if (!queue.length) return { send: [], defer: [], dropped };
+    const urgency = clamp(need, 0, 1);
+    const safeBudget = Math.max(1, Math.min(PACKET_MAX_SEND, Math.round(Number(budget) || 1)));
+    // Stable links send exactly one keep-alive probe; an unstable link may
+    // send the whole (tiny) budget. The +1 roll adds jitter so the pattern
+    // is not deterministic.
+    const wanted = Math.round(urgency * safeBudget);
+    const jitter = random() < urgency * 0.4 ? 1 : 0;
+    const minSend = urgency >= 0.9 ? 2 : 1;
+    const sendCount = Math.max(1, Math.min(queue.length, Math.max(minSend, wanted + jitter)));
+    // Weighted random ranking: priority dominates, but a low-priority packet
+    // occasionally goes early, which keeps the sample spread honest.
+    const ranked = queue.map((packet) => ({
+      packet,
+      roll: random() * (1 + packet.priority * 3)
+    }));
+    ranked.sort((a, b) => b.roll - a.roll);
+    const chosen = ranked.slice(0, sendCount).map((item) => item.packet);
+    const chosenIds = new Set(chosen.map((packet) => packet.id));
+    queue = queue.filter((packet) => !chosenIds.has(packet.id));
+    counters.sent += chosen.length;
+    if (queue.length) counters.deferrals += queue.length;
+    return { send: chosen, defer: [...queue], dropped };
+  }
+
+  /** Delete specific queued packets (e.g. the link became stable). */
+  function cancel(ids) {
+    const set = ids instanceof Set ? ids : new Set(Array.isArray(ids) ? ids : []);
+    if (!set.size || !queue.length) return 0;
+    const before = queue.length;
+    queue = queue.filter((packet) => !set.has(packet.id));
+    const removed = before - queue.length;
+    counters.cancelled += removed;
+    return removed;
+  }
+
+  /** Delete every deferred packet — "we do not need them anymore". */
+  function cancelAll() {
+    const removed = queue.length;
+    queue = [];
+    counters.cancelled += removed;
+    return removed;
+  }
+
+  function stats() {
+    return {
+      version: PING_OP_VERSION,
+      pending: queue.length,
+      queued: counters.queued,
+      sent: counters.sent,
+      deferrals: counters.deferrals,
+      dropped: counters.dropped,
+      expired: counters.expired,
+      cancelled: counters.cancelled,
+      maxQueue: safeMaxQueue
+    };
+  }
+
+  function reset() {
+    queue = [];
+    nextId = 1;
+    for (const key of Object.keys(counters)) counters[key] = 0;
+  }
+
+  return { enqueue, plan, prune, cancel, cancelAll, stats, reset, peek: () => [...queue] };
 }
 
 export function createPingOp({ maxSamples = MAX_SAMPLES, displayWindow = DISPLAY_WINDOW } = {}) {
@@ -251,4 +422,12 @@ export class PingOp {
   reset() { return this.#engine.reset(); }
 }
 
-export default { createPingOp, PingOp, PING_OP_VERSION, PING_OP_NAME, qualityFor, sanitizeStatsReport };
+export default {
+  createPingOp,
+  createPacketScheduler,
+  PingOp,
+  PING_OP_VERSION,
+  PING_OP_NAME,
+  qualityFor,
+  sanitizeStatsReport
+};

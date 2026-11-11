@@ -237,6 +237,10 @@ const els = {
   micGateThresholdValue: $('#mic-gate-threshold-value'),
   micDeDistort: $('#mic-de-distort'),
   micDeDistortValue: $('#mic-de-distort-value'),
+  micEnhanceStrength: $('#mic-enhance-strength'),
+  micEnhanceStrengthValue: $('#mic-enhance-strength-value'),
+  micEnhance: $('#mic-enhance'),
+  micEnhanceNote: $('#mic-enhance-note'),
   micEnabled: $('#mic-enabled'),
   micEnabledNote: $('#mic-enabled-note'),
   micGate: $('#mic-gate'),
@@ -728,6 +732,7 @@ function bindEvents() {
     [els.micNoise, 'noiseSuppression'],
     [els.micEcho, 'echoCancellation'],
     [els.micAgc, 'autoGainControl'],
+    [els.micEnhance, 'enhance'],
     [els.micMonitor, 'monitor']
   ]) {
     el?.addEventListener('change', () => {
@@ -746,6 +751,13 @@ function bindEvents() {
   els.micDeDistort?.addEventListener('input', () => {
     updateMicOutputs();
     void state.mesh?.setMicSettings({ deDistort: Number(els.micDeDistort.value), preset: 'custom' });
+  });
+  els.micEnhanceStrength?.addEventListener('input', () => {
+    updateMicOutputs();
+    void state.mesh?.setMicSettings({
+      enhanceStrength: Number(els.micEnhanceStrength.value) / 100,
+      preset: 'custom'
+    });
   });
   els.micReset?.addEventListener('click', async () => {
     await state.mesh?.setMicSettings({ ...DEFAULT_MIC_SETTINGS });
@@ -3326,6 +3338,7 @@ function renderMicSettings() {
   const settings = state.mesh?.getMicSettings() ?? { ...DEFAULT_MIC_SETTINGS };
   if (els.micLead) els.micLead.textContent = t('tools.micLead');
   if (els.micEnabledNote) els.micEnabledNote.textContent = t('tools.micOffNote');
+  if (els.micEnhanceNote) els.micEnhanceNote.textContent = t('tools.micEnhanceNote');
   if (els.micMonitorWarn) els.micMonitorWarn.textContent = t('tools.micMonitorWarn');
   if (els.micPreset) {
     const labels = {
@@ -3356,10 +3369,14 @@ function renderMicSettings() {
   if (els.micNoise) els.micNoise.checked = Boolean(settings.noiseSuppression);
   if (els.micEcho) els.micEcho.checked = Boolean(settings.echoCancellation);
   if (els.micAgc) els.micAgc.checked = Boolean(settings.autoGainControl);
+  if (els.micEnhance) els.micEnhance.checked = settings.enhance !== false;
   if (els.micMonitor) els.micMonitor.checked = Boolean(settings.monitor);
   if (els.micAmp) els.micAmp.value = String(settings.amplificationDb ?? 6);
   if (els.micGateThreshold) els.micGateThreshold.value = String(settings.gateThresholdDb ?? -42);
   if (els.micDeDistort) els.micDeDistort.value = String(settings.deDistort ?? 25);
+  if (els.micEnhanceStrength) {
+    els.micEnhanceStrength.value = String(Math.round((settings.enhanceStrength ?? 0.85) * 100));
+  }
   updateMicOutputs();
 }
 
@@ -3370,6 +3387,11 @@ function updateMicOutputs() {
   }
   if (els.micDeDistortValue && els.micDeDistort) {
     els.micDeDistortValue.textContent = t('tools.micDeDistortValue', { value: els.micDeDistort.value });
+  }
+  if (els.micEnhanceStrengthValue && els.micEnhanceStrength) {
+    els.micEnhanceStrengthValue.textContent = t('tools.micEnhanceStrengthValue', {
+      value: els.micEnhanceStrength.value
+    });
   }
 }
 

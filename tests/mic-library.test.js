@@ -27,12 +27,21 @@ test('mic library: mic_ev1 ships a complete fail-safe enhancer', async () => {
   const worklet = await readFile(path.join(MIC, 'mic_ev1', 'worklet', 'noise-suppress-processor.js'), 'utf8');
   assert.match(worklet, /registerProcessor/, 'AudioWorklet processor registered');
 
-  for (const v of ['mic_ev1.1', 'mic_ev1.4', 'mic_ev1.5', 'mic_ev1.6', 'mic_ev1.7', 'mic_ev1.8', 'mic_ev1.9', 'mic_ev2']) {
+  for (const v of ['mic_ev1.1', 'mic_ev1.4', 'mic_ev1.5', 'mic_ev1.6', 'mic_ev1.7', 'mic_ev1.8', 'mic_ev1.9']) {
     const st = await stat(path.join(MIC, v, 'README.md'));
     assert.ok(st.isFile(), `${v} has a README`);
     const ver = JSON.parse(await readFile(path.join(MIC, v, 'version.json'), 'utf8'));
     assert.equal(ver.status, 'planned', `${v} is planned`);
   }
+  // ev2 is live (real STFT suppression inside the AudioWorklet chain).
+  const ev2 = JSON.parse(await readFile(path.join(MIC, 'mic_ev2', 'version.json'), 'utf8'));
+  assert.equal(ev2.status, 'active', 'ev2 is live');
+  assert.equal(ev2.version, '2.0.0');
+  const ev2Enhancer = await readFile(path.join(MIC, 'mic_ev2', 'src', 'mic-enhancer.js'), 'utf8');
+  assert.match(ev2Enhancer, /MIC_VERSION = 'ev2\.0'/, 'canonical ev2 enhancer');
+  assert.match(ev2Enhancer, /workletNode\.connect\(lowpass\)/, 'canonical worklet in chain');
+  const ev2Dsp = await readFile(path.join(MIC, 'mic_ev2', 'src', 'mic-dsp.js'), 'utf8');
+  assert.match(ev2Dsp, /StftNoiseSuppressor/);
   // ev1.3 is live (gain ownership + deafen mute landed with it).
   const ev13 = JSON.parse(await readFile(path.join(MIC, 'mic_ev1.3', 'version.json'), 'utf8'));
   assert.equal(ev13.status, 'active', 'ev1.3 is live');
@@ -56,6 +65,6 @@ test('mic browser runtime: fallback-safe, no external dependencies', async () =>
   const media = await readFile(path.join(ROOT, 'public', 'js', 'room', 'media.js'), 'utf8');
   assert.match(media, /createMicEnhancer/, 'MediaMesh wires the enhancer');
   const fx = await readFile(path.join(ROOT, 'public', 'js', 'room', 'mic-fx.js'), 'utf8');
-  assert.match(fx, /mic_ev1/, 'settings reference mic_ev1');
+  assert.match(fx, /mic_ev2/, 'settings reference mic_ev2');
   assert.match(fx, /enhance/, 'enhance setting exists');
 });

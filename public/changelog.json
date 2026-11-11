@@ -2,6 +2,29 @@
   "version": "15.0.0",
   "entries": [
     {
+      "date": "2026-11-11",
+      "ts": 1763887300000,
+      "kind": "feature",
+      "kindEn": "Feature",
+      "kindAr": "ميزة",
+      "titleEn": "v15: PING OP 1.5 packet scheduler + mic_ev2 studio noise filter",
+      "titleAr": "v15: جدولة حزم PING OP 1.5 + مرشّح ضوضاء mic_ev2",
+      "pointsEn": [
+        "NEW PING OP 1.5 packet scheduler: every probe is now a packet with a priority and a deadline. Each round queues a keep-alive packet plus extras only when the link actually needs them, randomly sends the useful subset now (usually 1, up to 3), and defers the rest. Deferred packets are deleted when the link calms down or their deadline passes — so a stable connection stops paying for probes it does not need while a degrading one still gets fresh readings.",
+        "NEW mic_ev2 noise filter: a real 512-point STFT suppressor (Hann window, 128 hop, 75% overlap) now runs inside the AudioWorklet and is actually in the signal chain — in ev1 it was a muted tap, so spectral suppression never reached the call. It estimates a per-bin noise floor, blends spectral subtraction with Wiener gain, smooths across frequency and time, and keeps a gain floor against musical noise.",
+        "IMPROVED mic pipeline: MediaMesh, MicFx and the enhancer share one AudioContext (was up to three), the gate/AGC meter is tapped after suppression so it reacts to what peers hear, and the whole chain falls back to EQ + gate + limiter (or the raw mic) if the worklet fails — a call can never break or go silent.",
+        "NEW mic controls: an Adaptive noise filter (mic_ev2) toggle and a Noise filter strength slider in Mic settings, applied live without rebuilding the call. All new strings are bilingual.",
+        "HARDENED PING OP server: stale probes that waited too long are rejected instead of producing a meaningless RTT, payloads are sanitized, the rate limiter is O(1), and responses add nosniff. The browser mirror (public/js/ping-op/*) and the room ping meter use the same v1.5 engine."
+      ],
+      "pointsAr": [
+        "جديد جدولة حزم PING OP 1.5: كل مسبار أصبح حزمة لها أولوية وموعد انتهاء. كل جولة تضع حزمة إبقاء، وحزمًا إضافية فقط عندما يحتاجها الرابط فعلًا، ثم ترسل عشوائيًا المجموعة المفيدة الآن (عادة 1، وحتى 3) وتؤجّل الباقي. الحزم المؤجّلة تُحذف عندما يهدأ الرابط أو ينتهي موعدها — فالرابط المستقر يتوقف عن دفع ثمن مسبارات لا يحتاجها، والمتدهور يبقى يحصل على قراءات حديثة.",
+        "جديد مرشّح ضوضاء mic_ev2: قامع STFT حقيقي بـ 512 نقطة (نافذة Hann، هوب 128، تداخل 75%) يعمل الآن داخل AudioWorklet وداخل سلسلة الإشارة فعليًا — في ev1 كان tap صامتًا فلم يصل القامع الطيفي إلى المكالمة. يقدّر حدّ ضوضاء لكل bin، يمزج الطرح الطيفي مع كسب Wiener، ينعّم تكراريًا وزمنيًا، ويحافظ على أرضية كسب ضد الضوضاء الموسيقية.",
+        "تحسين خط المايك: MediaMesh وMicFx والمحسّن يتشاركون سياق صوت واحدًا (كانت حتى ثلاثة)، ومقياس البوابة/AGC ملتصق بعد التنقية فيتفاعل مع ما يسمعه الطرف الآخر، والسلسلة كلها تعود إلى EQ + بوابة + limiter (أو المايك الخام) إن فشل الـ worklet — لا يمكن أن تنكسر المكالمة أو تصمت.",
+        "جديد أدوات المايك: مفتاح Adaptive noise filter (mic_ev2) وشريط قوة مرشّح الضوضاء في إعدادات المايك، يُطبّقان حيًا دون إعادة بناء المكالمة. كل النصوص الجديدة ثنائية اللغة.",
+        "تقوية خادم PING OP: رفض المسبارات المتقادمة التي انتظرت طويلًا بدل حساب RTT لا معنى له، تطهير الحمولات، حدّ معدل بزمن O(1)، وترويسة nosniff. مرآة المتصفح (public/js/ping-op/*) ومقياس البنق في الغرفة يستعملان نفس محرك v1.5."
+      ]
+    },
+    {
       "date": "2026-11-10",
       "ts": 1763800900000,
       "kind": "update",

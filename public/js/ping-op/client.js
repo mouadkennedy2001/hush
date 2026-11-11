@@ -1,5 +1,5 @@
 /**
- * PING OP v1.4 — browser client (written from scratch, zero deps).
+ * PING OP v1.5 — browser client (written from scratch, zero deps).
  * v1.1 adds: periodic stats reporting to POST /api/ping/stats.
  * v1.3 adds: trend-aware quality display and the core's clock-drift guard —
  * rounds measured across a tab suspension / throttled timer no longer blend
@@ -7,8 +7,15 @@
  * v1.4 adds: requestAnimationFrame chart with a dirty flag (one draw per
  * frame at most), quadratic midpoint smoothing, and cached DOM writes
  * (textContent/dataset/title only change when the value really changed).
+ * v1.5 adds: need-aware packet scheduling. Probes are queued as packets,
+ * randomly split by current need, and only the useful ones are sent now.
+ * The rest are deferred with a deadline; when the link is calm (or the
+ * deferred packet is stale) they are deleted instead of being sent. A calm
+ * link now sends one keep-alive probe per round, while a degrading link can
+ * spend the full tiny budget.
  *
- * - 2 parallel probes per round, take the MIN (kills polling jitter)
+ * - up to 3 probes per round (usually 1 on a stable link), take the MIN
+ *   (kills polling jitter) — the scheduler decides the subset
  * - displayed value = min of last 4 rounds, adaptive interval
  *   (good 3s / fair 2s / poor 1.2s / offline 0.9s — up to ~2x faster while
  *   the trend is worsening or loss >= 20%, floored at 800ms)
@@ -21,19 +28,24 @@
  * from the repo-root folder, the server only serves public/).
  */
 
-import { createPingOp, PING_OP_VERSION } from './ping-op.js';
+import { createPingOp, createPacketScheduler, PING_OP_VERSION } from './ping-op.js';
 
 export { PING_OP_VERSION };
 
 const TIMEOUT_MS = 1500;
 const MAX_SAMPLES = 60;
-const PROBES = 2;
+const PROBES = 2; // base budget; the scheduler can use one extra packet
+const PROBE_BUDGET = PROBES + 1;
 
 let started = false;
 let getSocket = () => null;
 let timer = null;
 let seq = 0;
 let engine = createPingOp({ maxSamples: MAX_SAMPLES });
+// Small queue on purpose: a deferred latency probe is only useful while it
+// is fresh. 8s is long enough to ride out a short spike, short enough that
+// stale work is deleted instead of piling up.
+const scheduler = createPacketScheduler({ maxQueue: 8, deferMs: 6000 });
 
 function nowMono() { return performance.now(); }
 
@@ -55,12 +67,18 @@ function trendLabel(trend) {
   return 'Stable';
 }
 
-function probeOnce(socket, mySeq) {
+function probeOnce(socket, mySeq, packet = null) {
   return new Promise((resolve, reject) => {
     const sentMono = nowMono();
     const timerId = setTimeout(() => reject(new Error('timeout')), TIMEOUT_MS);
     try {
-      socket.emit('ping:request', { t: Date.now(), seq: mySeq }, (ack) => {
+      const payload = { t: Date.now(), seq: mySeq };
+      // v1.5: tell the server when this packet was queued. If it waited too
+      // long in the defer queue the server can drop it instead of answering
+      // a probe whose RTT no longer means anything.
+      if (packet && Number.isFinite(packet.queuedAt)) payload.queuedAt = packet.queuedAt;
+      if (packet && Number.isFinite(packet.id)) payload.packetId = packet.id;
+      socket.emit('ping:request', payload, (ack) => {
         clearTimeout(timerId);
         if (!ack?.ok || ack.seq !== mySeq) return reject(new Error('stale-pong'));
         resolve(Math.max(0, Math.round(nowMono() - sentMono)));
@@ -72,12 +90,53 @@ function probeOnce(socket, mySeq) {
   });
 }
 
+// v1.5: how many fresh probes the link actually needs right now. A stable,
+// good link only needs the keep-alive packet; anything degrading gets more.
+function probeNeed(stats) {
+  if (!stats || stats.samplesCount < 3) return 1; // warm-up: learn fast
+  let need = 0.2;
+  if (stats.quality === 'offline') need += 0.5;
+  else if (stats.quality === 'poor') need += 0.35;
+  else if (stats.quality === 'fair') need += 0.15;
+  if (stats.trend === 'worsening') need += 0.2;
+  if (Number(stats.lossRate) >= 10) need += 0.15;
+  if (Number(stats.jitter) > 35) need += 0.1;
+  return Math.max(0.15, Math.min(1, need));
+}
+
+/**
+ * Queue this round's candidate packets and let the scheduler split them.
+ * One high-priority keep-alive packet is always queued (the badge must never
+ * go stale); extra packets are only created while the link needs them.
+ */
+function fillAndPlan(stats) {
+  const need = probeNeed(stats);
+  // Calm link: deferred probes are no longer useful — delete them now.
+  if (need <= 0.25) scheduler.cancelAll();
+  scheduler.enqueue({ priority: 1, ttlMs: 1500, meta: { keepalive: true } });
+  const extras = Math.round(need * 2);
+  for (let i = 0; i < extras; i += 1) {
+    scheduler.enqueue({
+      priority: Math.max(0.2, need * (0.55 + i * 0.15)),
+      ttlMs: 6000,
+      meta: { extra: i }
+    });
+  }
+  // At least one packet always goes out, so the reading stays live.
+  return scheduler.plan({ need: Math.max(0.34, need), budget: PROBE_BUDGET });
+}
+
 async function measureViaSocket(socket) {
-  const probes = [];
-  for (let i = 0; i < PROBES; i += 1) probes.push(probeOnce(socket, ++seq).catch(() => null));
-  const results = (await Promise.all(probes)).filter((v) => v != null);
-  if (!results.length) throw new Error('all-probes-failed');
-  return Math.min(...results);
+  const plan = fillAndPlan(engine.getStats());
+  // plan() always sends at least one packet while the queue has entries; the
+  // fallback is a defensive guard, not the normal path.
+  const packets = plan.send.length ? plan.send : [{ id: -1 }];
+  const results = await Promise.all(
+    packets.map((packet) => probeOnce(socket, ++seq, packet).catch(() => null))
+  );
+  const values = results.filter((value) => value != null);
+  if (!values.length) throw new Error('all-probes-failed');
+  return Math.min(...values);
 }
 
 async function measureViaHttp() {
@@ -247,12 +306,29 @@ function render() {
   requestChartDraw();
 }
 
-export function refreshPing() { engine.reset(); if (timer) clearTimeout(timer); void measure(); }
+export function refreshPing() {
+  engine.reset();
+  scheduler.reset();
+  if (timer) clearTimeout(timer);
+  void measure();
+}
 export function getPingSamples() { return [...engine.getSamples()]; }
+export function getPingPacketStats() { return scheduler.stats(); }
 export function getPingModel() {
   const s = engine.getStats();
   const health = typeof engine.getHealth === 'function' ? engine.getHealth() : s;
-  return { last: s.last, displayed: s.current, median: s.median, avg: s.avg, jitter: s.jitter, quality: s.quality, score: s.score, trend: health.trend || 'stable', version: PING_OP_VERSION };
+  return {
+    last: s.last,
+    displayed: s.current,
+    median: s.median,
+    avg: s.avg,
+    jitter: s.jitter,
+    quality: s.quality,
+    score: s.score,
+    trend: health.trend || 'stable',
+    packets: scheduler.stats(),
+    version: PING_OP_VERSION
+  };
 }
 
 // v1.1: report aggregated stats to the server (throttled, best-effort).
@@ -290,6 +366,16 @@ export function stopPing() {
   if (timer) clearTimeout(timer);
   timer = null;
   started = false;
+  scheduler.cancelAll(); // no one is reading the badge: drop deferred work
 }
 
-export default { startPing, stopPing, refreshPing, getPingModel, getPingSamples, reportPingStats, PING_OP_VERSION };
+export default {
+  startPing,
+  stopPing,
+  refreshPing,
+  getPingModel,
+  getPingSamples,
+  getPingPacketStats,
+  reportPingStats,
+  PING_OP_VERSION
+};

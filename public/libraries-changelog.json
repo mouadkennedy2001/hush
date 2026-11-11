@@ -1,7 +1,47 @@
 {
-  "version": "libraries-3.3.0",
-  "updated": "2026-11-10",
+  "version": "libraries-3.4.0",
+  "updated": "2026-11-11",
   "entries": [
+    {
+      "date": "2026-11-11",
+      "ts": 1763887300000,
+      "library": "mic",
+      "version": "ev2.0",
+      "kind": "feature",
+      "titleEn": "mic ev2.0 — real STFT suppression inside the AudioWorklet chain",
+      "titleAr": "mic ev2.0 — تقليل STFT حقيقي داخل سلسلة الـ AudioWorklet",
+      "pointsEn": [
+        "The AudioWorklet is now in the signal chain: source -> high-pass -> worklet -> low-pass -> gate -> soft clip -> AGC -> limiter -> destination. In ev1 the worklet was connected as a muted tap, so spectral suppression never reached the call.",
+        "New mic-dsp.js: a dependency-free 512-point STFT suppressor (periodic Hann, 128 hop, 75% overlap) with radix-2 FFT, per-bin adaptive noise floor, spectral subtraction + Wiener blend, 3-tap frequency smoothing, attack/release time smoothing, and a gain floor against musical noise. All buffers are allocated once; process() does no allocation.",
+        "One shared AudioContext across MediaMesh, MicFx and the enhancer (was up to three), and dispose() never closes a context it does not own. Gate/AGC now meter post-suppression audio, and live setStrength/setBypass/setGateThresholdDb apply without a rebuild.",
+        "Fail-safe: a failed worklet module still builds EQ + gate + limiter, and any attach() failure returns the raw track. New Adaptive noise filter toggle + strength slider in Mic settings; micVersion defaults to ev2.0."
+      ],
+      "pointsAr": [
+        "الـ AudioWorklet أصبح داخل سلسلة الإشارة: source -> high-pass -> worklet -> low-pass -> gate -> soft clip -> AGC -> limiter -> destination. في ev1 كان موصولًا كـ tap صامت فلم يصل القامع الطيفي إلى المكالمة.",
+        "جديد mic-dsp.js: قامع STFT بـ 512 نقطة بلا اعتماديات (Hann دورية، هوب 128، تداخل 75%) مع FFT radix-2، حدّ ضوضاء متكيّف لكل bin، طرح طيفي + مزج Wiener، تنعيم تكراري 3-tap، تنعيم زمني (فتح/غلق)، وأرضية كسب ضد الضوضاء الموسيقية. كل المخازن تُنشأ مرة واحدة؛ process() بلا تخصيص.",
+        "سياق صوت واحد مشترك بين MediaMesh وMicFx والمحسّن (كانت حتى ثلاثة)، وdispose() لا يغلق سياقًا لا يملكه. البوابة/AGC تقيسان ما بعد التنقية، وsetStrength/setBypass/setGateThresholdDb تعمل حيًا دون إعادة بناء.",
+        "فشل آمن: فشل وحدة الـ worklet يبني EQ + بوابة + limiter، وأي فشل في attach() يعيد المسار الخام. مفتاح Adaptive noise filter وشريط قوة جديدان في إعدادات المايك؛ micVersion الافتراضي ev2.0."
+      ]
+    },
+    {
+      "date": "2026-11-11",
+      "ts": 1763887200000,
+      "library": "ping-op",
+      "version": "1.5.0",
+      "kind": "feature",
+      "titleEn": "PING OP 1.5.0 — need-aware packet scheduler",
+      "titleAr": "PING OP 1.5.0 — جدولة حزم واعية بالحاجة",
+      "pointsEn": [
+        "New createPacketScheduler() in the pure core: each probe is a packet with a priority and a deadline in a small bounded queue. plan({ need, budget }) randomly picks the packets worth sending now, defers the rest, prune() deletes expired packets, and cancelAll() drops work that is no longer useful (calm link, stop).",
+        "The client derives need from quality, trend, loss and jitter: a stable link sends one keep-alive packet per round instead of two fixed probes, while a degrading link can spend the full tiny budget (up to 3). Deferred packets carry queuedAt/packetId so the server can reject stale probes instead of reporting a meaningless RTT.",
+        "getPingModel().packets and getPingPacketStats() expose { queued, sent, deferrals, dropped, expired, cancelled }. Server hardening: payload sanitization, O(1) rate limiting, traffic counters and nosniff. public/js/ping-op/* and public/js/ping.js use the same v1.5 engine."
+      ],
+      "pointsAr": [
+        "جديد createPacketScheduler() في المحرك النقي: كل مسبار حزمة لها أولوية وموعد انتهاء في طابور صغير محدود. plan({ need, budget }) يختار عشوائيًا الحزم المفيدة الآن ويؤجّل الباقي، وprune() يحذف المنتهية، وcancelAll() يطرح ما لم يعد مفيدًا (رابط هادئ، إيقاف).",
+        "العميل يشتق الحاجة من الجودة والاتجاه والفقدان والاهتزاز: الرابط المستقر يرسل حزمة إبقاء واحدة في الجولة بدل مسبارين ثابتين، والمتدهور يصرف الميزانية الصغيرة كاملة (حتى 3). الحزم المؤجّلة تحمل queuedAt/packetId ليرفض الخادم المسبار المتقادم بدل إبلاغ RTT لا معنى له.",
+        "getPingModel().packets وgetPingPacketStats() يعرضان { queued, sent, deferrals, dropped, expired, cancelled }. تقوية الخادم: تطهير الحمولات، حدّ معدل O(1)، عدّادات حركة وnosniff. public/js/ping-op/* وpublic/js/ping.js يستعملان نفس محرك v1.5."
+      ]
+    },
     {
       "date": "2026-11-10",
       "ts": 1763800900000,

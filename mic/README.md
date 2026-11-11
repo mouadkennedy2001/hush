@@ -2,7 +2,7 @@
 
 > مكتبة كاملة من الصفر لتصفية المايك وتقليل الضجيج وتحسين جودة الصوت بأقل موارد ممكنة.
 > تُبنى على إصدارات متطوّرة: **`mic_ev1` → `mic_ev1.1` → … → `mic_ev1.9` → `mic_ev2`** (نفس النمط يتكرر بعد ev2).
-> الإصدار العامل الآن هو **`mic_ev1`** مع تحسينات **ev1.1 (أقصى نقاوة + أمن)** حية في زمن التشغيل (انظر `mic/CHANGELOG.md`). بقية الإصدارات هي خطة التطوّر الموثقة هنا.
+> الإصدار العامل الآن هو **`mic_ev2` (2.0.0)**: قامع STFT حقيقي داخل سلسلة الـ AudioWorklet، بسياق صوتي مشترك واحد وبفشل آمن (انظر `mic/mic_ev2/README.md` و`mic/CHANGELOG.md`). بقية الإصدارات موثقة كخطة تطوّر.
 
 ## كيف يعمل؟ (طريقة عملها كاملة)
 
@@ -42,14 +42,18 @@
 mic/
   README.md           ← هذا الملف (نظرة شاملة)
   CHANGELOG.md        ← كل إصدار وتغييره
-  mic_ev1/            ← الإصدار العامل الآن
+  mic_ev1/            ← الأساس (مرجع تاريخي)
     README.md
     src/mic-enhancer.js          (واجهة الإدماج: create(config))
     src/spectral.js              (محرك القامع الطيفي)
     src/gate-agc.js              (بوابة + ضاغط + AGC)
     worklet/noise-suppress-processor.js  (AudioWorkletProcessor)
   mic_ev1.1/ … mic_ev1.9/        ← إضافات تراكمية (README + CHANGELOG لكل إصدار)
-  mic_ev2/                     ← قفزة Major: نموذج AI خفيف + fallback إلى ev1
+  mic_ev2/                     ← الإصدار العامل الآن: STFT (512/128) + Worklet في السلسلة
+    src/mic-dsp.js             (FFT + StftNoiseSuppressor نقي وقابل للاختبار)
+    src/mic-enhancer.js        (واجهة الإدماج + fallback)
+    src/mic-settings.js        (تطهير الإعدادات)
+    worklet/noise-suppress-processor.js
   presets/             ← إعدادات جاهزة (هدوء، جماعة، سفر، للأطفال)
 ```
 
@@ -58,7 +62,7 @@ mic/
 ```js
 // في public/js/room/media.js (موجود أصلاً — يختار تلقائياً):
 import { createMicEnhancer } from './mic-enhancer.js';
-const enhancer = createMicEnhancer({ strength: 0.8 });   // 0..1
+const enhancer = createMicEnhancer({ strength: 0.85 });  // 0..1
 const track = await enhancer.attach(rawStream);          // يعيد مساراً بروابط العمل
 ```
 

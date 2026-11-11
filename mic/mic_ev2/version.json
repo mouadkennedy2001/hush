@@ -1,6 +1,9 @@
 {
-  "version": "",
-  "status": "planned",
-  "basedOn": "2",
-  "entrypoint": "src/mic-enhancer.js"
+  "version": "2.0.0",
+  "status": "active",
+  "basedOn": "1.2",
+  "entrypoint": "src/mic-enhancer.js",
+  "dsp": "src/mic-dsp.js",
+  "worklet": "worklet/noise-suppress-processor.js",
+  "released": "2026-11-11"
 }

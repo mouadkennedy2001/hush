@@ -123,7 +123,7 @@ test('PING OP 1.1: trend/health and sanitized client reports', () => {
   assert.equal(op.getTrend(), 'stable');
   for (let i = 0; i < 5; i += 1) op.sample(50 + i * 2);
   const health = op.getHealth();
-  assert.equal(health.version, '1.4.0');
+  assert.equal(health.version, '1.5.0');
   assert.ok(['improving', 'worsening', 'stable'].includes(health.trend));
   assert.equal(typeof health.healthy, 'boolean');
   const clean = sanitizeStatsReport({ current: '42', avg: 50, median: 40, jitter: 5, lossRate: 2, score: 90, quality: 'good', samplesCount: 10 });

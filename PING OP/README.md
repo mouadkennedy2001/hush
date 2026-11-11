@@ -1,4 +1,4 @@
-# PING OP — مكتبة تحسين ping السيرفر (ping v1.4)
+# PING OP — مكتبة تحسين ping السيرفر (ping v1.5)
 
 > **الاسم:** PING OP — OP اختصار Optimizer (المحسّن). الاسم العربي للواجهة: **تحسين البنق** (Ping Optimizer). المجلد يبقى `PING OP` كاسم تقني، والشارة العربية تظهر بجانب البنق في الغرف والخوادم.
 > مكتبة جديدة مكتوبة من الصفر بالكامل — لا تعتمد على أي مكتبة خارجية.
@@ -17,7 +17,11 @@
 
 PING OP v1.0 يحلها بثلاث أفكار بسيطة لكنها فعالة:
 
-- **2 مسبارات متوازية في كل جولة، نأخذ الأدنى (الأفضل).**
+- **جدولة حزم واعية بالحاجة (v1.5):** كل مسبار «حزمة» لها أولوية وموعد
+  انتهاء. تُرسل الآن الحزم المفيدة فقط، والباقي يُؤجَّل ثم **يُحذف** إن لم
+  يعد مفيدًا أو انتهت صلاحيته — رابط هادئ يرسل حزمة إبقاء واحدة، والرابط
+  المتدهور يستطيع صرف الميزانية الصغيرة كاملة.
+- **حتى 3 مسبارات متوازية في كل جولة (غالبًا 1)، نأخذ الأدنى (الأفضل).**
 - **القيمة المعروضة = أدنى 4 جولات أخيرة** — الانخفاض يظهر فورًا،
   والارتفاع العابر لا يسمم الرقم.
 - **دورة تكيّفية:** جيد 3s / مقبول 2s / ضعيف 1.2s / غير متصل 0.9s.
@@ -28,17 +32,21 @@ PING OP v1.0 يحلها بثلاث أفكار بسيطة لكنها فعالة:
 
 ```
 [الواجهة: كل دورة]
-   ├─ مسبار 1 ── ping:request ──┐
-     (monotonic clock)           ▼
-   └─ مسبار 2 ── ping:request ──> [الخادم: PING OP/server.js يعيد t/seq/serverTime]
-                                  │  (rate-limit 5/s لكل سوكت)
-                                  ▼
-        [PING OP/core: min(مسبارين) -> sample()]
-                                  │
-                                  ▼
-        [العرض: min(آخر 4 جولات) + جودة + اهتزاز + فقدان + نتيجة 0..100]
-                                  │
-                    [الواجهة: badge + sparkline عند ظهور اللوحة فقط]
+   ├─ fillAndPlan(): طابور حزم صغير + need من الجودة/الاتجاه/الفقدان
+   │     ├─ حزمة إبقاء (أولوية 1) ── ping:request ──┐
+   │     └─ حزم إضافية عند الحاجة (حتى 3) ──────────┤
+   │        والباقي مؤجَّل بموعد انتهاء               ▼
+   │                    [الخادم: PING OP/server.js يعيد t/seq/serverTime]
+   │                     │  (rate-limit O(1) + رفض المسبار المتقادم)
+   │                     ▼
+   │      [PING OP/core: min(الحزم المُرسلة) -> sample()]
+   │                     │
+   │                     ▼
+   │      [العرض: min(آخر 4 جولات) + جودة + اهتزاز + فقدان + نتيجة 0..100]
+   │                     │
+   └──── prune/cancelAll: حذف الحزم المؤجَّلة غير المفيدة
+                         ▼
+             [الواجهة: badge + sparkline عند ظهور اللوحة فقط]
 ```
 
 **الخادم (server.js):**
@@ -64,7 +72,7 @@ PING OP v1.0 يحلها بثلاث أفكار بسيطة لكنها فعالة:
 
 ```
 PING OP/
-  package.json          ← ping-op v1.4.0 (ESM, بلا dependencies)
+  package.json          ← ping-op v1.5.0 (ESM, بلا dependencies)
   version.json          ← الإصدار + الحالة (active)
   README.md             ← هذا الملف
   CHANGELOG.md          ← سجل التحديثات
@@ -87,9 +95,16 @@ pingOp.attach(io);                  // socket ping:request
 app.get('/api/ping', (req, res) => pingOp.httpHandler(req, res));
 
 // الواجهة (public/js/ping.js — يستخدم نفس المحرك):
-import { createPingOp } from './ping-op/ping-op.js';
+import { createPingOp, createPacketScheduler } from './ping-op/ping-op.js';
 pingOp.sample(42);                  // ms
 const stats = pingOp.getStats();    // { current, jitter, lossRate, quality, score }
+
+// v1.5: جدولة الحزم — الأولوية والحاجة تقرران ما يُرسل الآن وما يُؤجَّل.
+const scheduler = createPacketScheduler({ maxQueue: 8, deferMs: 6000 });
+scheduler.enqueue({ priority: 1, ttlMs: 1500 });
+const plan = scheduler.plan({ need: 0.4, budget: 3 });
+plan.send;        // الحزم التي تُرسل الآن
+scheduler.stats(); // { queued, sent, deferrals, dropped, expired, cancelled }
 ```
 
 ## الضمانات
@@ -101,6 +116,6 @@ const stats = pingOp.getStats();    // { current, jitter, lossRate, quality, sco
 
 ## التطوير التالي (مخطط)
 
-- `ping v1.1`: per-connection stats لكل سوكت + endpoint `/api/ping/op` للإحصاءات المجمّعة.
-- `ping v1.2`: تنبيه عند تدهور الجودة (score < 40 لأكثر من 10 ثوانٍ).
+- `ping v1.6`: per-connection stats لكل سوكت + endpoint `/api/ping/op` للإحصاءات المجمّعة.
+- `ping v1.7`: تنبيه عند تدهور الجودة (score < 40 لأكثر من 10 ثوانٍ).
 - `ping v2.0`: تجميع عبر multiple relays (TURN) إن أضيفت لاحقًا.
