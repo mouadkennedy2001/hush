@@ -89,7 +89,7 @@ test('v13: server board upload + icon upload over HTTP (owner rules)', async () 
     const token = created.sessionToken;
 
     // Icon upload by owner works and is served from /uploads.
-    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
+    const png = await readFile(path.join(ROOT, 'botton', 'brave_yxRxXbI8S5.png'));
     const iconForm = new FormData();
     iconForm.append('file', new Blob([png], { type: 'image/png' }), 'icon.png');
     const iconRes = await fetch(`${url}/api/servers/${serverId}/icon?deviceId=${deviceId}`, {
@@ -102,9 +102,16 @@ test('v13: server board upload + icon upload over HTTP (owner rules)', async () 
     assert.equal(served.status, 200);
 
     // Non-owner icon upload is refused.
+    const strangerJoin = await fetch(`${url}/api/servers/${serverId}/join`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deviceId: 'device-v13-stranger', name: 'Stranger', inviteCode: created.server.inviteCode })
+    }).then((response) => response.json());
     const badIcon = new FormData();
     badIcon.append('file', new Blob([png], { type: 'image/png' }), 'icon.png');
-    const badRes = await fetch(`${url}/api/servers/${serverId}/icon?deviceId=device-v13-stranger`, { method: 'POST', body: badIcon });
+    const badRes = await fetch(`${url}/api/servers/${serverId}/icon?deviceId=device-v13-stranger`, {
+      method: 'POST', body: badIcon,
+      headers: { 'X-Session-Token': strangerJoin.sessionToken }
+    });
     assert.equal(badRes.status, 403);
 
     // Server custom sound upload (member) + relay shape.

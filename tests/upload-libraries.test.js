@@ -42,21 +42,44 @@ test('server upload: multipart channelId read after multer (was always 404)', as
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'UploadTest', ownerName: 'A', ownerDeviceId: 'device-upload-1', iconEmojiId: 'star' })
     });
-    const server = (await created.json()).server;
+    const createdData = await created.json();
+    const server = createdData.server;
+    const token = createdData.sessionToken;
     const channel = server.channels.find((c) => c.type === 'text');
+    const png = await readFile(path.join(ROOT, 'botton', 'brave_yxRxXbI8S5.png'));
     const fd = new FormData();
-    fd.append('file', new File(['hello'], 'image.png', { type: 'image/png' }));
+    fd.append('file', new File([png], 'image.png', { type: 'image/png' }));
     fd.append('channelId', channel.id);
-    const up = await fetch(`${url}/api/servers/${server.id}/upload?deviceId=device-upload-1&channelId=${channel.id}`, { method: 'POST', body: fd });
+    const headers = { 'X-Session-Token': token };
+    const up = await fetch(`${url}/api/servers/${server.id}/upload?deviceId=device-upload-1&channelId=${channel.id}`, { method: 'POST', body: fd, headers });
     assert.equal(up.status, 201, 'image upload succeeds with channelId in query+body');
     const body = await up.json();
     assert.match(body.url, new RegExp(`^/uploads/server-${server.id}/${channel.id}/`));
     assert.equal(body.name, 'image.png');
+    const uploadedFile = await fetch(`${url}${body.url}`);
+    assert.equal(uploadedFile.status, 200);
+    assert.equal(uploadedFile.headers.get('content-disposition'), null, 'images remain displayable inline');
+    const textForm = new FormData();
+    textForm.append('file', new File(['plain text'], 'note.txt', { type: 'text/plain' }));
+    textForm.append('channelId', channel.id);
+    const textUpload = await fetch(`${url}/api/servers/${server.id}/upload?deviceId=device-upload-1&channelId=${channel.id}`, {
+      method: 'POST', body: textForm, headers
+    });
+    assert.equal(textUpload.status, 201);
+    const textBody = await textUpload.json();
+    const downloadedText = await fetch(`${url}${textBody.url}`);
+    assert.equal(downloadedText.status, 200);
+    assert.equal(downloadedText.headers.get('content-disposition'), 'attachment');
+    const forged = new FormData();
+    forged.append('file', new File(['<script>alert(1)</script>'], 'fake.png', { type: 'image/png' }));
+    forged.append('channelId', channel.id);
+    const rejected = await fetch(`${url}/api/servers/${server.id}/upload?deviceId=device-upload-1&channelId=${channel.id}`, { method: 'POST', body: forged, headers });
+    assert.equal(rejected.status, 415, 'file contents must match the declared image type');
     // Bad channel is rejected and the file is cleaned up.
     const fd2 = new FormData();
-    fd2.append('file', new File(['hello'], 'image.png', { type: 'image/png' }));
+    fd2.append('file', new File([png], 'image.png', { type: 'image/png' }));
     fd2.append('channelId', channel.id);
-    const bad = await fetch(`${url}/api/servers/${server.id}/upload?deviceId=device-upload-1&channelId=00000000-0000-0000-0000-000000000000`, { method: 'POST', body: fd2 });
+    const bad = await fetch(`${url}/api/servers/${server.id}/upload?deviceId=device-upload-1&channelId=00000000-0000-0000-0000-000000000000`, { method: 'POST', body: fd2, headers });
     assert.equal(bad.status, 404);
   } finally {
     await hush.stop();

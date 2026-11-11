@@ -121,6 +121,8 @@ to the browser.
 
 3. Start Hush. On first startup, local server metadata is copied to Supabase if the cloud has no server state, local server files are encrypted and migrated, and channel histories are migrated as they are opened. Once cloud state exists it is authoritative.
 
+Run `npm.cmd run check:supabase` to verify the environment, database tables, and private Storage bucket without printing credentials or changing cloud data. Run it before starting Hush; startup may migrate local server files to Supabase.
+
 The Supabase secret key is used only by the Node server. Server metadata and chat history are stored in the database; server uploads are AES-256-GCM encrypted before entering a private Storage bucket. Unreferenced files are marked by a daily scan and deleted after 30 days. Keep the encryption key in a secure backup—rotating or losing it without re-encrypting existing files makes those files unreadable. Room data remains local. This setup expects one Hush server process; it does not provide cross-instance write coordination or end-to-end encryption for chat.
 
 Example:

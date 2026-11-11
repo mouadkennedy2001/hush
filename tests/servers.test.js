@@ -31,7 +31,9 @@ test('servers are separate from rooms: permanent, own chat, invite link', async 
       body: JSON.stringify({ name: 'Friends', ownerName: 'Ahmed', ownerDeviceId: 'device-server-1', iconEmojiId: 'robot' })
     });
     assert.equal(created.status, 201);
-    server = (await created.json()).server;
+    const createdData = await created.json();
+    server = createdData.server;
+    const ownerToken = createdData.sessionToken;
     assert.ok(server.id.startsWith('srv_'));
     assert.ok(typeof server.inviteCode === 'string' && server.inviteCode.length === 10, 'invite is 10-char crypto code (A5)');
     assert.equal(server.channels.length, 2);
@@ -55,6 +57,7 @@ test('servers are separate from rooms: permanent, own chat, invite link', async 
       body: JSON.stringify({ deviceId: 'device-nomember1', name: 'Bob', inviteCode: server.inviteCode })
     });
     assert.equal(joinedBob.status, 200);
+    const bobToken = (await joinedBob.json()).sessionToken;
 
     // Server chat over sockets (independent from room chat)
     const alice = ioClient(url, { transports: ['websocket'], forceNew: true });
@@ -84,18 +87,23 @@ test('servers are separate from rooms: permanent, own chat, invite link', async 
 
       // N3/A14: member can NO LONGER add a channel (owner-only policy).
       const addedAsMember = await fetch(`${url}/api/servers/${server.id}/channels`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Session-Token': bobToken },
         body: JSON.stringify({ name: 'random', type: 'text', deviceId: 'device-nomember1' })
       });
       assert.equal(addedAsMember.status, 403, 'member must not add channels (owner-only)');
+      const withoutToken = await fetch(`${url}/api/servers/${server.id}/channels`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'unauthorized', type: 'text', deviceId: 'device-server-1' })
+      });
+      assert.equal(withoutToken.status, 401, 'deviceId alone is not a server session');
       // Owner CAN add a channel (REST), owner regenerates invite
       const added = await fetch(`${url}/api/servers/${server.id}/channels`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Session-Token': ownerToken },
         body: JSON.stringify({ name: 'random', type: 'text', deviceId: 'device-server-1' })
       });
       assert.equal(added.status, 201);
       const regen = await fetch(`${url}/api/servers/${server.id}/regenerate-invite`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Session-Token': ownerToken },
         body: JSON.stringify({ deviceId: 'device-server-1' })
       });
       assert.equal(regen.status, 200);
@@ -164,6 +172,33 @@ test('rooms and servers are separate pages/systems', async () => {
   const roomCss = await readFile(path.join(PUBLIC, 'css', 'room.css'), 'utf8');
   assert.match(roomCss, /minmax\(56px/, 'soundboard grid does not overlap');
   assert.match(roomCss, /max-height: 42vh/, 'soundboard panel is compact and scrolls');
+});
+
+test('Socket.IO rejects browser connections from a different Origin', async () => {
+  const fs = await import('node:fs/promises');
+  const os = await import('node:os');
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'hush-origin-'));
+  const hush = await createHushServer({
+    port: 0,
+    host: '127.0.0.1',
+    dataDir: path.join(dir, 'data'),
+    uploadsDir: path.join(dir, 'uploads')
+  });
+  const address = await hush.start();
+  const url = `http://127.0.0.1:${address.port}`;
+  const socket = ioClient(url, {
+    transports: ['websocket'],
+    forceNew: true,
+    reconnection: false,
+    extraHeaders: { Origin: 'https://attacker.example' }
+  });
+  try {
+    await assert.rejects(onceConnect(socket));
+  } finally {
+    socket.disconnect();
+    await hush.stop();
+    await fs.rm(dir, { recursive: true, force: true });
+  }
 });
 
 test('server desktop mention notifications use the shared opt-in setting', async () => {

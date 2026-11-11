@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 import express from 'express';
 import multer from 'multer';
+import { fileTypeFromFile } from 'file-type';
 import { Server as SocketServer } from 'socket.io';
 
 import { RoomManager, formatCode, isValidCode, normalizeCode } from './rooms.js';
@@ -73,6 +74,39 @@ function cleanUploadName(name) {
     .replace(/[\u0000-\u001f\u007f]/g, '')
     .trim()
     .slice(0, 120) || 'File';
+}
+
+const UPLOAD_MIME_BY_EXTENSION = new Map([
+  ['.png', ['image/png']], ['.jpg', ['image/jpeg']], ['.jpeg', ['image/jpeg']],
+  ['.gif', ['image/gif']], ['.webp', ['image/webp']], ['.avif', ['image/avif']],
+  ['.pdf', ['application/pdf']], ['.zip', ['application/zip']],
+  ['.mp3', ['audio/mpeg']], ['.wav', ['audio/wav', 'audio/x-wav']],
+  ['.ogg', ['audio/ogg']], ['.oga', ['audio/ogg']], ['.opus', ['audio/ogg', 'audio/opus']],
+  ['.m4a', ['audio/mp4', 'audio/x-m4a']], ['.webm', ['video/webm', 'audio/webm']]
+]);
+const INLINE_UPLOAD_EXTENSION = /\.(?:png|jpe?g|gif|webp|avif|mp3|wav|ogg|oga|opus|m4a|webm)$/i;
+
+async function verifiedUploadMime(file, allowedExtensions, allowedMimes) {
+  const extension = path.extname(file.originalname).toLowerCase();
+  if (!allowedExtensions.has(extension)) return null;
+
+  const detected = await fileTypeFromFile(file.path);
+  if (detected) {
+    const acceptedForExtension = UPLOAD_MIME_BY_EXTENSION.get(extension) || [];
+    if (!acceptedForExtension.includes(detected.mime) || !allowedMimes.has(detected.mime)) return null;
+    return detected.mime;
+  }
+
+  if (!['.txt', '.md', '.csv'].includes(extension)) return null;
+  const bytes = await fs.readFile(file.path);
+  if (bytes.includes(0)) return null;
+  try {
+    new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    return null;
+  }
+  const mime = extension === '.md' ? 'text/markdown' : extension === '.csv' ? 'text/csv' : 'text/plain';
+  return allowedMimes.has(mime) ? mime : null;
 }
 
 async function migrateLocalServerFiles(uploadsDir, serverStore) {
@@ -146,6 +180,13 @@ export async function createHushServer({
     const { deviceId, via } = sessions.resolve({ sessionToken: token, deviceId: fallbackDeviceId, serverId });
     return via === 'none' ? '' : deviceId;
   };
+  const requireServerSession = (req, res, next) => {
+    const token = req.get('X-Session-Token') || req.body?.sessionToken || '';
+    const session = sessions.verify(token, req.params.id);
+    if (!session) return res.status(401).json({ error: 'session-required' });
+    req.serverSession = session;
+    next();
+  };
   const attachParams = { rooms, servers, sessions };
 
   const app = express();
@@ -159,7 +200,17 @@ export async function createHushServer({
     pingInterval: 5000,
     pingTimeout: 8000,
     transports: ['websocket', 'polling'],
-    cors: { origin: false }
+    cors: { origin: false },
+    allowRequest(req, callback) {
+      const origin = req.headers.origin;
+      if (!origin) return callback(null, true);
+      try {
+        const requestHost = req.headers.host;
+        callback(null, Boolean(requestHost) && new URL(origin).host.toLowerCase() === requestHost.toLowerCase());
+      } catch {
+        callback(null, false);
+      }
+    }
   });
 
   // PING OP socket echo lives in the library; realtime owns everything else.
@@ -447,7 +498,7 @@ export async function createHushServer({
   });
 
   const leaveLimit = rateLimiter({ windowMs: 60_000, max: 20 });
-  app.post('/api/servers/:id/leave', leaveLimit, async (req, res) => {
+  app.post('/api/servers/:id/leave', leaveLimit, requireServerSession, async (req, res) => {
     // A7/H2: leave must evict live sockets, not just mutate the DB.
     const actor = reqDeviceId(req, req.body?.deviceId, req.params.id);
     const ok = await servers.leave(req.params.id, actor || req.body?.deviceId);
@@ -463,14 +514,14 @@ export async function createHushServer({
     res.json({ ok: true });
   });
 
-  app.post('/api/servers/:id/regenerate-invite', serverLimit, async (req, res) => {
+  app.post('/api/servers/:id/regenerate-invite', serverLimit, requireServerSession, async (req, res) => {
     const actor = reqDeviceId(req, req.body?.deviceId, req.params.id);
     const server = await servers.regenerateInvite(req.params.id, actor || req.body?.deviceId);
     if (!server) return res.status(403).json({ error: 'not-admin' });
     res.json({ server: servers.publicSummary(server, actor || req.body?.deviceId) });
   });
 
-  app.patch('/api/servers/:id', serverLimit, async (req, res) => {
+  app.patch('/api/servers/:id', serverLimit, requireServerSession, async (req, res) => {
     const actor = reqDeviceId(req, req.body?.deviceId, req.params.id);
     const updated = await servers.updateSettings(req.params.id, actor || req.body?.deviceId, {
       name: req.body?.name, description: req.body?.description, iconEmojiId: req.body?.iconEmojiId,
@@ -485,7 +536,7 @@ export async function createHushServer({
     res.json({ server: servers.publicSummary(updated, actor || req.body?.deviceId) });
   });
 
-  app.post('/api/servers/:id/transfer', serverLimit, async (req, res) => {
+  app.post('/api/servers/:id/transfer', serverLimit, requireServerSession, async (req, res) => {
     // N1/A16: ownership transfer for orphaned servers.
     const actor = reqDeviceId(req, req.body?.deviceId, req.params.id);
     const updated = await servers.transferOwnership(req.params.id, actor || req.body?.deviceId, req.body?.toDeviceId);
@@ -498,7 +549,7 @@ export async function createHushServer({
     res.json({ server: servers.publicSummary(updated, actor || req.body?.deviceId) });
   });
 
-  app.post('/api/servers/:id/kick', serverLimit, async (req, res) => {
+  app.post('/api/servers/:id/kick', serverLimit, requireServerSession, async (req, res) => {
     const actor = reqDeviceId(req, req.body?.deviceId, req.params.id);
     const targetDeviceId = cleanDeviceId(req.body?.targetDeviceId);
     const ok = await servers.kick(req.params.id, actor || req.body?.deviceId, targetDeviceId);
@@ -517,7 +568,7 @@ export async function createHushServer({
     res.json({ ok: true, server: servers.publicSummary(server, actor || req.body?.deviceId) });
   });
 
-  app.post('/api/servers/:id/ban', serverLimit, async (req, res) => {
+  app.post('/api/servers/:id/ban', serverLimit, requireServerSession, async (req, res) => {
     const actor = reqDeviceId(req, req.body?.deviceId, req.params.id);
     const targetDeviceId = cleanDeviceId(req.body?.targetDeviceId);
     const ban = await servers.ban(req.params.id, actor || req.body?.deviceId, targetDeviceId, req.body?.targetName, req.body?.minutes);
@@ -534,7 +585,7 @@ export async function createHushServer({
     res.json({ ok: true, ban, server: servers.publicSummary(server, actor || req.body?.deviceId) });
   });
 
-  app.post('/api/servers/:id/unban', serverLimit, async (req, res) => {
+  app.post('/api/servers/:id/unban', serverLimit, requireServerSession, async (req, res) => {
     const actor = reqDeviceId(req, req.body?.deviceId, req.params.id);
     const ok = await servers.unban(req.params.id, actor || req.body?.deviceId, req.body?.targetDeviceId);
     if (!ok) return res.status(403).json({ error: 'not-admin' });
@@ -542,7 +593,7 @@ export async function createHushServer({
   });
 
   const historyLimit = rateLimiter({ windowMs: 60_000, max: 60 });
-  app.get('/api/servers/:id/history', historyLimit, async (req, res) => {
+  app.get('/api/servers/:id/history', historyLimit, requireServerSession, async (req, res) => {
     const server = servers.get(req.params.id);
     if (!server) return res.status(404).json({ error: 'server-not-found' });
     const viewer = reqDeviceId(req, req.query?.deviceId, server.id) || cleanDeviceId(req.query?.deviceId);
@@ -555,7 +606,7 @@ export async function createHushServer({
     res.json({ ok: true, messages });
   });
 
-  app.post('/api/servers/:id/channels', serverLimit, async (req, res) => {
+  app.post('/api/servers/:id/channels', serverLimit, requireServerSession, async (req, res) => {
     const name = cleanChannelName(req.body?.name);
     if (!name) return res.status(400).json({ error: 'invalid-channel' });
     const actor = reqDeviceId(req, req.body?.deviceId || req.body?.ownerDeviceId, req.params.id);
@@ -575,7 +626,7 @@ export async function createHushServer({
     res.status(201).json({ channel, server: servers.publicSummary(updated, actor || req.body?.deviceId || req.body?.ownerDeviceId) });
   });
 
-  app.patch('/api/servers/:id/channels/:channelId', serverLimit, async (req, res) => {
+  app.patch('/api/servers/:id/channels/:channelId', serverLimit, requireServerSession, async (req, res) => {
     if (!isValidChannelId(req.params.channelId)) return res.status(404).json({ error: 'channel-not-found' });
     const actor = reqDeviceId(req, req.body?.deviceId, req.params.id);
     const channel = await servers.renameChannel(req.params.id, req.params.channelId, req.body?.name, actor || req.body?.deviceId);
@@ -590,7 +641,7 @@ export async function createHushServer({
   });
 
   const channelDeleteLimit = rateLimiter({ windowMs: 60_000, max: 20 });
-  app.delete('/api/servers/:id/channels/:channelId', channelDeleteLimit, async (req, res) => {
+  app.delete('/api/servers/:id/channels/:channelId', channelDeleteLimit, requireServerSession, async (req, res) => {
     if (!isValidChannelId(req.params.channelId)) return res.status(404).json({ error: 'channel-not-found' });
     const actor = reqDeviceId(req, req.body?.deviceId, req.params.id);
     const removed = await servers.deleteChannel(req.params.id, req.params.channelId, actor || req.body?.deviceId);
@@ -606,7 +657,7 @@ export async function createHushServer({
   });
 
   const serverDeleteLimit = rateLimiter({ windowMs: 60_000, max: 10 });
-  app.delete('/api/servers/:id', serverDeleteLimit, async (req, res) => {
+  app.delete('/api/servers/:id', serverDeleteLimit, requireServerSession, async (req, res) => {
     const actor = reqDeviceId(req, req.body?.deviceId, req.params.id);
     const removed = await servers.deleteServer(req.params.id, actor || req.body?.deviceId);
     if (!removed) {
@@ -698,7 +749,7 @@ export async function createHushServer({
     await fs.unlink(file.path);
   }
 
-  app.post('/api/servers/:id/upload', serverUploadLimit, async (req, res, next) => {
+  app.post('/api/servers/:id/upload', serverUploadLimit, requireServerSession, async (req, res, next) => {
     const serverId = String(req.params.id || '');
     if (!isValidServerId(serverId)) { req.resume(); return res.status(404).json({ error: 'server-not-found' }); }
     const server = servers.get(serverId);
@@ -707,7 +758,7 @@ export async function createHushServer({
     // BEFORE multer parses the multipart body). channelId is read AFTER
     // multer — req.body is empty before that, so reading it here always
     // failed (the "upload fails" bug).
-    const deviceId = reqDeviceId(req, req.query?.deviceId, serverId) || cleanDeviceId(req.query?.deviceId);
+    const deviceId = req.serverSession.deviceId;
     if (!deviceId || !servers.isMember(server, deviceId) || servers.isBanned(server, deviceId)) {
       req.resume();
       return res.status(403).json({ error: 'not-member' });
@@ -731,6 +782,15 @@ export async function createHushServer({
       const channel = server.channels.find((c) => c.id === channelId && c.type === 'text');
       if (!channel) { await cleanup(); return res.status(404).json({ error: 'channel-not-found' }); }
       if (!req.file) return res.status(400).json({ error: 'missing-file' });
+      let verifiedMime;
+      try {
+        verifiedMime = await verifiedUploadMime(req.file, UPLOAD_EXTENSIONS, UPLOAD_MIME_TYPES);
+      } catch (error) {
+        await cleanup();
+        return next(error);
+      }
+      if (!verifiedMime) { await cleanup(); return res.status(415).json({ error: 'unsupported-file-type' }); }
+      req.file.mimetype = verifiedMime;
       // Quota: refuse if this server already exceeds its storage budget.
       let used;
       try {
@@ -806,14 +866,25 @@ export async function createHushServer({
     }
     req.roomCode = code;
 
-    upload.single('file')(req, res, (error) => {
+    upload.single('file')(req, res, async (error) => {
       if (error) return next(error);
       if (!req.file) return res.status(400).json({ error: 'missing-file' });
+      let verifiedMime;
+      try {
+        verifiedMime = await verifiedUploadMime(req.file, UPLOAD_EXTENSIONS, UPLOAD_MIME_TYPES);
+      } catch (error) {
+        try { await fs.unlink(req.file.path); } catch (cleanupError) { return next(cleanupError); }
+        return next(error);
+      }
+      if (!verifiedMime) {
+        await fs.unlink(req.file.path);
+        return res.status(415).json({ error: 'unsupported-file-type' });
+      }
       res.status(201).json({
         url: `/uploads/${code}/${req.file.filename}`,
         name: cleanUploadName(req.file.originalname),
         size: req.file.size,
-        mime: req.file.mimetype
+        mime: verifiedMime
       });
     });
   });
@@ -880,6 +951,23 @@ export async function createHushServer({
         try { if (imageFile) await fs.unlink(imageFile.path); } catch {}
         return res.status(400).json({ error: 'missing-file' });
       }
+      let audioMime;
+      let imageMime = null;
+      try {
+        audioMime = await verifiedUploadMime(req.file, BOARD_AUDIO_EXTENSIONS, BOARD_AUDIO_MIME_TYPES);
+        if (imageFile) imageMime = await verifiedUploadMime(imageFile, BOARD_IMAGE_EXTENSIONS, BOARD_IMAGE_MIME_TYPES);
+      } catch (error) {
+        try { await fs.unlink(req.file.path); } catch (cleanupError) { return next(cleanupError); }
+        try { if (imageFile) await fs.unlink(imageFile.path); } catch (cleanupError) { return next(cleanupError); }
+        return next(error);
+      }
+      if (!audioMime || (imageFile && !imageMime)) {
+        try { await fs.unlink(req.file.path); } catch {}
+        try { if (imageFile) await fs.unlink(imageFile.path); } catch {}
+        return res.status(415).json({ error: 'unsupported-file-type' });
+      }
+      req.file.mimetype = audioMime;
+      if (imageFile) imageFile.mimetype = imageMime;
       try {
         const room = await rooms.getOrCreate(code);
         if ((room.customSounds || []).length >= MAX_CUSTOM_SOUNDS_PER_ROOM) {
@@ -952,17 +1040,29 @@ export async function createHushServer({
     }
   });
 
-  app.post('/api/servers/:id/icon', serverLimit, async (req, res, next) => {
+  app.post('/api/servers/:id/icon', serverLimit, requireServerSession, async (req, res, next) => {
     const serverId = String(req.params.id || '');
     if (!isValidServerId(serverId)) { req.resume(); return res.status(404).json({ error: 'server-not-found' }); }
     const server = servers.get(serverId);
     if (!server) { req.resume(); return res.status(404).json({ error: 'server-not-found' }); }
-    const actor = reqDeviceId(req, req.query?.deviceId, serverId) || cleanDeviceId(req.query?.deviceId);
+    const actor = req.serverSession.deviceId;
     if (!actor || !servers.isOwner(server, actor)) { req.resume(); return res.status(403).json({ error: 'not-admin' }); }
     req.serverId = serverId;
     serverIconUpload.single('file')(req, res, async (error) => {
       if (error) return next(error);
       if (!req.file) return res.status(400).json({ error: 'missing-file' });
+      let verifiedMime;
+      try {
+        verifiedMime = await verifiedUploadMime(req.file, BOARD_IMAGE_EXTENSIONS, BOARD_IMAGE_MIME_TYPES);
+      } catch (error) {
+        try { await fs.unlink(req.file.path); } catch (cleanupError) { return next(cleanupError); }
+        return next(error);
+      }
+      if (!verifiedMime) {
+        await fs.unlink(req.file.path);
+        return res.status(415).json({ error: 'unsupported-file-type' });
+      }
+      req.file.mimetype = verifiedMime;
       // Remove a previous icon with a different extension.
       try {
         const dir = path.join(uploadsDir, `server-${serverId}`);
@@ -997,12 +1097,12 @@ export async function createHushServer({
   /* -------- Permanent server custom sounds (audio + optional cover) -------- */
   const serverBoardUpload = boardUploadFields((req) => path.join(uploadsDir, `server-${req.serverId}`, 'board'));
 
-  app.post('/api/servers/:id/soundboard', serverLimit, async (req, res, next) => {
+  app.post('/api/servers/:id/soundboard', serverLimit, requireServerSession, async (req, res, next) => {
     const serverId = String(req.params.id || '');
     if (!isValidServerId(serverId)) { req.resume(); return res.status(404).json({ error: 'server-not-found' }); }
     const server = servers.get(serverId);
     if (!server) { req.resume(); return res.status(404).json({ error: 'server-not-found' }); }
-    const actor = reqDeviceId(req, req.query?.deviceId, serverId) || cleanDeviceId(req.query?.deviceId);
+    const actor = req.serverSession.deviceId;
     if (!actor || !servers.isMember(server, actor) || servers.isBanned(server, actor)) {
       req.resume();
       return res.status(403).json({ error: 'not-member' });
@@ -1018,6 +1118,21 @@ export async function createHushServer({
       };
       if (imageFile && imageFile.size > MAX_BOARD_IMAGE_BYTES) { await cleanup(); return res.status(413).json({ error: 'limit_file_size' }); }
       if (!req.file) { await cleanup(); return res.status(400).json({ error: 'missing-file' }); }
+      let audioMime;
+      let imageMime = null;
+      try {
+        audioMime = await verifiedUploadMime(req.file, BOARD_AUDIO_EXTENSIONS, BOARD_AUDIO_MIME_TYPES);
+        if (imageFile) imageMime = await verifiedUploadMime(imageFile, BOARD_IMAGE_EXTENSIONS, BOARD_IMAGE_MIME_TYPES);
+      } catch (error) {
+        await cleanup();
+        return next(error);
+      }
+      if (!audioMime || (imageFile && !imageMime)) {
+        await cleanup();
+        return res.status(415).json({ error: 'unsupported-file-type' });
+      }
+      req.file.mimetype = audioMime;
+      if (imageFile) imageFile.mimetype = imageMime;
       if ((server.customSounds || []).length >= MAX_CUSTOM_SOUNDS_PER_SERVER) { await cleanup(); return res.status(409).json({ error: 'board-full' }); }
       try {
         await persistServerUpload(serverId, `board/${req.file.filename}`, req.file);
@@ -1074,6 +1189,7 @@ export async function createHushServer({
       if (!file) return res.status(404).end();
       res.setHeader('Content-Type', file.contentType);
       res.setHeader('Content-Length', file.buffer.length);
+      if (!INLINE_UPLOAD_EXTENSION.test(relativePath)) res.setHeader('Content-Disposition', 'attachment');
       res.setHeader('Cache-Control', 'private, max-age=3600');
       res.setHeader('X-Content-Type-Options', 'nosniff');
       res.setHeader(
@@ -1092,8 +1208,11 @@ export async function createHushServer({
     express.static(uploadsDir, {
       fallthrough: false,
       maxAge: '1h',
-      setHeaders(res) {
+      setHeaders(res, filePath) {
         res.setHeader('X-Content-Type-Options', 'nosniff');
+        if (!INLINE_UPLOAD_EXTENSION.test(filePath)) {
+          res.setHeader('Content-Disposition', 'attachment');
+        }
         res.setHeader(
           'Content-Security-Policy',
           "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'"
