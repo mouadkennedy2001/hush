@@ -35,6 +35,7 @@ export const DEFAULT_CONFIG = Object.freeze({
   gateHoldMs: 220,
   // STFT suppressor
   fftSize: 512,
+  // AudioWorklet renders 128-sample quanta; keep the DSP hop in sync.
   hopSize: 128,
   maxAttenuationDb: 30,
   // agc / clipper / limiter
@@ -59,6 +60,7 @@ function sanitizeConfig(raw = {}) {
   cfg.gateThresholdDb = Math.max(-60, Math.min(-20, Number(cfg.gateThresholdDb) || -42));
   cfg.gate = cfg.gate !== false;
   cfg.fftSize = [256, 512, 1024].includes(Number(cfg.fftSize)) ? Number(cfg.fftSize) : 512;
+  cfg.hopSize = 128;
   cfg.mode = MODES.has(cfg.mode) ? cfg.mode : 'voice';
   cfg.bypass = cfg.bypass === true;
   return cfg;

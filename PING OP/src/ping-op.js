@@ -46,7 +46,7 @@
  * No I/O, no timers, no DOM — unit-testable in plain Node.
  */
 
-export const PING_OP_VERSION = '1.5.0';
+export const PING_OP_VERSION = '1.5.1';
 export const PING_OP_NAME = 'ping-op';
 
 export const MAX_SAMPLES = 60;
@@ -57,6 +57,7 @@ export const EWMA_ALPHA = 0.25;
 export const JITTER_WINDOW = 12;
 export const SUSPENSION_GAP_MS = 30_000;
 export const MIN_INTERVAL_MS = 800;
+export const OFFLINE_LOSS_THRESHOLD = 3;
 
 // v1.5 packet scheduler limits. A "packet" is one ping probe candidate.
 // The queue is deliberately tiny: latency probes are only useful while they
@@ -97,6 +98,13 @@ export function qualityFor(ms) {
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, Number(value) || 0));
+}
+
+function boundedInteger(value, fallback, min, max) {
+  const number = Number(value);
+  return Number.isFinite(number)
+    ? Math.min(max, Math.max(min, Math.round(number)))
+    : fallback;
 }
 
 function median(values) {
@@ -263,6 +271,8 @@ export function createPacketScheduler({
 }
 
 export function createPingOp({ maxSamples = MAX_SAMPLES, displayWindow = DISPLAY_WINDOW } = {}) {
+  const safeMaxSamples = boundedInteger(maxSamples, MAX_SAMPLES, 1, MAX_SAMPLES);
+  const safeDisplayWindow = boundedInteger(displayWindow, DISPLAY_WINDOW, 1, safeMaxSamples);
   const samples = []; // successful RTTs in order
   const rounds = []; // min per round (for the displayed value)
   const probes = []; // 1 per probe (true = success)
@@ -270,6 +280,7 @@ export function createPingOp({ maxSamples = MAX_SAMPLES, displayWindow = DISPLAY
   let displayed = null;
   let ewma = null;
   let warmupDone = false;
+  let consecutiveLosses = 0;
   let lastArrivalMs = null;
   let lastIntervalMs = 3000;
 
@@ -282,15 +293,24 @@ export function createPingOp({ maxSamples = MAX_SAMPLES, displayWindow = DISPLAY
 
     if (ms == null || !Number.isFinite(ms)) {
       probes.push(false);
-      if (probes.length > maxSamples) probes.shift();
+      if (probes.length > safeMaxSamples) probes.shift();
+      consecutiveLosses += 1;
+      if (consecutiveLosses >= OFFLINE_LOSS_THRESHOLD) {
+        last = null;
+        displayed = null;
+        ewma = null;
+        rounds.length = 0;
+        warmupDone = false;
+      }
       return null;
     }
     const value = Math.max(0, Math.round(ms));
     last = value;
     samples.push(value);
-    if (samples.length > maxSamples) samples.shift();
+    if (samples.length > safeMaxSamples) samples.shift();
     probes.push(true);
-    if (probes.length > maxSamples) probes.shift();
+    if (probes.length > safeMaxSamples) probes.shift();
+    consecutiveLosses = 0;
 
     if (!warmupDone || resumed) {
       warmupDone = true;
@@ -299,7 +319,7 @@ export function createPingOp({ maxSamples = MAX_SAMPLES, displayWindow = DISPLAY
       ewma = value; // re-seed the moving average on the fresh era
     } else {
       rounds.push(value);
-      if (rounds.length > displayWindow) rounds.shift();
+      if (rounds.length > safeDisplayWindow) rounds.shift();
       displayed = Math.min(...rounds);
       ewma += EWMA_ALPHA * (value - ewma); // EWMA: recent rounds weigh more
     }
@@ -400,6 +420,7 @@ export function createPingOp({ maxSamples = MAX_SAMPLES, displayWindow = DISPLAY
     displayed = null;
     ewma = null;
     warmupDone = false;
+    consecutiveLosses = 0;
     lastArrivalMs = null;
     lastIntervalMs = 3000;
   }

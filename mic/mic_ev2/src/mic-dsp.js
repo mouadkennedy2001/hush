@@ -29,7 +29,7 @@
  * No DOM, no network, no timers.
  */
 
-export const MIC_DSP_VERSION = '2.0.0';
+export const MIC_DSP_VERSION = '2.0.1';
 
 const TAU = Math.PI * 2;
 
@@ -117,8 +117,15 @@ export class StftNoiseSuppressor {
     minGain = null,
     enabled = true
   } = {}) {
-    const size = Math.max(128, Math.min(1024, Number(fftSize) || 512));
-    const hop = Math.max(32, Math.min(size, Number(hopSize) || size / 4));
+    const requestedSize = Number(fftSize);
+    const boundedSize = Number.isFinite(requestedSize)
+      ? clamp(requestedSize, 128, 1024)
+      : 512;
+    const size = 2 ** Math.floor(Math.log2(boundedSize));
+    const requestedHop = Number(hopSize);
+    const hop = Math.round(Number.isFinite(requestedHop)
+      ? clamp(requestedHop, 32, size / 2)
+      : size / 4);
     this.sampleRate = Number(sampleRate) || 48000;
     this.fftSize = size;
     this.hop = hop;
@@ -127,12 +134,16 @@ export class StftNoiseSuppressor {
     this.re = new Float32Array(size);
     this.im = new Float32Array(size);
     this.window = new Float32Array(size);
-    // Periodic Hann: w[n] = 0.5 - 0.5 cos(2πn/N). With hop N/4 the squared
-    // windows sum to exactly 1.5, so the OLA normalisation is 1/1.5.
+    // Periodic Hann: w[n] = 0.5 - 0.5 cos(2πn/N).
     for (let i = 0; i < size; i += 1) {
       this.window[i] = 0.5 - 0.5 * Math.cos((TAU * i) / size);
     }
-    this.olaNorm = 1 / 1.5;
+    this.olaNorm = new Float32Array(hop);
+    for (let phase = 0; phase < hop; phase += 1) {
+      let weight = 0;
+      for (let i = phase; i < size; i += hop) weight += this.window[i] * this.window[i];
+      this.olaNorm[phase] = weight > 1e-8 ? 1 / weight : 0;
+    }
     this.inRing = new Float32Array(size);
     this.ola = new Float32Array(size);
     this.mag = new Float32Array(this.bins + 1);
@@ -290,7 +301,7 @@ export class StftNoiseSuppressor {
 
     // 6) Inverse FFT + Hann synthesis + overlap-add.
     this.fft.inverse(re, im);
-    for (let i = 0; i < n; i += 1) ola[i] += re[i] * win[i] * this.olaNorm;
+    for (let i = 0; i < n; i += 1) ola[i] += re[i] * win[i];
 
     // 7) Dry/wet ramp for click-free enable/disable, then emit one hop.
     const target = this.mixTarget;
@@ -299,7 +310,7 @@ export class StftNoiseSuppressor {
     let outEnergy = 0;
     for (let i = 0; i < hop; i += 1) {
       mix += mixStep;
-      const wet = ola[i];
+      const wet = ola[i] * this.olaNorm[i];
       const dry = input[i] || 0;
       const value = dry + (wet - dry) * mix;
       output[i] = value;

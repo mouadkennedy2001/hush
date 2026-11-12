@@ -72,7 +72,7 @@ PING OP v1.0 يحلها بثلاث أفكار بسيطة لكنها فعالة:
 
 ```
 PING OP/
-  package.json          ← ping-op v1.5.0 (ESM, بلا dependencies)
+  package.json          ← ping-op v1.5.1 (ESM, بلا dependencies)
   version.json          ← الإصدار + الحالة (active)
   README.md             ← هذا الملف
   CHANGELOG.md          ← سجل التحديثات

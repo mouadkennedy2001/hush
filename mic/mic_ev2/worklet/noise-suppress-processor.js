@@ -30,10 +30,11 @@ class HushNoiseSuppressProcessor extends AudioWorkletProcessor {
   constructor(options) {
     super();
     const opts = options?.processorOptions || {};
+    const fftSize = [256, 512, 1024].includes(Number(opts.fftSize)) ? Number(opts.fftSize) : 512;
     this.dsp = new StftNoiseSuppressor({
       sampleRate: opts.sampleRate || (typeof sampleRate !== 'undefined' ? sampleRate : 48000),
-      fftSize: opts.fftSize || 512,
-      hopSize: opts.hopSize || 128,
+      fftSize,
+      hopSize: 128,
       strength: opts.strength ?? 0.85,
       minGain: opts.minGain ?? null,
       enabled: opts.enabled !== false

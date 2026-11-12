@@ -6,7 +6,7 @@ import { createPingServer } from '../src/server.js';
 
 test('PING OP core: sampling, jitter, loss and score', () => {
   const op = createPingOp();
-  assert.equal(PING_OP_VERSION, '1.5.0');
+  assert.equal(PING_OP_VERSION, '1.5.1');
   assert.equal(qualityFor(40), 'good');
   assert.equal(qualityFor(120), 'fair');
   assert.equal(qualityFor(400), 'poor');
@@ -16,7 +16,7 @@ test('PING OP core: sampling, jitter, loss and score', () => {
   assert.equal(op.sample(48), 48);
   assert.equal(op.sample(44), 44);
   const stats = op.getStats();
-  assert.equal(stats.version, '1.5.0');
+  assert.equal(stats.version, '1.5.1');
   assert.equal(typeof stats.current, 'number');
   assert.equal(stats.min, 42);
   assert.equal(stats.max, 48);
@@ -142,9 +142,33 @@ test('PING OP server adapter: hardening + http handler shape', async () => {
   pingServer.httpHandler({}, fakeRes);
   assert.equal(fakeRes.payload.ok, true);
   assert.equal(fakeRes.payload.op, 'ping-op');
-  assert.equal(fakeRes.payload.version, '1.5.0');
+  assert.equal(fakeRes.payload.version, '1.5.1');
   assert.equal(fakeRes.headers['Cache-Control'], 'no-store');
-  assert.equal(fakeRes.headers['X-Ping-Op'], 'ping-op/1.5.0');
+  assert.equal(fakeRes.headers['X-Ping-Op'], 'ping-op/1.5.1');
+});
+
+test('PING OP marks the connection offline after repeated losses and re-anchors on recovery', () => {
+  const op = createPingOp();
+  op.sample(42);
+  op.sample(null);
+  op.sample(null);
+  assert.equal(op.getStats().current, 42, 'brief loss does not erase the last reading');
+  op.sample(null);
+  assert.equal(op.getStats().current, null);
+  assert.equal(op.getStats().avg, null);
+  assert.equal(op.getStats().quality, 'offline');
+
+  op.sample(75);
+  assert.equal(op.getStats().current, 75, 'recovery starts a fresh measurement window');
+  assert.equal(op.getStats().avg, 75);
+});
+
+test('PING OP clamps invalid sample-window options to a usable range', () => {
+  const op = createPingOp({ maxSamples: 0, displayWindow: 0 });
+  op.sample(50);
+  op.sample(60);
+  assert.equal(op.getStats().current, 60);
+  assert.equal(op.getStats().samplesCount, 1);
 });
 
 test('PING OP v1.5: packet scheduler sends a need-aware random subset', () => {

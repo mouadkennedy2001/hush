@@ -80,7 +80,20 @@ test('mic DSP: stationary noise is suppressed, speech is preserved', () => {
   const speechRatio = rms(speechOut) / rms(speechIn);
   assert.ok(noiseRatio < 0.6, `noise reduced (ratio ${noiseRatio.toFixed(3)})`);
   assert.ok(speechRatio > 0.75, `speech kept (ratio ${speechRatio.toFixed(3)})`);
-  assert.equal(MIC_DSP_VERSION, '2.0.0');
+  assert.equal(MIC_DSP_VERSION, '2.0.1');
+});
+
+test('mic DSP: invalid FFT sizes and hop settings stay valid and normalized', () => {
+  const suppressor = new StftNoiseSuppressor({ fftSize: 300, hopSize: 100 });
+  assert.equal(suppressor.fftSize, 256, 'FFT size is normalized to a power of two');
+  assert.equal(suppressor.hop, 100, 'valid bounded hops remain configurable');
+
+  const input = new Float32Array(suppressor.hop).fill(0.1);
+  const output = new Float32Array(suppressor.hop);
+  for (let frame = 0; frame < 20; frame += 1) suppressor.process(input, output);
+  assert.ok(output.every(Number.isFinite), 'processing does not produce invalid samples');
+  assert.ok(suppressor.olaNorm instanceof Float32Array);
+  assert.equal(suppressor.olaNorm.length, suppressor.hop);
 });
 
 test('mic settings: untrusted values are clamped and whitelisted', () => {

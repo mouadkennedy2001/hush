@@ -1,17 +1,40 @@
 # Hush
 
-Quiet rooms for text, voice, video, and screen sharing — styled with the Signal-inspired design system in [`DESIGN.md`](./DESIGN.md).
+Quiet rooms for text, voice, video, and screen sharing — styled with the Signal-inspired design system in [`DESIGN.md`](./DESIGN.md). Developed by **Void Studio**.
 
 No accounts, no build step. Open the page, pick a name, and share the room link.
 
-## Developer
+## Void Studio
 
-Built by **Zerouki Ahmed Mouad** (زروقي احمد معاذ).
+**Void Studio** is a software development team focused on creating secure, privacy-first communication tools. We believe in:
+
+- **Privacy by Design**: Minimal data collection, no persistent accounts
+- **Open Source**: All code is freely available and community-driven
+- **Simplicity**: Clean interfaces that just work
+- **Accessibility**: Everything works everywhere, for everyone
+
+### Void Studio Mission
+
+Create the most private, secure, and user-friendly communication platform that doesn't compromise on privacy or features.
+
+## Core Developer
+
+**Zerouki Ahmed Mouad** (زروقي احمد معاذ) - Lead Developer & Founder
 
 - GitHub: <https://github.com/mouadkennedy2001>
 - Instagram: <https://www.instagram.com/mouad_kennedy/>
+- Full-stack Programmer, Security Expert, UI/UX Designer
 
-## Features
+## Void Studio Edition Features
+
+Void Studio has enhanced Hush with additional features and improvements:
+
+- **Enhanced Design System**: Applied Signal-inspired design patterns with Void Studio refinements
+- **Void Studio Branding**: Complete Void Studio identity throughout the application
+- **Configuration Documentation**: Comprehensive server configuration in `error/server-config.json`
+- **Documentation Hub**: Centralized documentation in `error/README.md`
+
+## Core Features
 
 - **Giphy search (v12) + GIF links** — the emoji picker GIF tab searches Giphy (search / Trending / Random) through the server proxy `/api/gif/*`; the API key lives **only** on the server (`GIPHY_API_KEY` env or gitignored `.env`, see `.env.example`) and never reaches browser code. Any direct https `.gif` link (Tenor / anywhere) still renders inline, with a clickable fallback if it fails to load. Fixed: CSP blocked all https images, so pasted GIFs showed a tiny broken icon (the `error/` screenshot). In v12.1 there are also **dedicated GIF + sticker buttons beside the chat box** (separate menus, rooms + servers), GIFs render up to 340px and stickers up to 128px alone / 56px inline, sticker filter tabs are translated (Arabic in Arabic, English in English), the join-gate **display-name box** has a user icon + 0/32 counter + hint (52px, glowing focus), and the **Log** has search + kind filters (All / Updates / Fixes / Security / Features) with cards that wrap without clipping in Arabic RTL.
 - **65 unique stickers + custom sticker creator (v12)** — all 65 built-in stickers are now unique drawings with unique names (the old set repeated only 5 shapes in different colors; IDs are stable so old `:sticker-XX:` messages still render; regenerate with `node Sticker/generate.mjs`). **Create sticker**: pick PNG/JPG/GIF/WebP/AVIF (2 MB, SVG blocked) — it stays on this device in **IndexedDB** (localStorage fallback for small images, 30 stickers / 12 MB caps) until you press Send, then its Blob is uploaded from IndexedDB via the existing upload flow and sent as an image.

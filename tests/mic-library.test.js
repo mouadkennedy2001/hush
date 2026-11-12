@@ -36,12 +36,13 @@ test('mic library: mic_ev1 ships a complete fail-safe enhancer', async () => {
   // ev2 is live (real STFT suppression inside the AudioWorklet chain).
   const ev2 = JSON.parse(await readFile(path.join(MIC, 'mic_ev2', 'version.json'), 'utf8'));
   assert.equal(ev2.status, 'active', 'ev2 is live');
-  assert.equal(ev2.version, '2.0.0');
+  assert.equal(ev2.version, '2.0.1');
   const ev2Enhancer = await readFile(path.join(MIC, 'mic_ev2', 'src', 'mic-enhancer.js'), 'utf8');
   assert.match(ev2Enhancer, /MIC_VERSION = 'ev2\.0'/, 'canonical ev2 enhancer');
   assert.match(ev2Enhancer, /workletNode\.connect\(lowpass\)/, 'canonical worklet in chain');
   const ev2Dsp = await readFile(path.join(MIC, 'mic_ev2', 'src', 'mic-dsp.js'), 'utf8');
   assert.match(ev2Dsp, /StftNoiseSuppressor/);
+  assert.match(ev2Dsp, /MIC_DSP_VERSION = '2\.0\.1'/);
   // ev1.3 is live (gain ownership + deafen mute landed with it).
   const ev13 = JSON.parse(await readFile(path.join(MIC, 'mic_ev1.3', 'version.json'), 'utf8'));
   assert.equal(ev13.status, 'active', 'ev1.3 is live');
@@ -62,6 +63,8 @@ test('mic browser runtime: fallback-safe, no external dependencies', async () =>
   assert.doesNotMatch(runtime, /from\s+['"]https?:/, 'no CDN/import-map dependency');
   const processor = await readFile(path.join(ROOT, 'public', 'js', 'room', 'noise-suppress-processor.js'), 'utf8');
   assert.match(processor, /hush-noise-suppress/);
+  assert.match(processor, /hopSize: 128/, 'worklet hop stays aligned with its render quantum');
+  assert.match(runtime, /cfg\.hopSize = 128/, 'worklet hop stays aligned with its render quantum');
   const media = await readFile(path.join(ROOT, 'public', 'js', 'room', 'media.js'), 'utf8');
   assert.match(media, /createMicEnhancer/, 'MediaMesh wires the enhancer');
   const fx = await readFile(path.join(ROOT, 'public', 'js', 'room', 'mic-fx.js'), 'utf8');
