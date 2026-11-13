@@ -1765,6 +1765,19 @@ html[data-theme="dark"] .control[aria-pressed="true"] {
   margin-top: 8px;
 }
 
+.tools-actions > .sound-volume-row {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px 10px;
+  min-width: 0;
+  margin-top: 0;
+}
+
+.sound-volume-row > span { grid-column: 1 / -1; }
+.sound-volume-row input[type="range"] { width: 100%; min-width: 0; }
+
 .tool-button {
   display: flex;
   align-items: center;

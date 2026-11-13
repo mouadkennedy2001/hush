@@ -2,12 +2,18 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
   <title>Hush — quiet rooms for voice, video, and text</title>
   <meta name="description" content="Text, voice, video, and screen sharing in one calm room. No downloads, no accounts. Just a link and the people you want to talk to." />
   <meta name="theme-color" content="#9dbbf8" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Hush" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <script src="/js/lang-boot.js"></script>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/assets/icon-180.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;800&display=swap" />
@@ -15,6 +21,8 @@
   <link rel="stylesheet" href="/css/base.css" />
   <link rel="stylesheet" href="/css/landing.css" />
   <link rel="stylesheet" href="/css/feedback.css" />
+  <link rel="stylesheet" href="/css/mobile.css" />
+  <script src="/js/pwa.js" defer></script>
 </head>
 <body>
   <header class="site-nav">
@@ -49,6 +57,14 @@
             <img src="/assets/buymeacoffee-pfp.png" width="30" height="30" alt="" />
             <span>Support</span>
           </a>
+          <button class="btn btn-quiet btn-sm" type="button" data-pwa-install title="Install app" aria-label="Install app" hidden>
+            <svg class="nav-action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 3v12" />
+              <path d="m7 10 5 5 5-5" />
+              <path d="M5 21h14" />
+            </svg>
+            <span class="nav-action-label">Install app</span>
+          </button>
           <button class="btn btn-quiet btn-sm" type="button" data-open-log title="Log" aria-label="Log">
             <svg class="nav-action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M3 12a9 9 0 1 0 2.64-6.36L3 8" />

@@ -9,7 +9,9 @@ const DEFAULTS = {
   density: 'comfortable',
   motion: 'on',
   volume: 1,
-  notifications: false
+  notifications: false,
+  haptics: 'on',
+  wakeLock: 'on'
 };
 
 let settings = { ...DEFAULTS };
@@ -49,6 +51,12 @@ export function updateSettings(patch) {
     // The settings still apply for this page.
   }
   applySettings();
+  // Room code listens for this to start/stop the wake lock immediately.
+  try {
+    window.dispatchEvent(new CustomEvent('hush:settings', { detail: { ...settings } }));
+  } catch {
+    // CustomEvent is unavailable only in exotic embeddings.
+  }
   return { ...settings };
 }
 
@@ -91,6 +99,19 @@ function syncSettingsUi() {
   for (const node of document.querySelectorAll('[data-setting-label]')) {
     const key = node.dataset.settingLabel;
     if (key && settings[key] !== undefined) node.textContent = String(settings[key]);
+  }
+  // Toggle rows added by the mobile layer (haptics, wake lock): the visible
+  // title is translated through the runtime dictionary, and the segmented
+  // control's accessible name follows it.
+  for (const node of document.querySelectorAll('[data-setting-key]')) {
+    const key = node.dataset.settingKey;
+    if (!key || !(key in settings)) continue;
+    const label = t(`settings.${key}`);
+    if (node.tagName === 'SPAN') {
+      if (node.textContent !== label) node.textContent = label;
+    } else if (node.hasAttribute('aria-label') && node.getAttribute('aria-label').trim()) {
+      node.setAttribute('aria-label', label);
+    }
   }
 }
 

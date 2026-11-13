@@ -11,6 +11,20 @@ export const MAX_CHANNEL_NAME = 32;
 export const MAX_SERVER_MESSAGES = 500;
 export const MAX_TEMP_ROOMS_PER_SERVER = 10;
 export const MAX_INVITE_LENGTH = 10; // A5: 6 -> 10 chars (~50 bits) with crypto RNG
+export const MAX_CUSTOM_SERVER_ROLES = 20;
+export const MAX_SERVER_MEMBER_ROLES = 10;
+export const SERVER_ROLE_PERMISSIONS = Object.freeze([
+  'manage_settings',
+  'manage_channels',
+  'moderate_members',
+  'manage_messages'
+]);
+
+const BUILTIN_SERVER_ROLES = Object.freeze([
+  Object.freeze({ id: 'host', name: 'Host', color: '#f59e0b', position: 300, builtIn: true, permissions: Object.freeze(['manage_settings', 'manage_channels', 'moderate_members', 'manage_messages']) }),
+  Object.freeze({ id: 'assistant', name: 'Assistant', color: '#38bdf8', position: 200, builtIn: true, permissions: Object.freeze(['moderate_members', 'manage_messages']) }),
+  Object.freeze({ id: 'member', name: 'Member', color: '#94a3b8', position: 100, builtIn: true, permissions: Object.freeze([]) })
+]);
 
 // Back-compat export shape used by existing imports/tests.
 export { MAX_SERVERS_PER_DEVICE as MAX_SERVERS_PER_USER };
@@ -85,6 +99,60 @@ export function normalizeServerCustomSound(raw, serverId) {
 export function cleanDisplayName(value) {
   return String(value ?? 'Guest').replace(/[\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e]/g, '').trim().slice(0, 32) || 'Guest';
 }
+
+function cleanRoleName(value) {
+  return String(value ?? '').replace(/[\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 24);
+}
+
+function normalizeServerRoles(raw) {
+  const roles = BUILTIN_SERVER_ROLES.map((role) => ({ ...role, permissions: [...role.permissions] }));
+  const ids = new Set(roles.map((role) => role.id));
+  const names = new Set(roles.map((role) => role.name.toLowerCase()));
+  let customRoleCount = 0;
+  for (const role of Array.isArray(raw) ? raw : []) {
+    if (customRoleCount >= MAX_CUSTOM_SERVER_ROLES) break;
+    if (!role || typeof role !== 'object' || role.builtIn) continue;
+    const id = String(role.id ?? '');
+    const name = cleanRoleName(role.name);
+    if (!/^role_[a-z0-9-]{8,64}$/i.test(id) || ids.has(id) || !name || names.has(name.toLowerCase())) continue;
+    const color = /^#[0-9a-f]{6}$/i.test(String(role.color ?? '')) ? String(role.color).toLowerCase() : '#64748b';
+    const permissions = [...new Set((Array.isArray(role.permissions) ? role.permissions : [])
+      .filter((permission) => SERVER_ROLE_PERMISSIONS.includes(permission)))];
+    roles.push({
+      id,
+      name,
+      color,
+      position: Number.isFinite(role.position) ? Math.min(199, Math.max(101, Math.trunc(role.position))) : 150,
+      builtIn: false,
+      permissions
+    });
+    ids.add(id);
+    names.add(name.toLowerCase());
+    customRoleCount += 1;
+  }
+  return roles;
+}
+
+function cleanMember(raw, validRoleIds = new Set(['member'])) {
+  if (!raw) return null;
+  if (typeof raw === 'string') {
+    const deviceId = cleanDeviceId(raw);
+    return deviceId ? { deviceId, name: 'Guest', joinedAt: 0, roleIds: ['member'] } : null;
+  }
+  if (typeof raw === 'object') {
+    const deviceId = cleanDeviceId(raw.deviceId);
+    if (!deviceId) return null;
+    const roleIds = [...new Set((Array.isArray(raw.roleIds) ? raw.roleIds : [])
+      .filter((roleId) => typeof roleId === 'string' && validRoleIds.has(roleId)))].slice(0, MAX_SERVER_MEMBER_ROLES);
+    return {
+      deviceId,
+      name: cleanDisplayName(raw.name),
+      joinedAt: Number.isFinite(raw.joinedAt) ? raw.joinedAt : 0,
+      roleIds: roleIds.length ? roleIds : ['member']
+    };
+  }
+  return null;
+}
 export function generateServerId() {
   return `srv_${randomUUID().replace(/-/g, '').slice(0, 10)}`;
 }
@@ -110,24 +178,6 @@ export function inviteCodesEqual(a, b) {
   return x.length === y.length && timingSafeEqual(x, y);
 }
 
-function cleanMember(raw) {
-  if (!raw) return null;
-  if (typeof raw === 'string') {
-    const deviceId = cleanDeviceId(raw);
-    return deviceId ? { deviceId, name: 'Guest', joinedAt: 0 } : null;
-  }
-  if (typeof raw === 'object') {
-    const deviceId = cleanDeviceId(raw.deviceId);
-    if (!deviceId) return null;
-    return {
-      deviceId,
-      name: cleanDisplayName(raw.name),
-      joinedAt: Number.isFinite(raw.joinedAt) ? raw.joinedAt : 0
-    };
-  }
-  return null;
-}
-
 function normalizeServer(raw) {
   if (!raw || typeof raw !== 'object' || typeof raw.id !== 'string') return null;
   if (!/^srv_[a-z0-9]{6,20}$/i.test(raw.id)) return null;
@@ -151,15 +201,17 @@ function normalizeServer(raw) {
     channels.push({ id: randomUUID(), name: 'general', type: 'text', createdAt: Date.now() });
     channels.push({ id: randomUUID(), name: 'voice-lounge', type: 'voice', createdAt: Date.now() });
   }
+  const roles = normalizeServerRoles(raw.roles);
+  const validRoleIds = new Set(roles.map((role) => role.id));
   const seen = new Set();
   const members = [];
-  for (const m of (Array.isArray(raw.members) ? raw.members : []).map(cleanMember).filter(Boolean)) {
+  for (const m of (Array.isArray(raw.members) ? raw.members : []).map((member) => cleanMember(member, validRoleIds)).filter(Boolean)) {
     if (!seen.has(m.deviceId)) { seen.add(m.deviceId); members.push(m); }
   }
   const ownerDeviceId = cleanDeviceId(raw.ownerDeviceId);
   // Ensure the owner is always a member, so memberCount is exact.
   if (ownerDeviceId && !members.some((m) => m.deviceId === ownerDeviceId)) {
-    members.unshift({ deviceId: ownerDeviceId, name: cleanDisplayName(raw.ownerName), joinedAt: Number.isFinite(raw.createdAt) ? raw.createdAt : Date.now() });
+    members.unshift({ deviceId: ownerDeviceId, name: cleanDisplayName(raw.ownerName), joinedAt: Number.isFinite(raw.createdAt) ? raw.createdAt : Date.now(), roleIds: ['member'] });
   }
   const banned = [];
   if (Array.isArray(raw.banned)) {
@@ -170,7 +222,9 @@ function normalizeServer(raw) {
       if (!deviceId) continue;
       const until = Number.isFinite(b.until) ? b.until : 0;
       if (until && until < now) continue;
-      banned.push({ deviceId, name: cleanDisplayName(b.name), until: until || null, reason: String(b.reason ?? '').slice(0, 120) });
+      const roleIds = [...new Set((Array.isArray(b.roleIds) ? b.roleIds : [])
+        .filter((roleId) => typeof roleId === 'string' && validRoleIds.has(roleId)))];
+      banned.push({ deviceId, name: cleanDisplayName(b.name), until: until || null, reason: String(b.reason ?? '').slice(0, 120), roleIds: roleIds.length ? roleIds : ['member'] });
     }
   }
   const customSounds = [];
@@ -193,6 +247,7 @@ function normalizeServer(raw) {
     createdAt: Number.isFinite(raw.createdAt) ? raw.createdAt : Date.now(),
     channels: channels.slice(0, MAX_CHANNELS_PER_SERVER),
     members: members.slice(0, 200),
+    roles,
     banned,
     pinned: {}
   };
@@ -383,6 +438,7 @@ export class ServerManager {
     const viewer = cleanDeviceId(viewerDeviceId);
     const isMember = Boolean(viewer && this.isMember(server, viewer));
     const isOwnerViewer = Boolean(viewer && this.isOwner(server, viewer));
+    const canModerateMembers = Boolean(viewer && this.hasPermission(server, viewer, 'moderate_members'));
     const showInvite = Boolean(isMember && !options.omitInvite);
     // Pseudonym helper: stable per-device hash (not reversible base64).
     const pseudo = (d) => this.memberIdFor(d);
@@ -390,14 +446,15 @@ export class ServerManager {
     if (isMember) {
       members = server.members.map((m) => {
         const isSelf = m.deviceId === viewer;
-        // Owner can see deviceId for moderation; self always sees own deviceId.
-        const exposeDevice = Boolean(isOwnerViewer || isSelf);
+        // Moderators need stable ids for member actions; broadcasts always redact them.
+        const exposeDevice = !options.redactDeviceIds && Boolean(canModerateMembers || isSelf);
         return {
           memberId: pseudo(m.deviceId),
           name: m.name,
           joinedAt: m.joinedAt,
           isOwner: m.deviceId === server.ownerDeviceId,
           isYou: isSelf,
+          roleIds: [...(m.roleIds || ['member'])],
           ...(exposeDevice ? { deviceId: m.deviceId } : {})
         };
       });
@@ -409,6 +466,14 @@ export class ServerManager {
       iconEmojiId: server.iconEmojiId,
       iconUrl: server.iconUrl || '',
       customSounds: isMember ? (server.customSounds || []) : [],
+      roles: (server.roles || normalizeServerRoles([])).map((role) => ({
+        id: role.id,
+        name: role.name,
+        color: role.color,
+        position: role.position,
+        builtIn: role.builtIn,
+        permissions: [...role.permissions]
+      })),
       ownerName: server.ownerName,
       // A2/C2: never broadcast raw ownerDeviceId to non-owners/members.
       ownerDeviceId: isOwnerViewer ? server.ownerDeviceId : null,
@@ -435,11 +500,11 @@ export class ServerManager {
     // The owner fetches full ids via the private REST summary when moderating.
     const nonOwner = server.members.find((m) => m.deviceId !== server.ownerDeviceId);
     const viewer = nonOwner ? nonOwner.deviceId : server.ownerDeviceId;
-    const view = this.publicSummary(server, viewer, { omitInvite: true });
+    const view = this.publicSummary(server, viewer, { omitInvite: true, redactDeviceIds: true });
     // isYou is per-viewer; strip it from the shared broadcast (clients
     // recompute it from their own memberId after the join ack).
     const members = (view.members || []).map((m) => ({ ...m, isYou: false }));
-    return { ...view, ownerDeviceId: null, members };
+    return { ...view, ownerDeviceId: null, isOwner: false, members };
   }
 
   memberIdFor(deviceId) {
@@ -464,6 +529,34 @@ export class ServerManager {
     return Boolean(server && cleanDeviceId(deviceId) && server.ownerDeviceId === cleanDeviceId(deviceId));
   }
 
+  hasPermission(server, deviceId, permission) {
+    const device = cleanDeviceId(deviceId);
+    if (!server || !device) return false;
+    if (this.isOwner(server, device)) return true;
+    if (!SERVER_ROLE_PERMISSIONS.includes(permission)) return false;
+    const member = server.members.find((entry) => entry.deviceId === device);
+    if (!member) return false;
+    const roleIds = new Set(member.roleIds || ['member']);
+    return (server.roles || []).some((role) => roleIds.has(role.id) && role.permissions.includes(permission));
+  }
+
+  canModerateMember(server, actorDeviceId, targetDeviceId) {
+    const actor = cleanDeviceId(actorDeviceId);
+    const target = cleanDeviceId(targetDeviceId);
+    if (!server || !actor || !target || target === server.ownerDeviceId
+      || !this.hasPermission(server, actor, 'moderate_members')) return false;
+    const targetMember = server.members.find((entry) => entry.deviceId === target);
+    const targetBan = (server.banned || []).find((entry) => entry.deviceId === target);
+    if (!targetMember && !targetBan) return this.isOwner(server, actor);
+    const rank = (member) => Math.max(0, ...(server.roles || [])
+      .filter((role) => new Set(member?.roleIds || ['member']).has(role.id))
+      .map((role) => role.position));
+    const actorRank = this.isOwner(server, actor)
+      ? Number.POSITIVE_INFINITY
+      : rank(server.members.find((entry) => entry.deviceId === actor));
+    return actorRank > rank(targetMember || targetBan);
+  }
+
   isMember(server, deviceId) {
     const d = cleanDeviceId(deviceId);
     return Boolean(server && d && (server.ownerDeviceId === d || server.members.some((m) => m.deviceId === d)));
@@ -477,6 +570,89 @@ export class ServerManager {
   }
 
   canAccess(server, deviceId) { return this.isMember(server, deviceId) && !this.isBanned(server, deviceId); }
+
+  async createRole(id, actorDeviceId, { name, color, permissions } = {}) {
+    const server = this.get(id);
+    if (!server || !this.isOwner(server, actorDeviceId)) return null;
+    const roleName = cleanRoleName(name);
+    const roleColor = /^#[0-9a-f]{6}$/i.test(String(color ?? '')) ? String(color).toLowerCase() : '';
+    if (!roleName || !roleColor || !Array.isArray(permissions)
+      || permissions.some((permission) => !SERVER_ROLE_PERMISSIONS.includes(permission))
+      || (server.roles || []).some((role) => role.name.toLowerCase() === roleName.toLowerCase())) return null;
+    const customCount = (server.roles || []).filter((role) => !role.builtIn).length;
+    if (customCount >= MAX_CUSTOM_SERVER_ROLES) return null;
+    const role = {
+      id: `role_${randomUUID().replace(/-/g, '')}`,
+      name: roleName,
+      color: roleColor,
+      position: 150,
+      builtIn: false,
+      permissions: [...new Set(permissions)]
+    };
+    server.roles.push(role);
+    await this.#queueSave();
+    return role;
+  }
+
+  async updateRole(id, actorDeviceId, roleId, updates = {}) {
+    const server = this.get(id);
+    if (!server || !this.isOwner(server, actorDeviceId)) return null;
+    const role = server.roles.find((entry) => entry.id === String(roleId) && !entry.builtIn);
+    if (!role) return null;
+    let name = role.name;
+    let color = role.color;
+    let permissions = role.permissions;
+    if (updates.name !== undefined) {
+      name = cleanRoleName(updates.name);
+      if (!name || server.roles.some((entry) => entry.id !== role.id && entry.name.toLowerCase() === name.toLowerCase())) return null;
+    }
+    if (updates.color !== undefined) {
+      if (!/^#[0-9a-f]{6}$/i.test(String(updates.color))) return null;
+      color = String(updates.color).toLowerCase();
+    }
+    if (updates.permissions !== undefined) {
+      if (!Array.isArray(updates.permissions)
+        || updates.permissions.some((permission) => !SERVER_ROLE_PERMISSIONS.includes(permission))) return null;
+      permissions = [...new Set(updates.permissions)];
+    }
+    role.name = name;
+    role.color = color;
+    role.permissions = permissions;
+    await this.#queueSave();
+    return role;
+  }
+
+  async deleteRole(id, actorDeviceId, roleId) {
+    const server = this.get(id);
+    if (!server || !this.isOwner(server, actorDeviceId)) return null;
+    const index = server.roles.findIndex((entry) => entry.id === String(roleId) && !entry.builtIn);
+    if (index === -1) return null;
+    const [role] = server.roles.splice(index, 1);
+    for (const member of server.members) {
+      member.roleIds = (member.roleIds || []).filter((assignedRoleId) => assignedRoleId !== role.id);
+      if (!member.roleIds.length) member.roleIds = ['member'];
+    }
+    for (const ban of server.banned || []) {
+      ban.roleIds = (ban.roleIds || []).filter((assignedRoleId) => assignedRoleId !== role.id);
+      if (!ban.roleIds.length) ban.roleIds = ['member'];
+    }
+    await this.#queueSave();
+    return server;
+  }
+
+  async assignMemberRoles(id, actorDeviceId, targetMemberId, roleIds) {
+    const server = this.get(id);
+    if (!server || !this.isOwner(server, actorDeviceId) || !Array.isArray(roleIds)
+      || roleIds.length > MAX_SERVER_MEMBER_ROLES) return null;
+    const target = server.members.find((member) => member.deviceId === cleanDeviceId(targetMemberId)
+      || this.memberIdFor(member.deviceId) === String(targetMemberId));
+    if (!target || target.deviceId === server.ownerDeviceId) return null;
+    const ids = [...new Set(roleIds)];
+    if (ids.some((roleId) => typeof roleId !== 'string' || !server.roles.some((role) => role.id === roleId))) return null;
+    target.roleIds = ids.length ? ids : ['member'];
+    await this.#queueSave();
+    return server;
+  }
 
   async create({ name, ownerName, ownerDeviceId, iconEmojiId, description }) {
     const cleanName = cleanServerName(name);
@@ -503,11 +679,12 @@ export class ServerManager {
       ownerDeviceId: owner,
       inviteCode,
       createdAt: this.now(),
+      roles: normalizeServerRoles([]),
       channels: [
         { id: randomUUID(), name: 'general', type: 'text', createdAt: this.now() },
         { id: randomUUID(), name: 'voice-lounge', type: 'voice', createdAt: this.now() }
       ],
-      members: [{ deviceId: owner, name: cleanDisplayName(ownerName), joinedAt: this.now() }],
+      members: [{ deviceId: owner, name: cleanDisplayName(ownerName), joinedAt: this.now(), roleIds: ['member'] }],
       banned: [],
       pinned: {}
     };
@@ -540,7 +717,8 @@ export class ServerManager {
     server.members.push({
       deviceId: device,
       name: cleanDisplayName(name),
-      joinedAt: this.now()
+      joinedAt: this.now(),
+      roleIds: ['member']
     });
     await this.#queueSave();
     return server;
@@ -561,8 +739,8 @@ export class ServerManager {
     const actor = cleanDeviceId(ownerDeviceId);
     const target = cleanDeviceId(targetDeviceId);
     if (!server || !actor || !target) return false;
-    if (!this.isOwner(server, actor)) return false;
-    if (target === server.ownerDeviceId) return false;
+    if (!server.members.some((member) => member.deviceId === target)
+      || !this.canModerateMember(server, actor, target)) return false;
     const before = server.members.length;
     server.members = server.members.filter((m) => m.deviceId !== target);
     if (server.members.length === before) return false;
@@ -572,16 +750,18 @@ export class ServerManager {
 
   async ban(id, ownerDeviceId, targetDeviceId, targetName, minutes) {
     const server = this.get(id);
-    if (!server || !this.isOwner(server, ownerDeviceId)) return null;
     const target = cleanDeviceId(targetDeviceId);
-    if (!target || target === server.ownerDeviceId) return null;
+    if (!server || !target || target === server.ownerDeviceId
+      || !this.canModerateMember(server, ownerDeviceId, target)) return null;
     const mins = Math.min(10080, Math.max(1, Number(minutes) || 60));
     const existing = server.members.find((m) => m.deviceId === target);
+    const previousBan = (server.banned || []).find((ban) => ban.deviceId === target);
     const ban = {
       deviceId: target,
       name: cleanDisplayName(targetName || existing?.name),
       until: this.now() + mins * 60_000,
-      reason: ''
+      reason: '',
+      roleIds: [...(existing?.roleIds || previousBan?.roleIds || ['member'])]
     };
     server.banned = [...(server.banned || []).filter((b) => b.deviceId !== target), ban].slice(-200);
     server.members = server.members.filter((m) => m.deviceId !== target);
@@ -591,9 +771,8 @@ export class ServerManager {
 
   async unban(id, ownerDeviceId, targetDeviceId) {
     const server = this.get(id);
-    if (!server || !this.isOwner(server, ownerDeviceId)) return false;
     const target = cleanDeviceId(targetDeviceId);
-    if (!target) return false;
+    if (!server || !target || !this.canModerateMember(server, ownerDeviceId, target)) return false;
     const before = (server.banned || []).length;
     server.banned = (server.banned || []).filter((b) => b.deviceId !== target);
     if (server.banned.length !== before) await this.#queueSave();
@@ -602,7 +781,7 @@ export class ServerManager {
 
   async regenerateInvite(id, deviceId) {
     const server = this.get(id);
-    if (!server || !this.isOwner(server, deviceId)) return null;
+    if (!server || !this.hasPermission(server, deviceId, 'manage_settings')) return null;
     let inviteCode = generateInviteCode();
     while ([...this.#servers.values()].some((s) => inviteCodesEqual(s.inviteCode, inviteCode))) inviteCode = generateInviteCode();
     server.inviteCode = inviteCode;
@@ -634,7 +813,7 @@ export class ServerManager {
 
   async updateSettings(id, deviceId, { name, description, iconEmojiId, iconUrl } = {}) {
     const server = this.get(id);
-    if (!server || !this.isOwner(server, deviceId)) return null;
+    if (!server || !this.hasPermission(server, deviceId, 'manage_settings')) return null;
     if (name !== undefined) {
       const cleanName = cleanServerName(name);
       if (!cleanName) return null;
@@ -675,9 +854,7 @@ export class ServerManager {
   async addChannel(id, { name, type } = {}, deviceId) {
     const server = this.get(id);
     if (!server) return null;
-    // N3/A14 decision: owner only (was any member). Members without owner
-    // rights now get 403 from the route layer; the manager also enforces it.
-    if (!this.isOwner(server, deviceId)) return null;
+    if (!this.hasPermission(server, deviceId, 'manage_channels')) return null;
     if (server.channels.length >= MAX_CHANNELS_PER_SERVER) return null;
     const cleanName = cleanChannelName(name);
     if (!cleanName) return null;
@@ -691,7 +868,7 @@ export class ServerManager {
 
   async renameChannel(id, channelId, newName, deviceId) {
     const server = this.get(id);
-    if (!server || !this.isOwner(server, deviceId)) return null;
+    if (!server || !this.hasPermission(server, deviceId, 'manage_channels')) return null;
     const channel = server.channels.find((c) => c.id === channelId);
     if (!channel) return null;
     const cleanName = cleanChannelName(newName);
@@ -705,7 +882,7 @@ export class ServerManager {
 
   async deleteChannel(id, channelId, deviceId) {
     const server = this.get(id);
-    if (!server || !this.isOwner(server, deviceId)) return null;
+    if (!server || !this.hasPermission(server, deviceId, 'manage_channels')) return null;
     const index = server.channels.findIndex((c) => c.id === channelId);
     if (index === -1 || server.channels.length <= 1) return null;
     if (server.channels[index].type === 'text' && server.channels.filter((c) => c.type === 'text').length <= 1) return null;

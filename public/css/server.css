@@ -13,6 +13,8 @@
 .server-members { padding: 12px; overflow-y: auto; scrollbar-width: thin; }
 .server-stage { padding: 0; }
 .server-stage .messages { flex: 1; min-height: 0; }
+.server-drawer-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.server-drawer-close, .server-mobile-channels-toggle { display: none; }
 
 .server-invite-card { padding: 11px; border: 1px solid var(--color-fog); border-radius: var(--radius-panels); background: var(--color-paper); margin-bottom: 12px; flex: none; }
 .server-group-kicker { margin: 10px 0 4px; font-size: .625rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--color-text-2); flex: none; }
@@ -33,6 +35,75 @@
 .server-add-channel { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--color-border); flex: none; }
 .server-add-channel input, .server-add-channel select { padding: 7px 9px; border: 1.5px solid var(--color-border); border-radius: var(--radius-buttons, 8px); background: var(--color-surface-2); color: var(--color-text); font: inherit; font-size: .75rem; min-width: 0; }
 .server-danger-zone { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--color-border); flex: none; }
+.server-settings-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 9px;
+  width: 100%;
+  min-height: 42px;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-buttons, 8px);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: .8125rem;
+  font-weight: 700;
+  text-align: start;
+  cursor: pointer;
+}
+.server-settings-toggle:hover,
+.server-settings-toggle[aria-expanded="true"] { border-color: var(--color-accent); background: var(--wash-sky); color: var(--color-accent-2); }
+.server-settings-toggle .icon { width: 18px; height: 18px; }
+.server-settings-toggle[hidden],
+.server-owner-tools[hidden] { display: none !important; }
+.server-owner-tools { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; padding: 10px; border: 1px solid var(--color-border); border-radius: var(--radius-panels); background: var(--color-surface-2); }
+.server-owner-tools .server-settings { margin: 0; padding: 0; border: 0; }
+.server-owner-tools .server-add-channel { margin: 0; padding-top: 10px; }
+.server-owner-tools .btn { width: 100%; }
+.server-owner-tools,
+.server-owner-tools > *,
+.server-settings .field,
+.server-role-form,
+.server-role-permissions,
+.server-role-item { min-width: 0; max-width: 100%; }
+.server-settings .field,
+.server-role-form .field { display: grid; gap: 7px; }
+.server-settings .field input,
+.server-role-form input[type="text"] { width: 100%; min-width: 0; max-width: 100%; }
+.server-icon-input { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.server-icon-input input { min-width: 0; width: 100%; }
+.server-settings .server-icon-input { width: 100%; max-width: 100%; }
+.server-settings .server-icon-input input[type="file"] { display: block; min-width: 0; max-width: 100%; width: 100%; overflow: hidden; font-size: .6875rem; }
+.server-role-manager { display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 1px solid var(--color-border); }
+.server-role-manager[hidden] { display: none !important; }
+.server-role-form { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.server-role-form .field { margin: 0; }
+.server-role-form input[type="color"] { width: 48px; min-height: 36px; padding: 3px; }
+.server-role-permissions { display: grid; gap: 6px; min-width: 0; min-inline-size: 0; width: 100%; margin: 0; padding: 8px; border: 1px solid var(--color-border); border-radius: 8px; }
+.server-role-permissions legend { padding-inline: 4px; color: var(--color-text-2); font-size: .6875rem; font-weight: 700; }
+.server-role-permissions label,
+.member-role-form label { display: flex; align-items: center; gap: 7px; min-width: 0; font-size: .6875rem; }
+.server-role-permissions input,
+.member-role-form input { flex: none; accent-color: var(--color-accent); }
+.server-role-permissions label > span { min-width: 0; overflow-wrap: anywhere; }
+.server-role-list { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.server-role-item { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 8px; min-width: 0; padding: 7px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface); }
+.server-role-name,
+.member-role-badge { display: inline-flex; align-items: center; width: fit-content; max-width: 100%; padding: 2px 7px; border-radius: 999px; background: color-mix(in srgb, var(--role-color, #64748b) 16%, var(--color-surface)); color: var(--role-color, #64748b); font-size: .625rem; font-weight: 700; }
+.server-role-summary { flex: 1 1 100%; min-width: 0; color: var(--color-text-2); font-size: .625rem; overflow-wrap: anywhere; }
+.server-role-actions { display: flex; gap: 4px; width: 100%; }
+.server-role-actions .btn { flex: 1; }
+.server-members .person { flex-wrap: wrap; }
+.server-members .person-body { flex: 1 1 0; }
+.server-members .person-name { flex-wrap: wrap; overflow: visible; white-space: normal; }
+.server-members .member-role-assign { flex: 1 0 100%; margin-inline-start: 42px; min-width: 0; color: var(--color-text-2); font-size: .6875rem; }
+.member-role-assign summary { width: fit-content; cursor: pointer; }
+.member-role-form { display: grid; gap: 5px; margin-top: 6px; }
+.member-role-form .btn { grid-column: 1 / -1; }
+.server-members .member-kick { opacity: 1; }
 
 .server-channel-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--color-fog); flex: none; min-width: 0; }
 .server-channel-title { font-size: .875rem; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -96,6 +167,39 @@
 .server-screen-stage[hidden] { display: none; }
 .server-screen-stage video { display: block; width: 100%; height: 100%; max-height: 320px; object-fit: contain; background: #0a0d14; }
 .server-screen-label { position: absolute; left: 10px; bottom: 10px; padding: 4px 8px; border-radius: var(--radius-buttons, 8px); background: rgba(10,13,20,.72); color: #fff; font-size: .625rem; font-weight: 600; }
+/* Phone screen-share viewing: picture-in-picture button sits top-left, opposite
+   the enlarge button, and is only revealed when the browser supports PiP. */
+.server-screen-pip-btn {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(10, 13, 20, 0.7);
+  color: #fff;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+}
+.server-screen-pip-btn:hover { background: rgba(10, 13, 20, 0.88); }
+.server-screen-pip-btn[hidden] { display: none !important; }
+.server-screen-pip-btn .icon { width: 18px; height: 18px; }
+.server-screen-pip-btn .icon-when-on { display: none; }
+.server-screen-pip-btn.is-active .icon-when-on { display: block; }
+.server-screen-pip-btn.is-active .icon-when-off { display: none; }
+.server-screen-stage.is-enlarged .server-screen-pip-btn {
+  top: calc(14px + env(safe-area-inset-top, 0px));
+  left: max(14px, env(safe-area-inset-left, 0px));
+}
+.server-screen-stage.is-enlarged .screen-enlarge-btn {
+  top: calc(14px + env(safe-area-inset-top, 0px));
+  right: max(14px, env(safe-area-inset-right, 0px));
+}
 #create-temp-room-form button { width: 100%; }
 .leave-voice-chip { flex: none; }
 
@@ -124,6 +228,84 @@
   .server-members-toggle { display: inline-flex; }
 }
 @media (min-width: 1101px) { .server-members-toggle { display: none; } }
+
+/* ---------- Phones: keep the server page usable on a small screen ---------- */
+@media (max-width: 700px) {
+  .server-body { height: auto; min-height: 100dvh; }
+
+  /* The invite card eats the first screen; make it a compact strip. */
+  .server-invite-card {
+    padding: 8px 10px;
+    margin-bottom: 8px;
+    gap: 6px;
+  }
+
+  .server-invite-card .server-group-kicker { margin: 0 0 2px; }
+
+  .server-main {
+    gap: 8px;
+    padding-inline: max(8px, env(safe-area-inset-left, 0px)) max(8px, env(safe-area-inset-right, 0px));
+  }
+
+  .server-stage { min-height: 0; height: auto; }
+
+  .server-stage .messages { max-height: none; }
+
+  .server-stage .composer {
+    position: sticky;
+    bottom: 0;
+    z-index: 4;
+    padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+    background: var(--color-paper);
+  }
+
+  .server-stage .composer textarea { min-height: 42px; padding-block: 10px; }
+
+  .server-stage .send-btn { min-width: 42px; min-height: 42px; }
+
+  /* Voice: screen share gets the whole width, tiles stack below it. */
+  .voice-stage {
+    padding: max(8px, env(safe-area-inset-top, 0px)) 8px calc(10px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .server-screen-stage {
+    min-height: 0;
+    max-height: none;
+    margin: 8px 0;
+    border-radius: 12px;
+  }
+
+  .server-screen-stage video { max-height: 46dvh; }
+
+  .voice-stage .tile-grid { min-height: 0; }
+
+  .voice-stage .control-bar {
+    flex-wrap: nowrap;
+    gap: 4px;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scrollbar-width: none;
+  }
+
+  .voice-stage .control-bar::-webkit-scrollbar { display: none; }
+
+  .voice-stage .control {
+    min-width: 54px;
+    min-height: 46px;
+    padding: 6px 4px;
+  }
+
+  .voice-stage .control-label { font-size: 0.625rem; }
+
+  .server-members {
+    max-height: 60dvh;
+  }
+
+  .server-channel { min-height: 42px; }
+  .server-channel-del { min-width: 36px; min-height: 36px; justify-content: center; }
+  .server-settings-toggle { min-height: 46px; }
+  .server-owner-tools { padding: 10px; }
+}
 @media (max-width: 820px) {
   .server-main { grid-template-columns: 1fr; }
   .server-channels { max-height: 260px; overflow-y: auto; }
@@ -131,4 +313,10 @@
   .server-body { overflow-y: auto; }
   .server-stage { min-height: 540px; }
   .server-members { display: none; }
+}
+
+/* Phones (<= 700px): the 820px rules apply too, so relax the fixed stage
+   height here or the composer is pushed far below the fold. */
+@media (max-width: 700px) {
+  .server-stage { min-height: 0; }
 }

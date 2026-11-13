@@ -115,6 +115,8 @@ export class MediaMesh {
     this.rawAudioTrack = null;
     this.processedAudioTrack = null;
     this._switchingMic = false;
+    // Front ("user") or rear ("environment") camera on phones.
+    this.facingMode = VIDEO_CONSTRAINTS.facingMode;
 
     this.#bindSignaling();
   }
@@ -177,10 +179,35 @@ export class MediaMesh {
     if (this.tracks.camera) return true;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: VIDEO_CONSTRAINTS
+        video: { ...VIDEO_CONSTRAINTS, facingMode: this.facingMode }
       });
       const track = stream.getVideoTracks()[0];
       if (!track) throw new Error('no-video-track');
+      this.#watchTrack(track, 'camera');
+      this.#setTrack('camera', track);
+      this.onChange(null, 'camera');
+      return true;
+    } catch (error) {
+      this.onError(this.translate(friendlyMediaError(error)));
+      return false;
+    }
+  }
+
+  /**
+   * Switch between the front and rear cameras on a phone. Re-acquires the
+   * camera track and swaps it on every peer (replaceTrack, no renegotiation).
+   * Desktops with a single webcam simply keep the same device.
+   */
+  async flipCamera() {
+    if (!this.tracks.camera) return false;
+    const next = this.facingMode === 'user' ? 'environment' : 'user';
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { ...VIDEO_CONSTRAINTS, facingMode: next }
+      });
+      const track = stream.getVideoTracks()[0];
+      if (!track) throw new Error('no-video-track');
+      this.facingMode = next;
       this.#watchTrack(track, 'camera');
       this.#setTrack('camera', track);
       this.onChange(null, 'camera');

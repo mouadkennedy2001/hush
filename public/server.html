@@ -7,8 +7,14 @@
   <meta name="description" content="A permanent Hush server with chat and voice channels." />
   <meta name="theme-color" content="#f6f6f6" />
   <meta name="robots" content="noindex" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Hush" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <script src="/js/lang-boot.js"></script>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/assets/icon-180.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600&family=Inter:wght@400;600;800&display=swap" />
@@ -16,7 +22,9 @@
   <link rel="stylesheet" href="/css/base.css" />
   <link rel="stylesheet" href="/css/room.css" />
   <link rel="stylesheet" href="/css/server.css" />
+  <link rel="stylesheet" href="/css/mobile.css" />
   <link rel="stylesheet" href="/css/feedback.css" />
+  <script src="/js/pwa.js" defer></script>
 </head>
 <body class="room-body server-body">
   <svg class="svg-sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -44,6 +52,7 @@
     <symbol id="i-screen" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></symbol>
     <symbol id="i-expand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></symbol>
     <symbol id="i-shrink" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v6H2M16 21v-6h6M2 3l6 6M22 21l-6-6"/></symbol>
+    <symbol id="i-pip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="16" rx="2.5"/><rect x="12" y="11.5" width="7.5" height="6" rx="1.2" fill="currentColor" stroke="none"/></symbol>
     <symbol id="i-soundboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></symbol>
     <symbol id="i-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></symbol>
     <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></symbol>
@@ -111,7 +120,18 @@
     </header>
 
     <main class="server-main">
-      <aside class="server-channels" aria-label="Server channels">
+      <button class="server-drawer-scrim" id="server-drawer-scrim" type="button" aria-label="Close panel" hidden></button>
+      <aside class="server-channels" id="server-channels" aria-label="Server channels">
+        <div class="server-drawer-head">
+          <strong id="server-channels-title">Channels</strong>
+          <button class="icon-button server-drawer-close" id="server-channels-close" type="button" aria-label="Close panel" title="Close panel">
+            <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg>
+          </button>
+        </div>
+        <button class="server-settings-toggle" id="server-settings-toggle" type="button" aria-controls="server-owner-tools" aria-expanded="false" hidden>
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="m19.4 15 .1.1 1.4 1.1-1.4 2.4-1.7-.7a7.8 7.8 0 0 1-1.5.9l-.3 1.8h-2.8l-.3-1.8a7.8 7.8 0 0 1-1.5-.9l-1.7.7-1.4-2.4 1.4-1.1a7.7 7.7 0 0 1 0-1.8l-1.4-1.1 1.4-2.4 1.7.7a7.8 7.8 0 0 1 1.5-.9l.3-1.8h2.8l.3 1.8a7.8 7.8 0 0 1 1.5.9l1.7-.7 1.4 2.4-1.4 1.1a7.7 7.7 0 0 1 0 1.8Z"/></svg>
+          <span id="server-settings-toggle-label">Server settings</span>
+        </button>
         <div class="server-invite-card">
           <p class="invite-kicker">Invite people</p>
           <div class="invite-row">
@@ -119,10 +139,64 @@
             <button class="btn btn-primary btn-sm" id="invite-copy" type="button">Copy link</button>
           </div>
           <p class="invite-note">Anyone with this link can join the server.</p>
-          <button class="btn btn-quiet btn-sm" id="regen-invite" type="button" hidden>Regenerate invite</button>
           <button class="btn btn-quiet btn-sm" type="button" data-notifications-toggle aria-pressed="false">
             <span data-notifications-label>Notifications off</span>
           </button>
+        </div>
+        <div class="server-owner-tools" id="server-owner-tools" hidden>
+          <form class="server-settings" id="server-settings">
+            <p class="server-group-kicker" id="server-settings-title">Server settings</p>
+            <label class="field"><span id="server-settings-name-label">Server name</span>
+              <input type="text" id="server-settings-name" maxlength="40" dir="auto" />
+            </label>
+            <label class="field"><span id="server-settings-desc-label">Description</span>
+              <input type="text" id="server-settings-desc" maxlength="140" dir="auto" />
+            </label>
+            <label class="field"><span id="server-settings-icon-label">Server image</span>
+              <span class="server-icon-input">
+                <img class="server-icon-preview" id="server-settings-preview" alt="" hidden />
+                <input type="file" id="server-settings-icon" accept="image/png,image/jpeg,image/webp,image/gif,image/avif" />
+              </span>
+            </label>
+            <button class="btn btn-quiet btn-sm" id="server-settings-remove-icon" type="button" hidden>Remove image</button>
+            <button class="btn btn-primary btn-sm" id="server-settings-save" type="submit">Save settings</button>
+          </form>
+          <button class="btn btn-quiet btn-sm" id="regen-invite" type="button" hidden>Regenerate invite</button>
+          <form class="server-add-channel" id="add-channel-form">
+            <input type="text" id="new-channel-name" maxlength="32" placeholder="Channel name" aria-label="Channel name" dir="auto" />
+            <select id="new-channel-type" aria-label="Channel type">
+              <option value="text">Text channel</option>
+              <option value="voice">Voice channel</option>
+            </select>
+            <button class="btn btn-primary btn-sm" type="submit">Add channel</button>
+          </form>
+          <section class="server-role-manager" id="server-role-manager" hidden>
+            <p class="server-group-kicker" id="server-roles-title"></p>
+            <form class="server-role-form" id="server-role-form">
+              <input type="hidden" id="server-role-id" />
+              <label class="field">
+                <span id="server-role-name-label"></span>
+                <input type="text" id="server-role-name" maxlength="24" required dir="auto" />
+              </label>
+              <label class="field">
+                <span id="server-role-color-label"></span>
+                <input type="color" id="server-role-color" value="#64748b" />
+              </label>
+              <fieldset class="server-role-permissions">
+                <legend id="server-role-permissions-label"></legend>
+                <label><input type="checkbox" value="manage_settings" /><span id="server-role-perm-settings"></span></label>
+                <label><input type="checkbox" value="manage_channels" /><span id="server-role-perm-channels"></span></label>
+                <label><input type="checkbox" value="moderate_members" /><span id="server-role-perm-members"></span></label>
+                <label><input type="checkbox" value="manage_messages" /><span id="server-role-perm-messages"></span></label>
+              </fieldset>
+              <button class="btn btn-primary btn-sm" id="server-role-save" type="submit"></button>
+              <button class="btn btn-quiet btn-sm" id="server-role-cancel" type="button" hidden></button>
+            </form>
+            <ul class="server-role-list" id="server-role-list"></ul>
+          </section>
+          <div class="server-danger-zone" id="danger-zone" hidden>
+            <button class="btn btn-quiet btn-sm" id="delete-server-btn" type="button">Delete server</button>
+          </div>
         </div>
         <p class="server-group-kicker" id="text-kicker">Text channels</p>
         <ul class="server-channel-list" id="text-channels"></ul>
@@ -134,39 +208,14 @@
           <input type="text" id="new-temp-room-name" maxlength="32" placeholder="Room name (optional)" aria-label="Temporary voice room name" dir="auto" />
           <button class="btn btn-primary btn-sm" type="submit" id="create-temp-room-btn">Create voice room</button>
         </form>
-        <form class="server-add-channel" id="add-channel-form">
-          <input type="text" id="new-channel-name" maxlength="32" placeholder="Channel name" aria-label="Channel name" dir="auto" />
-          <select id="new-channel-type" aria-label="Channel type">
-            <option value="text">Text channel</option>
-            <option value="voice">Voice channel</option>
-          </select>
-          <button class="btn btn-primary btn-sm" type="submit">Add channel</button>
-        </form>
-        <form class="server-settings" id="server-settings" hidden>
-          <p class="server-group-kicker" id="server-settings-title">Server settings</p>
-          <label class="field"><span id="server-settings-name-label">Server name</span>
-            <input type="text" id="server-settings-name" maxlength="40" dir="auto" />
-          </label>
-          <label class="field"><span id="server-settings-desc-label">Description</span>
-            <input type="text" id="server-settings-desc" maxlength="140" dir="auto" />
-          </label>
-          <label class="field"><span id="server-settings-icon-label">Server image</span>
-            <span style="display:flex;align-items:center;gap:8px">
-              <img class="server-icon-preview" id="server-settings-preview" alt="" hidden />
-              <input type="file" id="server-settings-icon" accept="image/png,image/jpeg,image/webp,image/gif,image/avif" />
-            </span>
-          </label>
-          <button class="btn btn-quiet btn-sm" id="server-settings-remove-icon" type="button" hidden>Remove image</button>
-          <button class="btn btn-primary btn-sm" id="server-settings-save" type="submit">Save settings</button>
-        </form>
-        <div class="server-danger-zone" id="danger-zone" hidden>
-          <button class="btn btn-quiet btn-sm" id="delete-server-btn" type="button">Delete server</button>
-        </div>
       </aside>
 
       <section class="server-stage" id="server-stage" aria-label="Server chat">
         <div class="server-channel-head">
-          <span class="server-channel-title" id="channel-title"># general</span>
+          <button class="icon-button server-mobile-channels-toggle" id="server-mobile-channels-toggle" type="button" aria-controls="server-channels" aria-expanded="false" aria-label="Channels" title="Channels">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+          </button>
+          <span class="server-channel-title" id="channel-title" tabindex="-1"># general</span>
           <span class="server-channel-topic muted" id="channel-topic"></span>
           <span class="server-head-actions">
             <button class="btn btn-quiet btn-sm leave-voice-chip" id="leave-voice-chip" type="button" hidden>
@@ -176,7 +225,7 @@
             <button class="icon-button" id="soundboard-btn" type="button" title="Soundboard" aria-label="Soundboard" aria-pressed="false" aria-expanded="false" aria-controls="soundboard-panel">
               <svg class="icon" aria-hidden="true"><use href="#i-soundboard"></use></svg>
             </button>
-            <button class="icon-button server-members-toggle" id="members-toggle" type="button" title="Members" aria-label="Members" aria-expanded="false" aria-controls="members-list">
+            <button class="icon-button server-members-toggle" id="members-toggle" type="button" title="Members" aria-label="Members" aria-expanded="false" aria-controls="server-members-panel">
               <svg class="icon" aria-hidden="true"><use href="#i-user"></use></svg>
             </button>
           </span>
@@ -258,6 +307,9 @@
               <svg class="icon icon-when-off" aria-hidden="true"><use href="#i-expand"></use></svg>
               <svg class="icon icon-when-on" aria-hidden="true"><use href="#i-shrink"></use></svg>
             </button>
+            <button class="server-screen-pip-btn" id="server-screen-pip" type="button" title="Picture in picture" aria-label="Picture in picture" hidden>
+              <svg class="icon" aria-hidden="true"><use href="#i-pip"></use></svg>
+            </button>
           </div>
           <button class="btn btn-quiet btn-sm screen-watch-chip" id="server-screen-watch-btn" type="button" hidden>
             <svg class="icon" aria-hidden="true"><use href="#i-screen"></use></svg>
@@ -274,8 +326,13 @@
         </div>
       </section>
 
-      <aside class="server-members" aria-label="Server members">
-        <p class="server-group-kicker" id="members-kicker">Members</p>
+      <aside class="server-members" id="server-members-panel" aria-label="Server members">
+        <div class="server-drawer-head">
+          <p class="server-group-kicker" id="members-kicker">Members</p>
+          <button class="icon-button server-drawer-close" id="server-members-close" type="button" aria-label="Close panel" title="Close panel">
+            <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg>
+          </button>
+        </div>
         <ul class="people-list" id="members-list"></ul>
       </aside>
     </main>

@@ -665,6 +665,51 @@ export async function createHushServer({
     res.json({ ok: true });
   });
 
+  const roleAdminLimit = rateLimiter({ windowMs: 60_000, max: 30 });
+  app.post('/api/servers/:id/roles', roleAdminLimit, requireServerSession, async (req, res) => {
+    const server = servers.get(req.params.id);
+    if (!server) return res.status(404).json({ error: 'server-not-found' });
+    const actor = req.serverSession.deviceId;
+    if (!servers.isOwner(server, actor)) return res.status(403).json({ error: 'not-admin' });
+    const role = await servers.createRole(req.params.id, actor, req.body || {});
+    if (!role) return res.status(400).json({ error: 'invalid-role' });
+    io.to(`server:${req.params.id}`).emit('server:members:updated', { server: servers.broadcastSummary(server) });
+    res.status(201).json({ role, server: servers.publicSummary(server, actor) });
+  });
+
+  app.patch('/api/servers/:id/roles/:roleId', roleAdminLimit, requireServerSession, async (req, res) => {
+    const server = servers.get(req.params.id);
+    if (!server) return res.status(404).json({ error: 'server-not-found' });
+    const actor = req.serverSession.deviceId;
+    if (!servers.isOwner(server, actor)) return res.status(403).json({ error: 'not-admin' });
+    const role = await servers.updateRole(req.params.id, actor, req.params.roleId, req.body || {});
+    if (!role) return res.status(400).json({ error: 'invalid-role' });
+    io.to(`server:${req.params.id}`).emit('server:members:updated', { server: servers.broadcastSummary(server) });
+    res.json({ role, server: servers.publicSummary(server, actor) });
+  });
+
+  app.delete('/api/servers/:id/roles/:roleId', roleAdminLimit, requireServerSession, async (req, res) => {
+    const server = servers.get(req.params.id);
+    if (!server) return res.status(404).json({ error: 'server-not-found' });
+    const actor = req.serverSession.deviceId;
+    if (!servers.isOwner(server, actor)) return res.status(403).json({ error: 'not-admin' });
+    const updated = await servers.deleteRole(req.params.id, actor, req.params.roleId);
+    if (!updated) return res.status(404).json({ error: 'role-not-found' });
+    io.to(`server:${req.params.id}`).emit('server:members:updated', { server: servers.broadcastSummary(updated) });
+    res.json({ ok: true, server: servers.publicSummary(updated, actor) });
+  });
+
+  app.put('/api/servers/:id/members/:memberId/roles', roleAdminLimit, requireServerSession, async (req, res) => {
+    const server = servers.get(req.params.id);
+    if (!server) return res.status(404).json({ error: 'server-not-found' });
+    const actor = req.serverSession.deviceId;
+    if (!servers.isOwner(server, actor)) return res.status(403).json({ error: 'not-admin' });
+    const updated = await servers.assignMemberRoles(req.params.id, actor, req.params.memberId, req.body?.roleIds);
+    if (!updated) return res.status(400).json({ error: 'invalid-role-assignment' });
+    io.to(`server:${req.params.id}`).emit('server:members:updated', { server: servers.broadcastSummary(updated) });
+    res.json({ ok: true, server: servers.publicSummary(updated, actor) });
+  });
+
   const historyLimit = rateLimiter({ windowMs: 60_000, max: 60 });
   app.get('/api/servers/:id/history', historyLimit, requireServerSession, async (req, res) => {
     const server = servers.get(req.params.id);
@@ -691,7 +736,7 @@ export async function createHushServer({
     if (!channel) {
       const server = servers.get(req.params.id);
       if (!server) return res.status(404).json({ error: 'server-not-found' });
-      if (!servers.isOwner(server, actor || req.body?.deviceId || req.body?.ownerDeviceId)) return res.status(403).json({ error: 'not-admin' });
+      if (!servers.hasPermission(server, actor || req.body?.deviceId || req.body?.ownerDeviceId, 'manage_channels')) return res.status(403).json({ error: 'not-admin' });
       return res.status(409).json({ error: 'channel-limit' });
     }
     const updated = servers.get(req.params.id);
@@ -721,7 +766,7 @@ export async function createHushServer({
     if (!removed) {
       const server = servers.get(req.params.id);
       if (!server) return res.status(404).json({ error: 'server-not-found' });
-      if (!servers.isOwner(server, actor || req.body?.deviceId)) return res.status(403).json({ error: 'not-admin' });
+      if (!servers.hasPermission(server, actor || req.body?.deviceId, 'manage_channels')) return res.status(403).json({ error: 'not-admin' });
       return res.status(400).json({ error: 'channel-not-found' });
     }
     const updated = servers.get(req.params.id);
@@ -1084,7 +1129,7 @@ export async function createHushServer({
     });
   });
 
-  /* -------- Server icon image (owner only, at creation or later) -------- */
+  /* -------- Server icon image (server settings permission) -------- */
   const serverIconUpload = multer({
     storage: multer.diskStorage({
       destination(req, file, callback) {
@@ -1119,7 +1164,7 @@ export async function createHushServer({
     const server = servers.get(serverId);
     if (!server) { req.resume(); return res.status(404).json({ error: 'server-not-found' }); }
     const actor = req.serverSession.deviceId;
-    if (!actor || !servers.isOwner(server, actor)) { req.resume(); return res.status(403).json({ error: 'not-admin' }); }
+    if (!actor || !servers.hasPermission(server, actor, 'manage_settings')) { req.resume(); return res.status(403).json({ error: 'not-admin' }); }
     req.serverId = serverId;
     serverIconUpload.single('file')(req, res, async (error) => {
       if (error) return next(error);

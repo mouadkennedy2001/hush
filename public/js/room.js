@@ -14,6 +14,18 @@ import { initChangelog } from './changelog.js';
 import { initLibraries } from './libraries-log.js';
 import { initFeedback } from './feedback.js';
 import { animateDiceRoll } from './dice-password.js';
+import {
+  initViewportVars,
+  initWakeLock,
+  setWakeLock,
+  haptic,
+  shareUrl,
+  canNativeShare,
+  bindSheetDrag,
+  bindTabSwipe,
+  supportsPictureInPicture,
+  togglePictureInPicture
+} from './mobile.js';
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -168,6 +180,9 @@ const els = {
   copyCode: $('#copy-code'),
   inviteBtn: $('#invite-btn'),
   inviteCopy: $('#invite-copy'),
+  inviteShare: $('#invite-share'),
+  barMenuBtn: $('#bar-menu-btn'),
+  barMenu: $('#bar-menu'),
   status: $('#connection-status'),
   statusLabel: $('#connection-label'),
   stage: $('#stage'),
@@ -190,6 +205,22 @@ const els = {
   reactionLayer: $('#reaction-layer'),
   leaveBtn: $('#leave-btn'),
   leaveTop: $('#leave-btn-top'),
+  moreBtn: $('#more-btn'),
+  moreLabel: $('#more-label'),
+  moreSheet: $('#more-sheet'),
+  moreScrim: $('#more-scrim'),
+  moreClose: $('#more-close'),
+  moreTitle: $('#more-title'),
+  moreReactions: $('#more-reactions'),
+  moreHandLabel: $('#more-hand-label'),
+  moreBoardLabel: $('#more-board-label'),
+  moreDeafenLabel: $('#more-deafen-label'),
+  moreFlipLabel: $('#more-flip-label'),
+  moreFlipBtn: $('#more-flip'),
+  morePipBtn: $('#more-pip'),
+  morePipLabel: $('#more-pip-label'),
+  moreInviteLabel: $('#more-invite-label'),
+  moreMicLabel: $('#more-mic-label'),
   tabChat: $('#tab-chat'),
   tabPeople: $('#tab-people'),
   sidePanel: $('#side-panel'),
@@ -309,6 +340,7 @@ const els = {
   screenStopWatching: $('#screen-stop-watching'),
   screenStopLabel: $('#screen-stop-label'),
   screenEnlarge: $('#screen-enlarge'),
+  screenPip: $('#screen-pip'),
   screenZoomBar: $('#screen-zoom-bar'),
   screenZoomIn: $('#screen-zoom-in'),
   screenZoomOut: $('#screen-zoom-out'),
@@ -402,6 +434,8 @@ const state = {
 initI18n();
 initTheme();
 initSettings();
+initViewportVars();
+initWakeLock();
 // Settings owns the master-volume value; the mesh owns the actual gains
 // (including deafen). Forwarding here keeps deafen in sync with the slider.
 registerVolumeSink((volume) => state.mesh?.setMasterVolume(volume));
@@ -551,6 +585,8 @@ function bindEvents() {
   els.copyCode.addEventListener('click', copyInvite);
   els.inviteBtn.addEventListener('click', copyInvite);
   els.inviteCopy.addEventListener('click', copyInvite);
+  els.inviteShare?.addEventListener('click', shareInvite);
+  bindPhoneMenus();
 
   els.tabChat.addEventListener('click', () => switchTab('chat'));
   els.tabPeople.addEventListener('click', () => switchTab('people'));
@@ -565,6 +601,9 @@ function bindEvents() {
   window.matchMedia?.(PHONE_LAYOUT_QUERY)?.addEventListener?.('change', (event) => {
     if (!event.matches) closeSheet();
   });
+  // Mobile browser chrome appearing/disappearing changes the visual viewport;
+  // mobile.js publishes --app-vh, so just keep the PiP availability honest.
+  window.visualViewport?.addEventListener?.('resize', () => syncScreenPip());
   els.focusToggle?.addEventListener('click', () => toggleFocusMode());
   els.focusModeBtn?.addEventListener('click', () => toggleFocusMode());
   els.pinnedClear?.addEventListener('click', unpinMessage);
@@ -931,6 +970,8 @@ async function joinRoom(event) {
     applyJoinState(response);
     hideGate();
     startSessionTimer();
+    applyWakeLock();
+    feedback('success');
     setStatus('online', 'status.connected');
 
     const existingIds = [...state.participants.keys()].filter((id) => id !== state.selfId);
@@ -938,7 +979,11 @@ async function joinRoom(event) {
     await Promise.allSettled(existingIds.map((id) => state.mesh.connectToPeer(id)));
     await mediaPromise;
 
-    setTimeout(() => els.messageInput.focus(), 200);
+    setTimeout(() => {
+      // On phones the keyboard would cover half the call the moment the gate
+      // closes; wait for the user to tap the composer instead.
+      if (!isPhoneLayout()) els.messageInput.focus();
+    }, 200);
   } catch (error) {
     showJoinError(error?.message?.startsWith?.('error.') ? error.message : 'error.joinFailed');
     setStatus('offline', 'status.notConnected');
@@ -1084,6 +1129,8 @@ function toggleDeafen(force) {
     els.deafenBtn.classList.toggle('is-active', state.deafened);
   }
   if (els.deafenLabel) els.deafenLabel.textContent = t(state.deafened ? 'deafen.on' : 'deafen.off');
+  feedback(state.deafened ? 'light' : 'success');
+  renderMoreSheet();
   playSound(state.deafened ? 'click' : 'success');
   updatePresence();
 }
@@ -1885,6 +1932,7 @@ function updateScreenStage() {
     els.screenStage.classList.remove('is-enlarged');
     resetScreenZoom();
     syncScreenEnlarge();
+    syncScreenPip();
     return;
   }
 
@@ -1901,6 +1949,7 @@ function updateScreenStage() {
     els.screenStage.hidden = true;
     els.stage.classList.remove('is-sharing');
     els.screenVideo.srcObject = null;
+    syncScreenPip();
     return;
   }
   const stream =
@@ -1946,6 +1995,7 @@ function updateScreenStage() {
   } else {
     els.screenStage.title = '';
   }
+  syncScreenPip();
 }
 
 function cycleScreenShare() {
@@ -1979,6 +2029,7 @@ function renderControls() {
   els.cameraBtn.title = state.media.camera ? t('control.cameraOnTitle') : t('control.cameraOffTitle');
   els.screenBtn.title = state.media.screen ? t('control.screenOnTitle') : t('control.screenOffTitle');
   els.handBtn.title = state.handRaised ? t('control.handOnTitle') : t('control.handOffTitle');
+  renderMoreSheet();
 }
 
 /* ---------------- Small helpers ---------------- */
@@ -3564,6 +3615,7 @@ async function toggleMic() {
 
   syncLocalMediaState();
   renderControls();
+  feedback('light');
 }
 
 async function toggleCamera() {
@@ -3580,6 +3632,7 @@ async function toggleCamera() {
   syncLocalMediaState();
   renderControls();
   syncTileMedia();
+  feedback('light');
 }
 
 async function toggleScreen() {
@@ -3588,11 +3641,18 @@ async function toggleScreen() {
   if (state.mesh.isOn('screen')) {
     state.mesh.stopScreen();
   } else {
+    // Most mobile browsers do not expose getDisplayMedia at all. Explain the
+    // limitation instead of failing inside the media layer.
+    if (!navigator.mediaDevices?.getDisplayMedia && isPhoneLayout()) {
+      toast(t('screen.phoneShare'), 'error', 5200);
+      return;
+    }
     const started = await state.mesh.startScreen();
     if (!started) return;
     playSound('share');
   }
 
+  feedback('light');
   syncLocalMediaState();
   renderControls();
   updateScreenStage();
@@ -3601,8 +3661,300 @@ async function toggleScreen() {
 function toggleHand() {
   state.handRaised = !state.handRaised;
   if (state.handRaised) playSound('hand');
+  feedback('light');
   updatePresence();
+  renderMoreSheet();
 }
+
+function feedback(kind = 'light') {
+  if (getSettings().haptics === 'off') return;
+  haptic(kind);
+}
+
+/* ---------------- Phone menus, sheet & screen extras ---------------- */
+
+function toggleBarMenu(force) {
+  if (!els.barMenu || !els.barMenuBtn) return;
+  const open = typeof force === 'boolean' ? force : els.barMenu.hidden;
+  els.barMenu.hidden = !open;
+  els.barMenuBtn.setAttribute('aria-expanded', String(open));
+  if (open) {
+    closeMoreSheet();
+    feedback('light');
+  }
+}
+
+function closeBarMenu() {
+  toggleBarMenu(false);
+}
+
+function toggleMoreSheet(force) {
+  if (!els.moreSheet || !els.moreBtn) return;
+  const open = typeof force === 'boolean' ? force : els.moreSheet.hidden;
+  if (open) {
+    closeBarMenu();
+    renderMoreSheet();
+    els.moreSheet.hidden = false;
+    if (els.moreScrim) els.moreScrim.hidden = false;
+    // Next frame so the translate/opacity transition actually runs.
+    requestAnimationFrame(() => {
+      els.moreSheet?.classList.add('is-open');
+      els.moreScrim?.classList.add('is-open');
+    });
+    els.moreBtn.setAttribute('aria-expanded', 'true');
+    feedback('light');
+  } else {
+    els.moreSheet.classList.remove('is-open');
+    els.moreScrim?.classList.remove('is-open');
+    els.moreBtn.setAttribute('aria-expanded', 'false');
+    const hide = () => {
+      if (els.moreSheet && !els.moreSheet.classList.contains('is-open')) els.moreSheet.hidden = true;
+      if (els.moreScrim) els.moreScrim.hidden = true;
+    };
+    setTimeout(hide, 220);
+  }
+}
+
+function closeMoreSheet() {
+  if (els.moreSheet && !els.moreSheet.hidden) toggleMoreSheet(false);
+}
+
+function renderMoreSheet() {
+  if (!els.moreSheet) return;
+  if (els.moreTitle) els.moreTitle.textContent = t('control.moreActions');
+  if (els.moreLabel) els.moreLabel.textContent = t('control.more');
+  if (els.moreBtn) {
+    els.moreBtn.title = t('control.moreActions');
+    els.moreBtn.setAttribute('aria-label', t('control.moreActions'));
+  }
+  if (els.moreHandLabel) {
+    els.moreHandLabel.textContent = t(state.handRaised ? 'control.lowerHand' : 'control.raiseHand');
+  }
+  const handItem = els.moreSheet.querySelector('[data-more-action="hand"]');
+  handItem?.setAttribute('aria-pressed', String(state.handRaised));
+  const boardItem = els.moreSheet.querySelector('[data-more-action="board"]');
+  boardItem?.setAttribute('aria-pressed', String(state.soundboardOpen));
+  const deafenItem = els.moreSheet.querySelector('[data-more-action="deafen"]');
+  deafenItem?.setAttribute('aria-pressed', String(state.deafened));
+  if (els.moreDeafenLabel) els.moreDeafenLabel.textContent = t(state.deafened ? 'deafen.on' : 'deafen.off');
+  if (els.moreBoardLabel) els.moreBoardLabel.textContent = t('soundboard.title');
+  if (els.moreFlipLabel) els.moreFlipLabel.textContent = t('control.flipCamera');
+  if (els.morePipLabel) els.morePipLabel.textContent = t('screen.pip');
+  if (els.moreInviteLabel) els.moreInviteLabel.textContent = t('control.invite');
+  if (els.moreMicLabel) els.moreMicLabel.textContent = t('control.micSettings');
+  if (els.moreFlipBtn) els.moreFlipBtn.hidden = !state.media.camera;
+  renderBarMenu();
+  syncScreenPip();
+}
+
+function renderBarMenu() {
+  if (!els.barMenu) return;
+  const labels = {
+    theme: 'control.theme',
+    language: 'control.language',
+    invite: 'control.invite',
+    log: 'control.log',
+    libraries: 'control.libraries',
+    bug: 'control.bug',
+    feature: 'control.feature'
+  };
+  els.barMenu.querySelectorAll('[data-bar-action]').forEach((item) => {
+    const key = labels[item.dataset.barAction];
+    const span = item.querySelector('span');
+    if (key && span) span.textContent = t(key);
+  });
+  const installLabel = els.barMenu.querySelector('[data-bar-install-label]');
+  if (installLabel) installLabel.textContent = t('control.install');
+}
+
+function bindPhoneMenus() {
+  if (els.inviteShare && canNativeShare()) els.inviteShare.hidden = false;
+
+  els.barMenuBtn?.addEventListener('click', (event) => {
+    event.stopPropagation();
+    toggleBarMenu();
+  });
+
+  els.barMenu?.addEventListener('click', (event) => {
+    const item = event.target.closest('[data-bar-action]');
+    if (!item) return;
+    const action = item.dataset.barAction;
+    closeBarMenu();
+    runBarAction(action);
+  });
+
+  els.moreBtn?.addEventListener('click', (event) => {
+    event.stopPropagation();
+    toggleMoreSheet();
+  });
+  els.moreClose?.addEventListener('click', () => toggleMoreSheet(false));
+  els.moreScrim?.addEventListener('click', () => toggleMoreSheet(false));
+  els.moreSheet?.addEventListener('click', (event) => {
+    const item = event.target.closest('[data-more-action]');
+    if (!item) return;
+    runMoreAction(item.dataset.moreAction);
+  });
+
+  document.addEventListener('click', (event) => {
+    if (!els.barMenu || els.barMenu.hidden) return;
+    if (els.barMenu.contains(event.target) || els.barMenuBtn?.contains(event.target)) return;
+    closeBarMenu();
+  });
+
+  buildMoreReactions();
+  syncScreenPip();
+
+  els.screenPip?.addEventListener('click', (event) => {
+    event.stopPropagation();
+    void toggleScreenPip();
+  });
+
+  bindSheetDrag({
+    getSheet: () => els.sidePanel,
+    getHandle: () => els.sidePanel?.querySelector('.side-tabs'),
+    onClose: () => closeSheet()
+  });
+  bindTabSwipe({
+    getHandle: () => els.sidePanel?.querySelector('.side-tabs'),
+    onSwipe: (direction) => switchTab(direction > 0 ? 'people' : 'chat')
+  });
+
+  window.addEventListener('hush:settings', applyWakeLock);
+}
+
+function runBarAction(action) {
+  switch (action) {
+    case 'invite':
+      els.inviteBtn?.click();
+      break;
+    case 'log':
+      $('[data-open-log]')?.click();
+      break;
+    case 'libraries':
+      $('[data-open-libraries-log]')?.click();
+      break;
+    case 'bug':
+      $('[data-open-bug-report]')?.click();
+      break;
+    case 'feature':
+      $('[data-open-feature-suggest]')?.click();
+      break;
+    case 'theme':
+      $('.room-bar [data-theme-toggle]')?.click();
+      break;
+    case 'language':
+      $('.room-bar [data-lang-toggle]')?.click();
+      break;
+    default:
+      break;
+  }
+}
+
+function runMoreAction(action) {
+  switch (action) {
+    case 'hand':
+      toggleHand();
+      break;
+    case 'board':
+      toggleSoundboard();
+      closeMoreSheet();
+      break;
+    case 'deafen':
+      toggleDeafen();
+      renderMoreSheet();
+      break;
+    case 'flip':
+      closeMoreSheet();
+      void flipCamera();
+      break;
+    case 'pip':
+      closeMoreSheet();
+      void toggleScreenPip();
+      break;
+    case 'invite':
+      closeMoreSheet();
+      els.inviteBtn?.click();
+      break;
+    case 'mic-settings':
+      closeMoreSheet();
+      els.micSettingsBtn?.click();
+      break;
+    default:
+      break;
+  }
+}
+
+function applyWakeLock() {
+  setWakeLock(Boolean(state.joinedAt) && getSettings().wakeLock !== 'off');
+}
+
+function buildMoreReactions() {
+  if (!els.moreReactions || els.moreReactions.childElementCount) return;
+  for (const emoji of REACTIONS) {
+    const button = el('button');
+    button.type = 'button';
+    button.dataset.emoji = emoji;
+    button.title = `:${emoji}:`;
+    button.setAttribute('aria-label', t('chat.reactWith', { emoji: `:${emoji}:` }));
+    button.append(customEmojiImage(emoji, 'custom-emoji custom-emoji-sm'));
+    button.addEventListener('click', () => {
+      state.socket?.emit('reaction:send', { emoji });
+      feedback('light');
+      closeMoreSheet();
+    });
+    els.moreReactions.append(button);
+  }
+}
+
+function syncScreenPip() {
+  const available =
+    Boolean(els.screenStage && !els.screenStage.hidden) &&
+    supportsPictureInPicture(els.screenVideo);
+  const active = Boolean(
+    available &&
+    els.screenVideo &&
+    document.pictureInPictureElement === els.screenVideo
+  );
+  if (els.screenPip) {
+    els.screenPip.hidden = !available;
+    els.screenPip.classList.toggle('is-active', active);
+    els.screenPip.title = t(active ? 'screen.pipExit' : 'screen.pip');
+    els.screenPip.setAttribute('aria-label', t(active ? 'screen.pipExit' : 'screen.pip'));
+  }
+  if (els.morePipBtn) els.morePipBtn.hidden = !available;
+  if (els.morePipLabel) els.morePipLabel.textContent = t(active ? 'screen.pipExit' : 'screen.pip');
+}
+
+async function toggleScreenPip() {
+  if (!els.screenVideo || els.screenStage?.hidden) return;
+  if (!supportsPictureInPicture(els.screenVideo)) {
+    toast(t('screen.pipUnavailable'), 'error');
+    return;
+  }
+  const entered = await togglePictureInPicture(els.screenVideo);
+  els.screenPip?.classList.toggle('is-active', Boolean(entered));
+  if (els.morePipBtn) els.morePipBtn.classList.toggle('is-active', Boolean(entered));
+  toast(t(entered ? 'screen.pipEntered' : 'screen.pipExited'), 'info', 1800);
+}
+
+async function flipCamera() {
+  if (!state.mesh) return;
+  if (!state.mesh.isOn('camera')) {
+    toast(t('media.cameraFlipUnavailable'));
+    return;
+  }
+  const flipped = await state.mesh.flipCamera();
+  if (flipped) {
+    feedback('success');
+    toast(t('media.cameraFlipped'));
+    syncTileMedia();
+  } else {
+    feedback('error');
+    toast(t('media.cameraFlipFailed'), 'error');
+  }
+}
+
+/* ---------------- Phone bottom sheet ---------------- */
 
 function switchTab(tab) {
   state.activeTab = tab === 'people' ? 'people' : 'chat';
@@ -3638,8 +3990,11 @@ function openSheet() {
   state.sheetOpen = true;
   els.sidePanel.classList.add('is-open');
   els.sheetScrim?.classList.add('is-open');
+  els.shell?.classList.add('is-sheet-open');
   els.chatFab?.setAttribute('aria-pressed', 'true');
   syncChatFab();
+  closeBarMenu();
+  closeMoreSheet();
 }
 
 function closeSheet() {
@@ -3648,6 +4003,7 @@ function closeSheet() {
   els.sidePanel.classList.remove('is-open');
   els.sheetScrim?.classList.remove('is-open');
   els.chatFab?.setAttribute('aria-pressed', 'false');
+  els.shell?.classList.remove('is-sheet-open');
   syncChatFab();
   // Keep whatever tab was active so reopening continues where the user left off.
   if (els.messageInput) els.messageInput.blur();
@@ -3707,6 +4063,19 @@ async function copyInvite() {
   }
 }
 
+async function shareInvite() {
+  const url = `${window.location.origin}/r/${state.code}`;
+  const result = await shareUrl({ title: document.title, url });
+  if (result === 'shared') {
+    feedback('success');
+    toast(t('toast.inviteShared'));
+    return;
+  }
+  // Desktop browsers without the share sheet (or a cancelled share) fall
+  // back to the copy path so the action never feels broken.
+  if (result === 'unsupported') copyInvite();
+}
+
 async function copyText(text) {
   if (navigator.clipboard?.writeText) {
     await navigator.clipboard.writeText(text);
@@ -3731,6 +4100,7 @@ function fallbackCopy(text) {
 function leaveRoom() {
   if (!window.confirm(t('confirm.leave'))) return;
 
+  setWakeLock(false);
   stopTyping();
   try {
     state.socket?.emit('room:leave');
@@ -3820,12 +4190,23 @@ function handleLanguageChange() {
   for (const [btn, key] of [[els.gifBtn, 'composer.gifTitle'], [els.stickerBtn, 'composer.stickerTitle']]) {
     if (btn) { btn.title = t(key); btn.setAttribute('aria-label', t(key)); }
   }
+  renderMoreSheet();
+  renderBarMenu();
+  syncScreenPip();
 }
 
 /* ---------------- Keyboard shortcuts ---------------- */
 
 function handleShortcut(event) {
   if (event.key === 'Escape') {
+    if (els.moreSheet && !els.moreSheet.hidden) {
+      toggleMoreSheet(false);
+      return;
+    }
+    if (els.barMenu && !els.barMenu.hidden) {
+      closeBarMenu();
+      return;
+    }
     if (els.screenStage?.classList.contains('is-enlarged')) {
       els.screenStage.classList.remove('is-enlarged');
       resetScreenZoom();

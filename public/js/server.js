@@ -18,6 +18,7 @@ import { playSound, getSoundsEnabled, setSoundsEnabled } from './sounds.js';
 import { getDeviceId, serverIconUrl } from './servers.js';
 import { initLibraries } from './libraries-log.js';
 import { initFeedback } from './feedback.js';
+import { initViewportVars, supportsPictureInPicture, togglePictureInPicture } from './mobile.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -25,6 +26,10 @@ const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const els = {
   gate: $('#join-gate'), joinForm: $('#join-form'), joinBtn: $('#join-btn'), joinError: $('#join-error'),
   nameInput: $('#name-input'), gateServer: $('#gate-server'),
+  serverChannels: $('#server-channels'), serverChannelsTitle: $('#server-channels-title'),
+  mobileChannelsToggle: $('#server-mobile-channels-toggle'), channelsClose: $('#server-channels-close'),
+  membersPanel: $('#server-members-panel'), membersToggle: $('#members-toggle'), membersClose: $('#server-members-close'),
+  drawerScrim: $('#server-drawer-scrim'),
   serverIcon: $('#server-icon'), serverName: $('#server-name'), serverCount: $('#server-count'), serverDescription: $('#server-description'),
   inviteBtn: $('#invite-btn'), inviteCopy: $('#invite-copy'), inviteCode: $('#invite-code'), regenInvite: $('#regen-invite'),
   leaveServerBtn: $('#leave-server-btn'), deleteServerBtn: $('#delete-server-btn'), dangerZone: $('#danger-zone'),
@@ -55,13 +60,19 @@ const els = {
   deafenBtn: $('#deafen-btn'), deafenLabel: $('#deafen-label'),
   serverScreenStopWatching: $('#server-screen-stop-watching'), serverScreenStopLabel: $('#server-screen-stop-label'),
   serverScreenEnlarge: $('#server-screen-enlarge'),
+  serverScreenPip: $('#server-screen-pip'),
   serverScreenWatchBtn: $('#server-screen-watch-btn'), serverScreenWatchLabel: $('#server-screen-watch-label'),
   serverSettings: $('#server-settings'), serverSettingsName: $('#server-settings-name'),
   serverSettingsDesc: $('#server-settings-desc'), serverSettingsIcon: $('#server-settings-icon'),
   serverSettingsPreview: $('#server-settings-preview'), serverSettingsRemoveIcon: $('#server-settings-remove-icon'),
   serverSettingsSave: $('#server-settings-save'),
+  serverSettingsToggle: $('#server-settings-toggle'), serverSettingsToggleLabel: $('#server-settings-toggle-label'),
+  serverOwnerTools: $('#server-owner-tools'),
   serverSettingsNameLabel: $('#server-settings-name-label'), serverSettingsDescLabel: $('#server-settings-desc-label'),
   serverSettingsIconLabel: $('#server-settings-icon-label'), serverSettingsTitle: $('#server-settings-title'),
+  roleManager: $('#server-role-manager'), roleForm: $('#server-role-form'), roleId: $('#server-role-id'),
+  roleName: $('#server-role-name'), roleColor: $('#server-role-color'), roleList: $('#server-role-list'),
+  roleSave: $('#server-role-save'), roleCancel: $('#server-role-cancel'),
   imageLightbox: $('#image-lightbox'), imageLightboxBackdrop: $('#image-lightbox-backdrop'),
   imageLightboxImg: $('#image-lightbox-img'), imageLightboxCaption: $('#image-lightbox-caption'),
   imageLightboxDownload: $('#image-lightbox-download'), imageLightboxClose: $('#image-lightbox-close'),
@@ -79,7 +90,8 @@ const state = {
   sessionToken: '', loadSeq: 0, drafts: new Map(),
   lastTextChannelId: null, voiceOccupancy: {}, tempOccupancy: {},
   joiningVoice: false, creatingRoom: false,
-  deafened: false, customSounds: [], personalSounds: [], boardQuery: '', hiddenScreenId: null
+  deafened: false, customSounds: [], personalSounds: [], boardQuery: '', hiddenScreenId: null,
+  serverSettingsOpen: false, serverDrawer: null
 };
 
 // A1: sessions/tokens — store the opaque token from join ack; REST calls
@@ -103,9 +115,137 @@ function isOwner() {
   return Boolean(state.server?.isOwner) || Boolean(state.server?.ownerDeviceId && state.server.ownerDeviceId === state.deviceId);
 }
 
+function currentMember() {
+  return state.server?.members?.find((member) => member.isYou
+    || (state.selfMemberId && member.memberId === state.selfMemberId)
+    || (member.deviceId && member.deviceId === state.deviceId)) || null;
+}
+
+function hasPermission(permission) {
+  if (isOwner()) return true;
+  const member = currentMember();
+  if (!member) return false;
+  const roleIds = new Set(member.roleIds || ['member']);
+  return (state.server?.roles || []).some((role) => roleIds.has(role.id) && role.permissions?.includes(permission));
+}
+
+function roleTitle(role) {
+  return role.builtIn ? t(`server.role.${role.id}`) : role.name;
+}
+
+function roleRank(member) {
+  const roleIds = new Set(member?.roleIds || ['member']);
+  return Math.max(0, ...(state.server?.roles || [])
+    .filter((role) => roleIds.has(role.id))
+    .map((role) => role.position || 0));
+}
+
+function canModerateMember(member) {
+  if (!hasPermission('moderate_members') || member.isOwner) return false;
+  return isOwner() || roleRank(currentMember()) > roleRank(member);
+}
+
+function updateServerDrawerUi() {
+  const isPhone = window.matchMedia('(max-width: 700px)').matches;
+  const isNarrow = window.matchMedia('(max-width: 1100px)').matches;
+  if ((state.serverDrawer === 'channels' && !isPhone) || (state.serverDrawer === 'members' && !isNarrow)) {
+    state.serverDrawer = null;
+  }
+
+  const channelsOpen = state.serverDrawer === 'channels' && isPhone;
+  const membersOpen = state.serverDrawer === 'members' && isNarrow;
+  els.serverChannels?.classList.toggle('is-drawer-open', channelsOpen);
+  els.membersPanel?.classList.toggle('is-drawer-open', membersOpen);
+  els.serverChannels?.toggleAttribute('inert', isPhone && !channelsOpen);
+  els.membersPanel?.toggleAttribute('inert', isNarrow && !membersOpen);
+  if (els.drawerScrim) els.drawerScrim.hidden = !channelsOpen && !membersOpen;
+  els.mobileChannelsToggle?.setAttribute('aria-expanded', String(channelsOpen));
+  els.membersToggle?.setAttribute('aria-expanded', String(membersOpen));
+
+  const channelsLabel = t('server.channels');
+  const membersLabel = t('server.membersTitle');
+  const closeLabel = t('chat.closePanel');
+  if (els.messageInput) {
+    els.messageInput.placeholder = t(isPhone ? 'server.messagePlaceholderShort' : 'server.messagePlaceholder');
+    els.messageInput.setAttribute('aria-label', t('server.messageInputLabel'));
+  }
+  for (const button of [els.mobileChannelsToggle, els.channelsClose]) {
+    if (button) {
+      button.title = button === els.channelsClose ? closeLabel : channelsLabel;
+      button.setAttribute('aria-label', button === els.channelsClose ? closeLabel : channelsLabel);
+    }
+  }
+  for (const button of [els.membersToggle, els.membersClose]) {
+    if (button) {
+      button.title = button === els.membersClose ? closeLabel : membersLabel;
+      button.setAttribute('aria-label', button === els.membersClose ? closeLabel : membersLabel);
+    }
+  }
+  if (els.serverChannelsTitle) els.serverChannelsTitle.textContent = channelsLabel;
+}
+
+function toggleServerDrawer(drawer) {
+  state.serverDrawer = state.serverDrawer === drawer ? null : drawer;
+  updateServerDrawerUi();
+  if (state.serverDrawer === drawer) {
+    const panel = drawer === 'channels' ? els.serverChannels : els.membersPanel;
+    panel?.querySelector('.server-drawer-close')?.focus();
+  }
+}
+
+function closeServerDrawer(restoreFocus = false) {
+  const previous = state.serverDrawer;
+  state.serverDrawer = null;
+  updateServerDrawerUi();
+  if (restoreFocus) {
+    const trigger = previous === 'channels' ? els.mobileChannelsToggle : els.membersToggle;
+    trigger?.focus();
+  }
+}
+
+function receiveServerBroadcast(server) {
+  const previous = state.server;
+  const previouslyOwner = isOwner();
+  const previousMembers = new Map((previous?.members || []).map((member) => [member.memberId, member]));
+  const members = (server.members || []).map((member) => {
+    const old = previousMembers.get(member.memberId);
+    const isYou = member.memberId === state.selfMemberId || Boolean(old?.isYou);
+    return {
+      ...member,
+      isYou,
+      ...(previouslyOwner && old?.deviceId ? { deviceId: old.deviceId } : {})
+    };
+  });
+  state.server = {
+    ...server,
+    isOwner: previouslyOwner,
+    ownerDeviceId: previouslyOwner ? previous?.ownerDeviceId : null,
+    members
+  };
+}
+
+async function refreshServerSummary() {
+  const serverId = state.serverId;
+  try {
+    const response = await fetch(`/api/servers/${encodeURIComponent(serverId)}?deviceId=${encodeURIComponent(state.deviceId)}`, {
+      headers: authHeaders()
+    });
+    if (!response.ok) throw new Error(`server-summary-failed:${response.status}`);
+    const data = await response.json();
+    if (serverId !== state.serverId || !data.server?.isMember) return;
+    state.server = data.server;
+    const self = state.server.members?.find((member) => member.isYou || member.deviceId === state.deviceId);
+    if (self?.memberId) state.selfMemberId = self.memberId;
+    applyServerUi();
+  } catch (error) {
+    console.error('server summary refresh failed', error);
+  }
+}
+
 initI18n();
 initTheme();
 initSettings();
+initViewportVars();
 initLibraries();
 initFeedback();
 startPing({ socketGetter: () => state.socket });
@@ -198,18 +338,31 @@ function bindEvents() {
   els.imageLightboxBackdrop?.addEventListener('click', closeImageLightbox);
   els.soundboardBtn?.addEventListener('click', () => toggleSoundboard());
   els.soundboardClose?.addEventListener('click', () => toggleSoundboard(false));
-  // A30: members sheet toggle for tablet/mobile where the aside is hidden.
-  document.querySelector('#members-toggle')?.addEventListener('click', () => {
-    const aside = document.querySelector('.server-members');
-    if (!aside) return;
-    const show = aside.style.display !== 'block';
-    aside.style.display = show ? 'block' : '';
-    document.querySelector('#members-toggle')?.setAttribute('aria-expanded', String(show));
+  els.mobileChannelsToggle?.addEventListener('click', () => toggleServerDrawer('channels'));
+  els.membersToggle?.addEventListener('click', () => toggleServerDrawer('members'));
+  els.channelsClose?.addEventListener('click', () => closeServerDrawer(true));
+  els.membersClose?.addEventListener('click', () => closeServerDrawer(true));
+  els.drawerScrim?.addEventListener('click', () => closeServerDrawer(true));
+  els.serverChannels?.addEventListener('click', (event) => {
+    if (state.serverDrawer !== 'channels') return;
+    if (!event.target.closest('.server-channel') || event.target.closest('.server-channel-del')) return;
+    state.serverDrawer = null;
+    updateServerDrawerUi();
+    els.channelTitle?.focus({ preventScroll: true });
   });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && state.serverDrawer) {
+      event.preventDefault();
+      closeServerDrawer(true);
+    }
+  });
+  window.addEventListener('resize', updateServerDrawerUi);
+  updateServerDrawerUi();
   els.soundboardVolume?.addEventListener('input', () => setSoundboardVolume(Number(els.soundboardVolume.value) / 100));
   els.deafenBtn?.addEventListener('click', () => toggleDeafen());
   els.serverScreenStopWatching?.addEventListener('click', (e) => { e.stopPropagation(); stopWatchingScreen(); });
   els.serverScreenEnlarge?.addEventListener('click', (e) => { e.stopPropagation(); toggleScreenEnlarge(); });
+  els.serverScreenPip?.addEventListener('click', (e) => { e.stopPropagation(); void toggleServerScreenPip(); });
   els.serverScreenVideo?.addEventListener('playing', () => {});
   els.serverScreenStopWatching?.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); stopWatchingScreen(); } });
   els.serverScreenWatchBtn?.addEventListener('click', () => { state.hiddenScreenId = null; updateScreenStage(); });
@@ -218,6 +371,13 @@ function bindEvents() {
   els.soundboardMyClear?.addEventListener('click', async () => { await clearPersonalSounds(); state.personalSounds = []; renderPersonalGrid(); });
   els.boardMyImage?.addEventListener('change', () => { const f = els.boardMyImage?.files?.[0]; if (!f) return; imageFileToDataUrl(f).then((u) => { boardMyImageDataUrl = u; if (els.boardMyImagePreview) { els.boardMyImagePreview.src = u; els.boardMyImagePreview.hidden = false; } }).catch(() => {}); });
   els.serverSettings?.addEventListener('submit', (e) => { e.preventDefault(); saveServerSettings(); });
+  els.roleForm?.addEventListener('submit', (e) => { e.preventDefault(); saveRole(); });
+  els.roleCancel?.addEventListener('click', resetRoleForm);
+  els.serverSettingsToggle?.addEventListener('click', () => {
+    state.serverSettingsOpen = !state.serverSettingsOpen;
+    applyServerUi();
+    if (state.serverSettingsOpen) els.serverSettingsName?.focus();
+  });
   els.serverSettingsRemoveIcon?.addEventListener('click', () => removeServerIcon());
   if (els.boardMyEmoji) {
     els.boardMyEmoji.replaceChildren();
@@ -363,6 +523,8 @@ async function rejoin() {
 function applyServerUi() {
   const server = state.server;
   if (!server) return;
+  if (els.stage) els.stage.setAttribute('aria-label', t('server.chatLabel'));
+  if (els.messages) els.messages.setAttribute('aria-label', t('server.messagesLabel'));
   if (els.serverName) els.serverName.textContent = server.name;
   if (els.gateServer) els.gateServer.textContent = server.name;
   if (els.serverDescription) {
@@ -384,11 +546,22 @@ function applyServerUi() {
   if (els.voiceKicker) els.voiceKicker.textContent = t('server.voiceChannels');
   if (els.membersKicker) els.membersKicker.textContent = t('server.membersTitle');
   const ownerCheck = isOwner();
-  if (els.regenInvite) els.regenInvite.hidden = !ownerCheck;
+  const settingsPermission = hasPermission('manage_settings');
+  const channelsPermission = hasPermission('manage_channels');
+  const hasServerTools = ownerCheck || settingsPermission || channelsPermission;
+  if (els.regenInvite) els.regenInvite.hidden = !settingsPermission;
   if (els.dangerZone) els.dangerZone.hidden = !ownerCheck;
+  if (els.serverSettingsToggle) {
+    els.serverSettingsToggle.hidden = !hasServerTools;
+    els.serverSettingsToggle.setAttribute('aria-expanded', String(hasServerTools && state.serverSettingsOpen));
+    if (els.serverSettingsToggleLabel) els.serverSettingsToggleLabel.textContent = t('server.settings');
+    els.serverSettingsToggle.setAttribute('aria-label', t('server.settings'));
+    if (!hasServerTools) state.serverSettingsOpen = false;
+  }
+  if (els.serverOwnerTools) els.serverOwnerTools.hidden = !hasServerTools || !state.serverSettingsOpen;
+  if (els.serverSettings) els.serverSettings.hidden = !settingsPermission;
   if (els.serverSettings) {
-    els.serverSettings.hidden = !ownerCheck;
-    if (ownerCheck) {
+    if (settingsPermission) {
       if (els.serverSettingsName && document.activeElement !== els.serverSettingsName) els.serverSettingsName.value = server.name || '';
       if (els.serverSettingsDesc && document.activeElement !== els.serverSettingsDesc) els.serverSettingsDesc.value = server.description || '';
       if (els.serverSettingsPreview) {
@@ -403,12 +576,146 @@ function applyServerUi() {
       if (els.serverSettingsSave) els.serverSettingsSave.textContent = t('server.settingsSave');
     }
   }
+  if (els.roleManager) els.roleManager.hidden = !ownerCheck;
+  renderRoleManager();
   if (Array.isArray(server.customSounds)) state.customSounds = server.customSounds;
-  // N3: add-channel form is owner-only (was visible to everyone while the
-  // server rejected members with a generic toast).
-  if (els.addChannelForm) els.addChannelForm.hidden = !ownerCheck;
+  if (els.addChannelForm) els.addChannelForm.hidden = !channelsPermission;
   renderChannels();
   renderMembers();
+}
+
+function renderRoleManager() {
+  if (!els.roleManager) return;
+  const labels = [
+    ['#server-roles-title', 'server.rolesTitle'],
+    ['#server-role-name-label', 'server.roleName'],
+    ['#server-role-color-label', 'server.roleColor'],
+    ['#server-role-permissions-label', 'server.rolePermissions'],
+    ['#server-role-perm-settings', 'server.permission.manage_settings'],
+    ['#server-role-perm-channels', 'server.permission.manage_channels'],
+    ['#server-role-perm-members', 'server.permission.moderate_members'],
+    ['#server-role-perm-messages', 'server.permission.manage_messages']
+  ];
+  for (const [selector, key] of labels) {
+    const node = $(selector);
+    if (node) node.textContent = t(key);
+  }
+  if (!els.roleForm || !els.roleList || !isOwner()) return;
+  if (!els.roleId?.value && els.roleSave) els.roleSave.textContent = t('server.roleCreate');
+  if (els.roleCancel) els.roleCancel.textContent = t('server.roleCancel');
+  els.roleList.replaceChildren();
+  const roles = [...(state.server?.roles || [])].sort((a, b) => b.position - a.position);
+  for (const role of roles) {
+    const item = document.createElement('li');
+    item.className = 'server-role-item';
+    const name = document.createElement('span');
+    name.className = 'server-role-name';
+    name.style.setProperty('--role-color', role.color);
+    name.textContent = roleTitle(role);
+    const permissions = document.createElement('span');
+    permissions.className = 'server-role-summary';
+    permissions.textContent = role.permissions.length
+      ? role.permissions.map((permission) => t(`server.permission.${permission}`)).join(' · ')
+      : t('server.roleNoPermissions');
+    item.append(name, permissions);
+    if (!role.builtIn) {
+      const actions = document.createElement('span');
+      actions.className = 'server-role-actions';
+      const edit = document.createElement('button');
+      edit.type = 'button';
+      edit.className = 'btn btn-quiet btn-sm';
+      edit.textContent = t('server.roleEdit');
+      edit.addEventListener('click', () => editRole(role));
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'btn btn-quiet btn-sm';
+      remove.textContent = t('server.roleDelete');
+      remove.addEventListener('click', () => deleteRole(role));
+      actions.append(edit, remove);
+      item.append(actions);
+    }
+    els.roleList.append(item);
+  }
+}
+
+function resetRoleForm() {
+  if (!els.roleForm) return;
+  els.roleForm.reset();
+  if (els.roleId) els.roleId.value = '';
+  if (els.roleColor) els.roleColor.value = '#64748b';
+  if (els.roleSave) els.roleSave.textContent = t('server.roleCreate');
+  if (els.roleCancel) els.roleCancel.hidden = true;
+}
+
+function editRole(role) {
+  if (!els.roleForm) return;
+  els.roleId.value = role.id;
+  els.roleName.value = role.name;
+  els.roleColor.value = role.color;
+  for (const input of els.roleForm.querySelectorAll('.server-role-permissions input')) {
+    input.checked = role.permissions.includes(input.value);
+  }
+  els.roleSave.textContent = t('server.roleSave');
+  els.roleCancel.hidden = false;
+  els.roleName.focus();
+}
+
+async function saveRole() {
+  const roleId = els.roleId?.value || '';
+  const permissions = [...(els.roleForm?.querySelectorAll('.server-role-permissions input:checked') || [])]
+    .map((input) => input.value);
+  const body = { name: els.roleName?.value || '', color: els.roleColor?.value || '', permissions };
+  const path = `/api/servers/${encodeURIComponent(state.serverId)}/roles${roleId ? `/${encodeURIComponent(roleId)}` : ''}`;
+  try {
+    const response = await fetch(path, {
+      method: roleId ? 'PATCH' : 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify(body)
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || 'role-save-failed');
+    state.server = data.server;
+    resetRoleForm();
+    applyServerUi();
+    toast(t('server.roleSaved'), 'info', 2400);
+  } catch {
+    toast(t('server.roleFailed'), 'error', 3600);
+  }
+}
+
+async function deleteRole(role) {
+  if (!window.confirm(t('server.roleDeleteConfirm', { name: role.name }))) return;
+  try {
+    const response = await fetch(`/api/servers/${encodeURIComponent(state.serverId)}/roles/${encodeURIComponent(role.id)}`, {
+      method: 'DELETE',
+      headers: authHeaders()
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || 'role-delete-failed');
+    state.server = data.server;
+    resetRoleForm();
+    applyServerUi();
+  } catch {
+    toast(t('server.roleFailed'), 'error', 3600);
+  }
+}
+
+async function assignMemberRoles(member, roleIds) {
+  if (!member.memberId) { toast(t('server.roleFailed'), 'error', 3600); return; }
+  try {
+    const response = await fetch(`/api/servers/${encodeURIComponent(state.serverId)}/members/${encodeURIComponent(member.memberId)}/roles`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ roleIds })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || 'role-assignment-failed');
+    state.server = data.server;
+    applyServerUi();
+    toast(t('server.roleAssigned'), 'info', 2200);
+  } catch {
+    toast(t('server.roleFailed'), 'error', 3600);
+  }
 }
 
 function occupantsFor(channelId, kind) {
@@ -481,7 +788,7 @@ function renderChannels() {
         }
       }
       row.append(link);
-      if (isOwner() && server.channels.length > 1) {
+      if (hasPermission('manage_channels') && server.channels.length > 1) {
         const del = document.createElement('button');
         del.type = 'button';
         del.className = 'server-channel-del';
@@ -872,14 +1179,14 @@ function createMessageNode(message) {
     meta.append(reactBtn);
   }
   appendReactionChips(meta, message);
-  const owner = isOwner();
+  const canDeleteAny = hasPermission('manage_messages');
   if (isSelf) {
     const edit = el('button', 'message-copy'); edit.type = 'button'; edit.title = t('chat.edit'); edit.setAttribute('aria-label', t('chat.edit')); edit.append(icon('i-pencil'));
     edit.addEventListener('click', () => editMessage(message.id));
     const del = el('button', 'message-copy'); del.type = 'button'; del.title = t('chat.delete'); del.setAttribute('aria-label', t('chat.delete')); del.append(icon('i-trash'));
     del.addEventListener('click', () => deleteMessage(message.id));
     meta.append(edit, del);
-  } else if (owner) {
+  } else if (canDeleteAny) {
     const delAny = el('button', 'message-copy'); delAny.type = 'button'; delAny.title = t('admin.deleteAny'); delAny.setAttribute('aria-label', t('admin.deleteAny')); delAny.append(icon('i-trash'));
     delAny.addEventListener('click', () => deleteMessageAny(message.id));
     meta.append(delAny);
@@ -1505,6 +1812,7 @@ function updateScreenStage() {
     if (els.serverScreenWatchBtn) els.serverScreenWatchBtn.hidden = true;
     els.serverScreenStage.classList.remove('is-enlarged');
     syncScreenEnlarge();
+    syncServerScreenPip();
     return;
   }
   const stoppedWatching = state.hiddenScreenId === id;
@@ -1512,6 +1820,7 @@ function updateScreenStage() {
   if (stoppedWatching) {
     els.serverScreenStage.hidden = true;
     if (els.serverScreenVideo) els.serverScreenVideo.srcObject = null;
+    syncServerScreenPip();
     return;
   }
   const stream = id === state.selfId
@@ -1530,6 +1839,7 @@ function updateScreenStage() {
       ? t('screen.youSharing')
       : t('screen.someoneSharing', { name: ownerName });
   }
+  syncServerScreenPip();
 }
 async function toggleMic() {
   if (state.mesh.isOn('audio')) state.mesh.disableMic();
@@ -1648,9 +1958,13 @@ function renderMembers() {
   const all = new Map();
   for (const m of state.server?.members || []) {
     const key = m.memberId || m.deviceId || m.name;
-    all.set(key, { key, memberId: m.memberId, deviceId: m.deviceId, name: m.name, persistent: true, isOwner: m.isOwner, isYou: m.isYou });
+    all.set(key, {
+      key, memberId: m.memberId, deviceId: m.deviceId, name: m.name,
+      roleIds: m.roleIds || ['member'], persistent: true, isOwner: m.isOwner, isYou: m.isYou
+    });
   }
-  const sorted = [...all.values()].sort((a, b) => (b.isOwner ? 1 : 0) - (a.isOwner ? 1 : 0) || String(a.name).localeCompare(String(b.name), locale()));
+  const sorted = [...all.values()].sort((a, b) => (b.isOwner ? 1 : 0) - (a.isOwner ? 1 : 0)
+    || roleRank(b) - roleRank(a) || String(a.name).localeCompare(String(b.name), locale()));
   if (!sorted.length) {
     const li = document.createElement('li');
     li.className = 'server-temp-empty';
@@ -1679,10 +1993,21 @@ function renderMembers() {
     nameRow.className = 'person-name';
     nameRow.append(document.createTextNode(member.name));
     if (isOwnerMember) {
-      const host = document.createElement('span');
-      host.className = 'host-badge';
-      host.textContent = t('admin.isHost');
-      nameRow.append(host);
+      const ownerBadge = document.createElement('span');
+      ownerBadge.className = 'host-badge';
+      ownerBadge.textContent = t('server.role.owner');
+      nameRow.append(ownerBadge);
+    } else {
+      const roleIds = new Set(member.roleIds || ['member']);
+      for (const role of [...(state.server?.roles || [])]
+        .filter((entry) => roleIds.has(entry.id))
+        .sort((a, b) => b.position - a.position)) {
+        const badge = document.createElement('span');
+        badge.className = 'member-role-badge';
+        badge.style.setProperty('--role-color', role.color);
+        badge.textContent = roleTitle(role);
+        nameRow.append(badge);
+      }
     }
     if (isSelf) {
       const you = document.createElement('span');
@@ -1692,7 +2017,7 @@ function renderMembers() {
     }
     body.append(nameRow);
     li.append(avatar, body);
-    if (isOwner() && !isSelf && !isOwnerMember) {
+    if (canModerateMember(member) && !isSelf) {
       const kick = document.createElement('button');
       kick.type = 'button';
       kick.className = 'member-kick';
@@ -1703,6 +2028,7 @@ function renderMembers() {
       kick.addEventListener('click', () => kickMember(member, member.name));
       li.append(kick);
     }
+    if (isOwner() && !isSelf && !isOwnerMember) li.append(createMemberRoleAssignment(member));
     els.membersList.append(li);
   }
   // A41: restore focus after re-render.
@@ -1710,6 +2036,42 @@ function renderMembers() {
     const el = els.membersList.querySelector(`[data-member-key="${CSS.escape(activeId)}"]`);
     if (el) try { el.focus({ preventScroll: true }); } catch { /* ignore */ }
   }
+}
+
+function createMemberRoleAssignment(member) {
+  const details = document.createElement('details');
+  details.className = 'member-role-assign';
+  const summary = document.createElement('summary');
+  summary.textContent = t('server.roleAssign');
+  details.append(summary);
+  const form = document.createElement('form');
+  form.className = 'member-role-form';
+  const selected = new Set(member.roleIds || ['member']);
+  const roles = [...(state.server?.roles || [])].sort((a, b) => b.position - a.position);
+  for (const role of roles) {
+    const label = document.createElement('label');
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.value = role.id;
+    checkbox.checked = selected.has(role.id);
+    const title = document.createElement('span');
+    title.textContent = roleTitle(role);
+    label.append(checkbox, title);
+    form.append(label);
+  }
+  const save = document.createElement('button');
+  save.type = 'submit';
+  save.className = 'btn btn-quiet btn-sm';
+  save.textContent = t('server.roleAssignSave');
+  save.dataset.memberKey = member.key;
+  form.append(save);
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const roleIds = [...form.querySelectorAll('input[type="checkbox"]:checked')].map((checkbox) => checkbox.value);
+    assignMemberRoles(member, roleIds);
+  });
+  details.append(form);
+  return details;
 }
 
 async function kickMember(member, name) {
@@ -1754,8 +2116,9 @@ function bindSocketEvents(socket) {
   });
   socket.on('server:members:updated', ({ server } = {}) => {
     if (!server) return;
-    state.server = server;
+    receiveServerBroadcast(server);
     applyServerUi();
+    void refreshServerSummary();
   });
   socket.on('server:kicked', () => {
     toast(t('server.youKicked'), 'error', 4200);
@@ -1768,8 +2131,9 @@ function bindSocketEvents(socket) {
     if (!server) return;
     // Keep the channel you were in if it still exists (voice or text).
     const current = state.channelId;
-    state.server = server;
+    receiveServerBroadcast(server);
     applyServerUi();
+    void refreshServerSummary();
     if (state.inVoice && state.voiceChannelId) {
       const vc = server.channels.find((c) => c.id === state.voiceChannelId);
       if (!vc) leaveVoice();
@@ -2116,6 +2480,30 @@ function syncScreenEnlarge() {
   }
 }
 
+function syncServerScreenPip() {
+  const available =
+    Boolean(els.serverScreenStage && !els.serverScreenStage.hidden) &&
+    supportsPictureInPicture(els.serverScreenVideo);
+  if (!els.serverScreenPip) return;
+  els.serverScreenPip.hidden = !available;
+  els.serverScreenPip.title = t('screen.pip');
+  els.serverScreenPip.setAttribute('aria-label', t('screen.pip'));
+}
+
+async function toggleServerScreenPip() {
+  if (!els.serverScreenVideo || els.serverScreenStage?.hidden) return;
+  if (!supportsPictureInPicture(els.serverScreenVideo)) {
+    toast(t('screen.pipUnavailable'), 'error');
+    return;
+  }
+  const entered = await togglePictureInPicture(els.serverScreenVideo);
+  els.serverScreenPip?.classList.toggle('is-active', Boolean(entered));
+  if (els.serverScreenPip) {
+    els.serverScreenPip.title = t(entered ? 'screen.pipExit' : 'screen.pip');
+    els.serverScreenPip.setAttribute('aria-label', t(entered ? 'screen.pipExit' : 'screen.pip'));
+  }
+}
+
 async function saveServerSettings() {
   const name = els.serverSettingsName?.value?.trim();
   const description = els.serverSettingsDesc?.value ?? '';
@@ -2226,6 +2614,7 @@ function emitAck(event, payload, timeoutMs = 12000) {
   });
 }
 function handleLanguageChange() {
+  updateServerDrawerUi();
   if (state.server) applyServerUi();
   renderMessages();
   renderSoundboardGrid();

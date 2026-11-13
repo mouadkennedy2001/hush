@@ -53,6 +53,8 @@ export const ui = {
   'toast.reconnecting': ['Disconnected — reconnecting…', 'انقطع الاتصال — جارٍ إعادة الاتصال…'],
   'server.noChannels': ['No channels', 'لا قنوات'],
   'server.noMembers': ['No members', 'لا أعضاء'],
+  'server.chatLabel': ['Server chat', 'دردشة الخادم'],
+  'server.messagesLabel': ['Server messages', 'رسائل الخادم'],
   'server.historyFailed': ['Could not load history', 'تعذّر تحميل السجل'],
   'server.inviteRegenerated': ['Invite regenerated', 'تم توليد دعوة جديدة'],
 
@@ -204,6 +206,8 @@ export const ui = {
   'settings.focus': ['Focus mode', 'وضع التركيز'],
   'settings.focusOn': ['Focus on', 'التركيز مفعّل'],
   'settings.focusOff': ['Focus off', 'التركيز متوقف'],
+  'settings.haptics': ['Haptics', 'الاهتزاز'],
+  'settings.wakeLock': ['Keep screen awake', 'إبقاء الشاشة مضاءة'],
 
   'stats.roomsOnline': ['rooms online now', 'غرف متصلة الآن'],
   'stats.uptime': ['server uptime', 'وقت تشغيل الخادم'],
@@ -242,6 +246,22 @@ export const ui = {
   'control.screenOffTitle': ['Share screen (S)', 'مشاركة الشاشة (S)'],
   'control.handOnTitle': ['Lower hand (H)', 'إنزال اليد (H)'],
   'control.handOffTitle': ['Raise hand (H)', 'رفع اليد (H)'],
+  'control.more': ['More', 'المزيد'],
+  'control.moreActions': ['More actions', 'مزيد من الإجراءات'],
+  'control.menu': ['Room options', 'خيارات الغرفة'],
+  'control.invite': ['Invite', 'دعوة'],
+  'control.log': ['Log', 'السجل'],
+  'control.libraries': ['Libraries', 'المكتبات'],
+  'control.bug': ['Report a bug', 'الإبلاغ عن خطأ'],
+  'control.feature': ['Suggest a feature', 'اقترح ميزة'],
+  'control.theme': ['Theme', 'السمة'],
+  'control.language': ['Language', 'اللغة'],
+  'control.install': ['Install app', 'تثبيت التطبيق'],
+  'control.flipCamera': ['Flip camera', 'تبديل الكاميرا'],
+  'control.raiseHand': ['Raise hand', 'رفع اليد'],
+  'control.lowerHand': ['Lower hand', 'إنزال اليد'],
+  'control.micSettings': ['Mic settings', 'إعدادات الميكروفون'],
+  'control.closeMenu': ['Close menu', 'إغلاق القائمة'],
 
   'media.permission': [
     'Permission was blocked. Allow mic or camera access in your browser, then try again.',
@@ -266,6 +286,12 @@ export const ui = {
   'media.screenStopped': ['Screen sharing stopped.', 'توقفت مشاركة الشاشة.'],
   'media.micDisconnected': ['Microphone disconnected.', 'انقطع الميكروفون.'],
   'media.cameraDisconnected': ['Camera disconnected.', 'انقطعت الكاميرا.'],
+  'media.cameraFlipped': ['Camera switched.', 'تم تبديل الكاميرا.'],
+  'media.cameraFlipFailed': ['Could not switch the camera.', 'تعذّر تبديل الكاميرا.'],
+  'media.cameraFlipUnavailable': [
+    'Turn your camera on first to flip it.',
+    'شغّل الكاميرا أولًا لتبديلها.'
+  ],
   'media.peerOfferFailed': [
     'A peer connection could not be established.',
     'تعذّر إنشاء اتصال مع أحد المشاركين.'
@@ -289,6 +315,7 @@ export const ui = {
   'upload.sentToChannel': ['Uploaded to {name}', 'تم الرفع إلى {name}'],
 
   'toast.inviteCopied': ['Invite link copied.', 'تم نسخ رابط الدعوة.'],
+  'toast.inviteShared': ['Invite shared.', 'تمت مشاركة الدعوة.'],
   'toast.copyFailed': [
     'Copy failed. The room code is on screen.',
     'تعذّر النسخ. رمز الغرفة ظاهر على الشاشة.'
@@ -645,6 +672,22 @@ export const ui = {
   'screen.zoomIn': ['Zoom in (+)', 'تكبير (+)'],
   'screen.zoomOut': ['Zoom out (-)', 'تصغير (-)'],
   'screen.zoomReset': ['Reset zoom (0)', 'إعادة ضبط التكبير (0)'],
+  'screen.pip': ['Picture in picture', 'صورة داخل صورة'],
+  'screen.pipExit': ['Exit picture in picture', 'إنهاء الصورة داخل صورة'],
+  'screen.pipEntered': ['Picture in picture on. You can keep chatting here.', 'الصورة داخل صورة مفعّلة. يمكنك مواصلة الدردشة هنا.'],
+  'screen.pipExited': ['Picture in picture off.', 'تم إيقاف الصورة داخل صورة.'],
+  'screen.pipUnavailable': [
+    'Picture in picture is not available for this screen.',
+    'الصورة داخل صورة غير متاحة لهذه الشاشة.'
+  ],
+  'screen.rotateHint': [
+    'Rotate your phone for a bigger picture',
+    'أدر هاتفك للحصول على صورة أكبر'
+  ],
+  'screen.phoneShare': [
+    'Most phone browsers cannot share a screen. You can share your camera instead.',
+    'معظم متصفحات الهاتف لا تستطيع مشاركة الشاشة. يمكنك مشاركة الكاميرا بدلًا من ذلك.'
+  ],
 
   /* Room settings (host only): name + password + dice generator. */
   'room.settingsBtn': ['Room settings', 'إعدادات الغرفة'],
@@ -748,6 +791,30 @@ export const ui = {
   'server.inviteNotFound': ['No server found for that invite code.', 'لا يوجد خادم بهذا الرمز.'],
   'server.inviteRequired': ['This server needs an invite link to join. Ask a member for it.', 'هذا الخادم يحتاج رابط دعوة للانضمام. اطلب من أحد الأعضاء.'],
   'server.membersTitle': ['Members', 'الأعضاء'],
+  'server.role.owner': ['Owner', 'المالك'],
+  'server.role.host': ['Host', 'مضيف'],
+  'server.role.assistant': ['Assistant', 'مساعد'],
+  'server.role.member': ['Member', 'عضو'],
+  'server.rolesTitle': ['Roles', 'الرتب'],
+  'server.roleName': ['Role name', 'اسم الرتبة'],
+  'server.roleColor': ['Role color', 'لون الرتبة'],
+  'server.rolePermissions': ['Permissions', 'الصلاحيات'],
+  'server.permission.manage_settings': ['Manage server settings', 'إدارة إعدادات الخادم'],
+  'server.permission.manage_channels': ['Manage channels', 'إدارة القنوات'],
+  'server.permission.moderate_members': ['Moderate lower-ranked members', 'الإشراف على الأعضاء الأقل رتبة'],
+  'server.permission.manage_messages': ['Delete any message', 'حذف أي رسالة'],
+  'server.roleCreate': ['Create role', 'إنشاء رتبة'],
+  'server.roleSave': ['Save role', 'حفظ الرتبة'],
+  'server.roleCancel': ['Cancel editing', 'إلغاء التعديل'],
+  'server.roleEdit': ['Edit', 'تعديل'],
+  'server.roleDelete': ['Delete', 'حذف'],
+  'server.roleDeleteConfirm': ['Delete the {name} role? Members assigned to it will become members.', 'حذف رتبة {name}؟ سيعود الأعضاء المعيّنون إليها إلى رتبة عضو.'],
+  'server.roleAssign': ['Assign roles', 'تعيين الرتب'],
+  'server.roleAssignSave': ['Save assignments', 'حفظ التعيينات'],
+  'server.roleSaved': ['Role saved.', 'تم حفظ الرتبة.'],
+  'server.roleAssigned': ['Member roles updated.', 'تم تحديث رتب العضو.'],
+  'server.roleFailed': ['Could not update roles. Check your permissions and try again.', 'تعذّر تحديث الرتب. تحقق من صلاحياتك وحاول مجددًا.'],
+  'server.roleNoPermissions': ['No extra permissions', 'لا توجد صلاحيات إضافية'],
   'server.leaveConfirm': ['Leave this server?', 'مغادرة هذا الخادم؟'],
   'server.leaveOwnerConfirm': ['You own this server. Leaving deletes the server for everyone. Continue?', 'أنت مالك هذا الخادم. المغادرة ستحذف الخادم للجميع. هل تريد المتابعة؟'],
   'server.deleteConfirm': ['Delete this server permanently? Its channels and saved chat will be gone.', 'حذف هذا الخادم نهائيًا؟ ستُفقد قنواته ودردشته المحفوظة.'],
@@ -760,6 +827,9 @@ export const ui = {
   'server.chooseIcon': ['Choose an icon', 'اختر أيقونة'],
   'server.createBtn': ['Create server', 'إنشاء الخادم'],
   'server.channels': ['Channels', 'القنوات'],
+  'server.messagePlaceholder': ['Message the channel…', 'أرسل رسالة إلى القناة…'],
+  'server.messagePlaceholderShort': ['Message…', 'اكتب رسالة…'],
+  'server.messageInputLabel': ['Message the channel', 'أرسل رسالة إلى القناة'],
   'server.textChannel': ['Text channel', 'قناة نصية'],
   'server.voiceChannel': ['Voice channel', 'قناة صوتية'],
   'server.addChannel': ['Add channel', 'إضافة قناة'],

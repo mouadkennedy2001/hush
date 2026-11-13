@@ -148,6 +148,11 @@ html[data-theme="dark"] .feature-card {
   display: none;
 }
 
+/* pwa.js reveals the install button once the browser offers a prompt. */
+.nav-utility [data-pwa-install][hidden] {
+  display: none;
+}
+
 .nav-utility [data-open-log],
 .nav-utility [data-open-libraries-log],
 .nav-utility [data-open-bug-report],

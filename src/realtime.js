@@ -1146,7 +1146,7 @@ export function attachRealtime(io, { rooms, servers, sessions = null, maxPartici
         serverMembership.server = fresh;
         if (!servers.isMember(fresh, serverMembership.deviceId) || servers.isBanned(fresh, serverMembership.deviceId)) return safeAck(ack, { ok: false, error: 'not-member' });
         const { deviceId } = serverMembership;
-        if (!servers.isOwner(fresh, deviceId)) return safeAck(ack, { ok: false, error: 'not-admin' });
+        if (!servers.hasPermission(fresh, deviceId, 'manage_messages')) return safeAck(ack, { ok: false, error: 'not-admin' });
         const channelId = String(payload.channelId || '');
         if (!isValidChannelId(channelId)) return safeAck(ack, { ok: false, error: 'channel-not-found' });
         const messageId = String(payload.messageId || '');
@@ -1191,7 +1191,7 @@ export function attachRealtime(io, { rooms, servers, sessions = null, maxPartici
         serverMembership.server = fresh;
         const { deviceId } = serverMembership;
         if (!servers.isMember(fresh, deviceId) || servers.isBanned(fresh, deviceId)) return safeAck(ack, { ok: false, error: 'not-member' });
-        if (!servers.isOwner(fresh, deviceId)) return safeAck(ack, { ok: false, error: 'not-admin' });
+        if (!servers.hasPermission(fresh, deviceId, 'moderate_members')) return safeAck(ack, { ok: false, error: 'not-admin' });
         // Accept either deviceId (owner UI) or memberId pseudonym (redacted view).
         let targetDeviceId = cleanDeviceId(payload.deviceId);
         if (!targetDeviceId && payload.memberId) {
@@ -1374,7 +1374,7 @@ export function attachRealtime(io, { rooms, servers, sessions = null, maxPartici
         const serverId = fresh.id;
         const room = tempRooms.get(serverId)?.get(roomId);
         if (!room) return safeAck(ack, { ok: false, error: 'room-not-found' });
-        if (room.creatorDeviceId !== serverMembership.deviceId && !servers.isOwner(fresh, serverMembership.deviceId)) {
+        if (room.creatorDeviceId !== serverMembership.deviceId && !servers.hasPermission(fresh, serverMembership.deviceId, 'moderate_members')) {
           return safeAck(ack, { ok: false, error: 'not-creator' });
         }
         // Evict everyone else in the room, then drop it even if non-empty:
@@ -1497,8 +1497,8 @@ export function attachRealtime(io, { rooms, servers, sessions = null, maxPartici
       if (!fresh) return safeAck(ack, { ok: false, error: 'server-not-found' });
       const target = fresh.customSounds?.find((s) => s.id === String(payload?.id ?? ''));
       if (!target) return safeAck(ack, { ok: false, error: 'invalid-sound' });
-      const isOwner = servers.isOwner(fresh, serverMembership.deviceId);
-      if (target.addedById !== serverMembership.deviceId && !isOwner) return safeAck(ack, { ok: false, error: 'not-admin' });
+      const canManageBoard = servers.hasPermission(fresh, serverMembership.deviceId, 'manage_settings');
+      if (target.addedById !== serverMembership.deviceId && !canManageBoard) return safeAck(ack, { ok: false, error: 'not-admin' });
       const removed = await servers.removeCustomSound(fresh.id, target.id);
       if (!removed) return safeAck(ack, { ok: false, error: 'invalid-sound' });
       // Delete the files (board dir holds audio + optional cover image).

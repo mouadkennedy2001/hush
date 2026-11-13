@@ -1,0 +1,1102 @@
+/* ==========================================================================
+   Hush mobile layer
+   --------------------------------------------------------------------------
+   Loaded after room.css / server.css / landing.css. Only phone-specific
+   behaviour lives here (<= 700px unless noted), so the desktop layout stays
+   exactly as it was. Everything is progressive: old browsers that lack
+   safe-area env(), :has() or dvh simply fall back to the previous rules.
+   ========================================================================== */
+
+/* ---------- Shared, always-on additions ---------- */
+
+.bar-menu-btn,
+.bar-menu,
+.more-sheet,
+.more-scrim,
+.screen-pip-btn,
+.screen-rotate-hint,
+.server-screen-pip-btn {
+  display: none;
+}
+
+/* Phone-only control; desktop keeps the full control bar. */
+.control-bar #more-btn {
+  display: none;
+}
+
+.invite-share {
+  margin-top: 8px;
+  width: 100%;
+  justify-content: center;
+  gap: 7px;
+}
+
+.bar-menu[hidden],
+.more-sheet[hidden],
+.more-scrim[hidden] {
+  display: none !important;
+}
+
+/* ==========================================================================
+   Phones (<= 700px)
+   ========================================================================== */
+@media (max-width: 700px) {
+  /* ---------- Viewport + safe areas ---------- */
+
+  html,
+  body {
+    /* --app-vh is published by mobile.js from visualViewport so the layout
+       follows the *visible* height when mobile browser chrome collapses. */
+    --app-height: var(--app-vh, 100dvh);
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  .room-body,
+  .room-shell {
+    height: var(--app-vh, 100dvh);
+    min-height: 0;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
+  .room-bar {
+    min-height: calc(52px + env(safe-area-inset-top, 0px));
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-inline: max(10px, env(safe-area-inset-left, 0px)) max(10px, env(safe-area-inset-right, 0px));
+    flex-wrap: nowrap;
+    gap: 8px;
+  }
+
+  .room-code {
+    flex: none;
+    white-space: nowrap;
+  }
+
+  .room-code code {
+    flex: none;
+    white-space: nowrap;
+  }
+
+  .server-identity {
+    flex: 1 1 0;
+  }
+
+  .server-identity-text {
+    flex: 1 1 0;
+    width: 0;
+  }
+
+  .server-identity-count {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .room-main {
+    min-height: 0;
+    height: 100%;
+  }
+
+  .stage {
+    padding-inline: max(8px, env(safe-area-inset-left, 0px)) max(8px, env(safe-area-inset-right, 0px));
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .control-bar {
+    padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* ---------- Top bar: keep one calm row ---------- */
+
+  .room-bar .brand-sm {
+    flex: none;
+  }
+
+  /* Secondary header actions move into the phone overflow menu. */
+  .room-bar #invite-btn,
+  .room-bar [data-open-log],
+  .room-bar [data-open-libraries-log],
+  .room-bar [data-open-bug-report],
+  .room-bar [data-open-feature-suggest] {
+    display: none !important;
+  }
+
+  .room-bar-actions {
+    margin-inline-start: auto;
+    flex: none;
+    gap: 2px;
+  }
+
+  /* Show the overflow trigger only on phones. */
+  .bar-menu-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--color-slate);
+    cursor: pointer;
+  }
+
+  .bar-menu-btn:hover,
+  .bar-menu-btn[aria-expanded="true"] {
+    background: var(--wash-sky);
+    color: var(--color-deep-signal);
+  }
+
+  .bar-menu-btn .icon {
+    width: 20px;
+    height: 20px;
+  }
+
+  .bar-menu {
+    position: fixed;
+    z-index: 60;
+    top: calc(54px + env(safe-area-inset-top, 0px));
+    inset-inline-end: max(8px, env(safe-area-inset-right, 0px));
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    width: min(248px, calc(100vw - 24px));
+    padding: 8px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: 14px;
+    background: var(--color-surface);
+    box-shadow: var(--shadow-lg, 0 18px 40px -18px rgba(0, 0, 0, 0.4));
+    transform-origin: top right;
+    animation: mobile-pop 140ms ease-out;
+  }
+
+  html[dir="rtl"] .bar-menu {
+    transform-origin: top left;
+  }
+
+  .bar-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 11px 10px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: var(--color-text);
+    font: inherit;
+    font-size: 0.875rem;
+    text-align: start;
+    cursor: pointer;
+  }
+
+  .bar-menu-item:hover,
+  .bar-menu-item:active {
+    background: var(--wash-sky);
+    color: var(--color-deep-signal);
+  }
+
+  .bar-menu-item .icon {
+    width: 18px;
+    height: 18px;
+    color: currentColor;
+  }
+
+  .bar-menu-sep {
+    height: 1px;
+    margin: 4px 8px;
+    background: var(--color-border);
+  }
+
+  /* ---------- Control bar: five thumb-sized actions ---------- */
+
+  /* Dissolve the two desktop groups so CSS can order every button. */
+  .control-bar .control-group {
+    display: contents;
+  }
+
+  .control-bar {
+    justify-content: stretch;
+    align-items: stretch;
+    gap: 6px;
+    padding-inline: 8px;
+    background: color-mix(in srgb, var(--color-paper) 92%, transparent);
+    backdrop-filter: blur(16px);
+    border-top: 1px solid var(--color-border);
+    flex-wrap: nowrap;
+  }
+
+  .control-bar .control {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 50px;
+    padding: 6px 4px;
+    gap: 3px;
+    border-radius: 12px;
+  }
+
+  /* Primary five: mic, camera, share, more, leave. */
+  .control-bar #more-btn {
+    display: flex;
+    order: 8;
+  }
+
+  .control-bar #leave-btn {
+    order: 9;
+    background: color-mix(in srgb, var(--color-signal-blue) 12%, transparent);
+    color: var(--color-deep-signal);
+  }
+
+  /* Secondary actions live in the More sheet, not in the bar. */
+  .control-bar #hand-btn,
+  .control-bar #reaction-btn,
+  .control-bar #soundboard-btn,
+  .control-bar #deafen-btn {
+    display: none;
+  }
+
+  /* Chat becomes a floating bubble above the bar so it stays one tap away. */
+  .control-bar .chat-fab {
+    position: fixed;
+    z-index: 9;
+    inset-inline-end: max(14px, env(safe-area-inset-right, 0px));
+    bottom: calc(78px + env(safe-area-inset-bottom, 0px));
+    display: inline-flex;
+    flex: none;
+    width: 52px;
+    height: 52px;
+    min-width: 52px;
+    min-height: 52px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: var(--color-signal-blue);
+    color: var(--color-white);
+    box-shadow: 0 10px 24px -8px rgba(12, 22, 48, 0.55);
+  }
+
+  .control-bar .chat-fab:hover,
+  .control-bar .chat-fab:active {
+    background: var(--color-deep-signal);
+    color: var(--color-white);
+  }
+
+  .control-bar .chat-fab .control-icon {
+    width: 24px;
+    height: 24px;
+  }
+
+  .control-bar .chat-fab .control-icon .icon {
+    width: 23px;
+    height: 23px;
+  }
+
+  .control-bar .chat-fab .control-label {
+    display: none;
+  }
+
+  .control-bar .chat-fab .tab-badge {
+    position: absolute;
+    top: -3px;
+    inset-inline-end: -3px;
+    min-width: 20px;
+    height: 20px;
+    border: 2px solid var(--color-paper);
+  }
+
+  .room-shell.is-sheet-open .chat-fab,
+  .room-shell.is-focus .chat-fab {
+    opacity: 0;
+    pointer-events: none;
+    transform: scale(0.85);
+  }
+
+  .control-bar .chat-fab {
+    transition: opacity 180ms ease, transform 180ms ease;
+  }
+
+  /* ---------- More sheet (secondary call actions) ---------- */
+
+  .more-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 45;
+    display: block;
+    border: 0;
+    padding: 0;
+    background: rgba(10, 14, 22, 0.34);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 200ms ease;
+  }
+
+  .more-scrim.is-open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .more-sheet {
+    position: fixed;
+    z-index: 46;
+    inset-inline: 8px;
+    bottom: calc(78px + env(safe-area-inset-bottom, 0px));
+    display: block;
+    padding: 10px;
+    border: 1px solid var(--color-border-strong);
+    border-radius: 18px;
+    background: var(--color-surface);
+    box-shadow: 0 -18px 44px -22px rgba(0, 0, 0, 0.5);
+    transform: translateY(16px);
+    opacity: 0;
+    transition: transform 200ms ease, opacity 200ms ease;
+    pointer-events: none;
+  }
+
+  .more-sheet.is-open {
+    transform: translateY(0);
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .more-sheet-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 2px 4px 8px;
+    color: var(--color-text-2);
+    font-size: 0.75rem;
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .more-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+  }
+
+  .more-reactions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+    margin: 0 2px 8px;
+    padding: 6px;
+    border-radius: 12px;
+    background: var(--color-surface-2, var(--color-paper));
+  }
+
+  .more-reactions button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1 1 0;
+    min-width: 0;
+    height: 40px;
+    padding: 0;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    cursor: pointer;
+  }
+
+  .more-reactions button:hover,
+  .more-reactions button:active {
+    background: var(--wash-sky);
+  }
+
+  .more-reactions img,
+  .more-reactions .custom-emoji {
+    width: 24px;
+    height: 24px;
+  }
+
+  .more-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 4px;
+    border: 1px solid transparent;
+    border-radius: 12px;
+    background: transparent;
+    color: var(--color-slate);
+    font: inherit;
+    font-size: 0.6875rem;
+    font-weight: var(--font-weight-semibold);
+    line-height: 1.15;
+    text-align: center;
+    cursor: pointer;
+  }
+
+  .more-item .icon {
+    width: 22px;
+    height: 22px;
+  }
+
+  .more-item:hover,
+  .more-item:active {
+    background: var(--wash-sky);
+    color: var(--color-deep-signal);
+  }
+
+  .more-item[aria-pressed="true"] {
+    background: var(--wash-sky);
+    border-color: var(--color-signal-blue);
+    color: var(--color-deep-signal);
+  }
+
+  .more-item .icon-when-on {
+    display: none;
+  }
+
+  .more-item[aria-pressed="true"] .icon-when-on {
+    display: block;
+  }
+
+  .more-item[aria-pressed="true"] .icon-when-off {
+    display: none;
+  }
+
+  .more-item[hidden] {
+    display: none;
+  }
+
+  /* ---------- Bottom sheet: keyboard + drag aware ---------- */
+
+  .side-panel {
+    height: min(calc(var(--app-vh, 100dvh) * 0.84), 640px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    will-change: transform;
+  }
+
+  .side-tabs {
+    touch-action: pan-y;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* When the keyboard is up, the sheet should use the whole visible height
+     instead of leaving a dead strip behind the keys. */
+  .is-keyboard-open .side-panel {
+    height: calc(var(--app-vh, 100dvh) - 4px);
+  }
+
+  .is-keyboard-open .sheet-scrim {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .composer {
+    padding-bottom: max(8px, env(safe-area-inset-bottom, 0px));
+  }
+
+  .is-keyboard-open .composer {
+    padding-bottom: 8px;
+  }
+
+  .is-keyboard-open .messages {
+    scroll-padding-bottom: 8px;
+  }
+
+  .sheet-close {
+    width: 44px;
+    height: 44px;
+  }
+
+  /* ---------- Screen share: phone-friendly viewer ---------- */
+
+  .screen-stage {
+    margin-bottom: 8px;
+    border-radius: 12px;
+  }
+
+  .screen-pip-btn {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 3;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border: 0;
+    border-radius: 10px;
+    background: rgba(10, 13, 20, 0.7);
+    color: #fff;
+    cursor: pointer;
+    backdrop-filter: blur(6px);
+  }
+
+  .screen-pip-btn:hover {
+    background: rgba(10, 13, 20, 0.88);
+  }
+
+  .screen-pip-btn[hidden] {
+    display: none !important;
+  }
+
+  .screen-pip-btn .icon {
+    width: 18px;
+    height: 18px;
+  }
+
+  .screen-rotate-hint {
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    z-index: 3;
+    display: none;
+    align-items: center;
+    gap: 6px;
+    max-width: calc(100% - 150px);
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: rgba(10, 13, 20, 0.7);
+    color: #fff;
+    font-size: 0.625rem;
+    font-weight: var(--font-weight-semibold);
+    line-height: 1.25;
+    text-align: center;
+    transform: translateX(-50%);
+    backdrop-filter: blur(6px);
+    pointer-events: none;
+  }
+
+  .screen-rotate-hint .icon {
+    width: 14px;
+    height: 14px;
+    flex: none;
+  }
+
+  /* Portrait phones: nudge the viewer to rotate for a bigger picture. */
+  .screen-stage:not([hidden]) .screen-rotate-hint {
+    display: inline-flex;
+  }
+
+  .screen-stage.is-enlarged .screen-zoom-bar {
+    top: calc(10px + env(safe-area-inset-top, 0px));
+  }
+
+  .screen-stage.is-enlarged .screen-enlarge-btn {
+    top: calc(10px + env(safe-area-inset-top, 0px));
+    right: max(10px, env(safe-area-inset-right, 0px));
+  }
+
+  .screen-stage.is-enlarged .screen-pip-btn {
+    top: calc(10px + env(safe-area-inset-top, 0px));
+    left: max(10px, env(safe-area-inset-left, 0px));
+  }
+
+  .screen-stage.is-enlarged .screen-caption,
+  .screen-stage.is-enlarged .screen-stop-btn {
+    bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .screen-stage.is-enlarged .screen-caption {
+    left: max(12px, env(safe-area-inset-left, 0px));
+  }
+
+  .screen-stop-btn {
+    min-height: 42px;
+  }
+
+  .stage.is-sharing .tile-grid {
+    gap: 6px;
+  }
+
+  .stage.is-sharing .tile {
+    flex-basis: 108px;
+    border-radius: 9px;
+  }
+
+  .stage.is-sharing .tile-name {
+    font-size: 0.5rem;
+  }
+
+  /* ---------- Tiles: tighter grid for portrait phones ---------- */
+
+  .tile-grid {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 7px;
+    align-content: start;
+  }
+
+  .tile {
+    min-height: 104px;
+    border-radius: 10px;
+  }
+
+  .tile-grid.is-pair {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tile-avatar span {
+    width: 44px;
+    height: 44px;
+    font-size: 0.875rem;
+  }
+
+  /* ---------- Touch niceties ---------- */
+
+  .icon-button,
+  .btn,
+  .side-tab,
+  .control,
+  .more-item,
+  .bar-menu-item {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .btn,
+  .tool-button,
+  .icon-button {
+    touch-action: manipulation;
+  }
+
+  .messages {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+
+  /* Composer: 16px text already enforced by room.css, give it more room. */
+  .composer textarea {
+    min-height: 42px;
+    padding-block: 10px;
+  }
+
+  .send-btn {
+    min-width: 42px;
+    min-height: 42px;
+  }
+
+  /* Install button inside the overflow menu. */
+  .bar-menu-item[data-pwa-install][hidden] {
+    display: none !important;
+  }
+}
+
+/* ---------- Small phones ---------- */
+@media (max-width: 420px) {
+  .room-bar {
+    min-height: calc(48px + env(safe-area-inset-top, 0px));
+    gap: 6px;
+  }
+
+  .room-status {
+    gap: 4px;
+  }
+
+  .more-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 2px;
+  }
+
+  .more-item {
+    padding: 9px 2px;
+    font-size: 0.625rem;
+  }
+
+  .more-item .icon {
+    width: 20px;
+    height: 20px;
+  }
+
+  .screen-rotate-hint {
+    max-width: calc(100% - 132px);
+    font-size: 0.5625rem;
+  }
+}
+
+@media (max-width: 280px) {
+  .server-identity-count,
+  .server-identity [data-ping-badge] {
+    display: none;
+  }
+}
+
+/* ---------- Landscape phones: give the stage every pixel ---------- */
+
+@media (max-width: 900px) and (max-height: 520px) and (orientation: landscape) {
+  .room-bar {
+    min-height: calc(44px + env(safe-area-inset-top, 0px));
+  }
+
+  .stage-topline {
+    padding-bottom: 6px;
+  }
+
+  .control-bar {
+    position: fixed;
+    inset-inline: 0;
+    bottom: 0;
+    z-index: 30;
+    padding-bottom: calc(4px + env(safe-area-inset-bottom, 0px));
+    background: color-mix(in srgb, var(--color-paper) 94%, transparent);
+  }
+
+  .control-bar .control {
+    min-height: 42px;
+  }
+
+  .stage {
+    padding-bottom: 62px;
+  }
+
+  .chat-fab {
+    bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .more-sheet {
+    bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+    max-height: 62vh;
+    overflow-y: auto;
+  }
+
+  .side-panel {
+    height: min(calc(var(--app-vh, 100dvh) - 8px), 100dvh);
+  }
+
+  .screen-rotate-hint {
+    display: none !important;
+  }
+
+  .screen-stage.is-enlarged video {
+    object-fit: contain;
+  }
+}
+
+/* ---------- Animations (only when motion is allowed) ---------- */
+
+@keyframes mobile-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bar-menu {
+    animation: none;
+  }
+
+  .more-sheet,
+  .more-scrim,
+  .chat-fab {
+    transition: none;
+  }
+}
+
+html[data-motion="off"] .bar-menu {
+  animation: none;
+}
+
+html[data-motion="off"] .more-sheet,
+html[data-motion="off"] .more-scrim,
+html[data-motion="off"] .chat-fab {
+  transition: none;
+}
+
+/* Server pages use the same keyboard-aware, app-height frame as room calls. */
+@media (max-width: 1100px) {
+  .server-drawer-scrim {
+    position: fixed;
+    z-index: 50;
+    inset: calc(66px + env(safe-area-inset-top, 0px)) 0 0;
+    display: block;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: rgba(5, 9, 17, 0.58);
+    backdrop-filter: blur(2px);
+  }
+
+  .server-drawer-scrim[hidden] { display: none !important; }
+
+  .server-members {
+    position: fixed;
+    z-index: 51;
+    inset-block: calc(66px + env(safe-area-inset-top, 0px)) 8px;
+    inset-inline-end: 8px;
+    display: none;
+    width: min(320px, calc(100vw - 24px));
+    max-height: none;
+    padding: 12px;
+    border-color: var(--color-border-strong);
+    border-radius: 16px;
+    box-shadow: 0 18px 48px -20px rgba(0, 0, 0, 0.6);
+    transform: translateX(105%);
+    visibility: hidden;
+    pointer-events: none;
+    transition: transform 180ms ease, visibility 180ms ease;
+  }
+
+  .server-members.is-drawer-open {
+    display: flex;
+    transform: translateX(0);
+    visibility: visible;
+    pointer-events: auto;
+  }
+
+  .server-drawer-close { display: inline-flex; min-width: 40px; min-height: 40px; }
+  html[dir="rtl"] .server-members { transform: translateX(-105%); }
+  html[dir="rtl"] .server-members.is-drawer-open { transform: translateX(0); }
+}
+
+@media (max-width: 700px) {
+  .server-body.room-body,
+  .server-shell.room-shell {
+    height: var(--app-vh, 100dvh);
+    min-height: 0;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
+  .server-main {
+    display: flex;
+    flex: 1 1 0;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 0;
+    max-height: 100%;
+    padding: 8px max(8px, env(safe-area-inset-right, 0px)) calc(8px + env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-left, 0px));
+    overflow: hidden;
+  }
+
+  .server-channels {
+    position: fixed;
+    z-index: 51;
+    inset-block: calc(52px + env(safe-area-inset-top, 0px)) env(safe-area-inset-bottom, 0px);
+    inset-inline-start: 8px;
+    width: min(340px, calc(100vw - 20px));
+    max-height: none;
+    min-height: 0;
+    padding: 8px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    border-color: var(--color-border-strong);
+    border-radius: 0 16px 16px 0;
+    box-shadow: 0 18px 48px -20px rgba(0, 0, 0, 0.6);
+    transform: translateX(-105%);
+    visibility: hidden;
+    pointer-events: none;
+    transition: transform 180ms ease, visibility 180ms ease;
+  }
+
+  .server-channels.is-drawer-open {
+    transform: translateX(0);
+    visibility: visible;
+    pointer-events: auto;
+  }
+
+  .server-drawer-scrim {
+    position: fixed;
+    z-index: 50;
+    inset: calc(52px + env(safe-area-inset-top, 0px)) 0 0;
+    display: block;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: rgba(5, 9, 17, 0.58);
+    backdrop-filter: blur(2px);
+  }
+
+  .server-drawer-scrim[hidden] { display: none !important; }
+
+  .server-members,
+  .server-members.is-drawer-open {
+    position: fixed;
+    z-index: 51;
+    inset-block: calc(52px + env(safe-area-inset-top, 0px)) env(safe-area-inset-bottom, 0px);
+    inset-inline-end: 8px;
+    width: min(300px, calc(100vw - 20px));
+    max-height: none;
+    padding: 12px;
+    border-color: var(--color-border-strong);
+    border-radius: 16px 0 0 16px;
+    box-shadow: 0 18px 48px -20px rgba(0, 0, 0, 0.6);
+    transform: translateX(105%);
+    visibility: hidden;
+    pointer-events: none;
+    transition: transform 180ms ease, visibility 180ms ease;
+  }
+
+  .server-members.is-drawer-open {
+    display: flex;
+    transform: translateX(0);
+    visibility: visible;
+    pointer-events: auto;
+  }
+
+  .server-drawer-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-height: 40px;
+    margin-bottom: 6px;
+  }
+
+  .server-drawer-head > strong {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--color-text);
+    font-size: .875rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .server-drawer-head .server-group-kicker { margin: 0; }
+  .server-drawer-close { display: inline-flex; min-width: 40px; min-height: 40px; }
+  .server-mobile-channels-toggle { display: inline-flex; flex: none; width: 40px; height: 40px; }
+  .server-mobile-channels-toggle .icon { width: 20px; height: 20px; }
+
+  html[dir="rtl"] .server-channels { transform: translateX(105%); border-radius: 16px 0 0 16px; }
+  html[dir="rtl"] .server-channels.is-drawer-open { transform: translateX(0); }
+  html[dir="rtl"] .server-members { transform: translateX(-105%); border-radius: 0 16px 16px 0; }
+  html[dir="rtl"] .server-members.is-drawer-open { transform: translateX(0); }
+
+  .room-bar { position: relative; z-index: 52; }
+  .server-channel-title { flex: 1 1 auto; min-width: 0; }
+  .server-channel-topic { display: none; }
+  .server-head-actions { gap: 2px; }
+  .server-head-actions .icon-button { min-width: 40px; min-height: 40px; }
+  .server-stage .composer { gap: 4px; padding: 6px; }
+  .server-stage .composer-attach { width: 34px; min-width: 34px; height: 40px; }
+  .server-stage .composer textarea { min-height: 40px; padding: 8px; }
+  .server-stage .send-btn { min-width: 40px; min-height: 40px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .server-channels,
+    .server-members { transition: none; }
+  }
+
+  .server-invite-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 6px 8px;
+  }
+
+  .server-invite-card .invite-note {
+    grid-column: 1 / -1;
+    margin: 0;
+  }
+
+  .server-invite-card .invite-kicker {
+    grid-column: 1;
+    min-width: 0;
+    margin: 0;
+  }
+
+  .server-invite-card .invite-note { display: none; }
+
+  .server-invite-card .invite-row {
+    display: flex;
+    grid-column: 1 / -1;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-width: 0;
+    margin-top: 0;
+  }
+
+  .server-invite-card .invite-row code {
+    flex: 1 1 0;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 0 8px;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    background: var(--color-surface);
+    line-height: 38px;
+  }
+
+  .server-invite-card .invite-row .btn {
+    flex: none;
+    min-height: 40px;
+    white-space: nowrap;
+  }
+
+  .server-invite-card [data-notifications-toggle] {
+    grid-column: 2;
+    grid-row: 1;
+    min-height: 38px;
+    max-width: 100%;
+    padding-inline: 8px;
+    font-size: .6875rem;
+    white-space: nowrap;
+  }
+
+  .server-owner-tools .field input:not([type="color"]),
+  .server-owner-tools .server-icon-input input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .server-stage {
+    flex: 1 1 0;
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
+    height: auto;
+    overflow: hidden;
+  }
+
+  .server-stage .messages {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .server-stage .composer {
+    position: relative;
+    flex: none;
+    bottom: auto;
+    padding-bottom: max(8px, env(safe-area-inset-bottom, 0px));
+  }
+
+  .server-channel-head { min-height: 48px; padding: 8px 10px; }
+  .server-stage .soundboard-panel { margin: 8px; }
+}
+
+@media (max-width: 420px) {
+  .server-main { gap: 6px; padding-top: 6px; }
+  .server-invite-card { padding: 7px; }
+  .server-channel-head { gap: 4px; padding-inline: 6px; }
+  .server-stage .composer { gap: 3px; padding: 5px; }
+  .server-stage .composer-attach { width: 32px; min-width: 32px; }
+}
+
+@media (max-width: 360px) {
+  .room-bar { gap: 4px; padding-inline: 8px; }
+  .room-bar #leave-btn-top { display: none !important; }
+  .room-code { gap: 4px; padding-inline: 6px; }
+  .room-code .icon { display: none; }
+  .room-status { gap: 3px; }
+  .room-status .ping-badge { min-height: 24px; padding: 2px 5px; }
+  .room-bar-actions { gap: 2px; }
+}
+
+@media (max-width: 300px) {
+  .room-status .ping-badge { display: none; }
+}
