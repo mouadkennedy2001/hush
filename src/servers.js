@@ -259,10 +259,10 @@ function normalizeServer(raw) {
  * data/server-chats/<serverId>/<channelId>.json and is permanent.
  *
  * Server messages carry BOTH:
- *  - authorId: the socket id that sent the message (display / presence)
+ *  - authorId: the socket id that sent the message (legacy/internal only)
  *  - authorDeviceId: the stable device id (edit/delete ownership survives
- *    reconnects and new tabs — the old socket-id-only check made your own
- *    messages un-editable as soon as you reconnected).
+ *    reconnects and new tabs). Neither identifier is exposed in public chat
+ *    payloads; the server computes a viewer-specific isOwn flag instead.
  */
 export class ServerManager {
   #servers = new Map();
@@ -970,21 +970,42 @@ export class ServerManager {
         }
       }
       if (Array.isArray(data)) {
+        const server = this.get(serverId);
         messages = data
           .filter((m) => m && typeof m.id === 'string' && typeof m.text === 'string')
-          .map((m) => ({
-            id: m.id,
-            type: 'text',
-            text: String(m.text).slice(0, 2000),
-            attachment: this.#cleanStoredAttachment(m.attachment, serverId, channelId),
-            authorId: typeof m.authorId === 'string' ? m.authorId : '',
-            authorDeviceId: typeof m.authorDeviceId === 'string' ? m.authorDeviceId : '',
-            authorName: typeof m.authorName === 'string' ? String(m.authorName).slice(0, 32) : 'Guest',
-            createdAt: Number.isFinite(m.createdAt) ? m.createdAt : this.now(),
-            editedAt: Number.isFinite(m.editedAt) ? m.editedAt : undefined,
-            reactions: this.#cleanStoredReactions(m.reactions),
-            channelId: typeof m.channelId === 'string' ? m.channelId : channelId
-          }))
+          .map((m) => {
+            const sourceChannelId = String(m.forwardedFrom?.sourceChannelId ?? '');
+            const sourceChannel = server?.channels.find((channel) =>
+              channel.id === sourceChannelId && channel.type === 'text');
+            const forwardedFrom = m.forwardedFrom && isValidChannelId(sourceChannelId) ? {
+              authorName: String(m.forwardedFrom.authorName ?? 'Guest').slice(0, 32),
+              channelName: sourceChannel?.name || String(m.forwardedFrom.channelName ?? 'channel').slice(0, 32),
+              text: String(m.forwardedFrom.text ?? '').slice(0, 1000),
+              attachment: this.#cleanStoredAttachment(
+                m.forwardedFrom.attachment, serverId, sourceChannelId
+              )
+            } : null;
+            const replyTo = m.replyTo && typeof m.replyTo === 'object' ? {
+              messageId: String(m.replyTo.messageId ?? '').slice(0, 80),
+              authorName: String(m.replyTo.authorName ?? 'Guest').slice(0, 32),
+              text: String(m.replyTo.text ?? '').slice(0, 240)
+            } : null;
+            return {
+              id: m.id,
+              type: 'text',
+              text: String(m.text).slice(0, 2000),
+              attachment: this.#cleanStoredAttachment(m.attachment, serverId, channelId),
+              forwardedFrom,
+              replyTo,
+              authorId: typeof m.authorId === 'string' ? m.authorId : '',
+              authorDeviceId: typeof m.authorDeviceId === 'string' ? m.authorDeviceId : '',
+              authorName: typeof m.authorName === 'string' ? String(m.authorName).slice(0, 32) : 'Guest',
+              createdAt: Number.isFinite(m.createdAt) ? m.createdAt : this.now(),
+              editedAt: Number.isFinite(m.editedAt) ? m.editedAt : undefined,
+              reactions: this.#cleanStoredReactions(m.reactions),
+              channelId: typeof m.channelId === 'string' ? m.channelId : channelId
+            };
+          })
           .slice(-MAX_SERVER_MESSAGES);
       } else {
         throw new Error(`Supabase channel history must be an array (${serverId}/${channelId})`);
@@ -1052,6 +1073,29 @@ export class ServerManager {
     if (!message) return false;
     const a = String(authorId ?? '');
     return message.authorDeviceId === a || message.authorId === a;
+  }
+
+  async findMessage(serverId, channelId, messageId) {
+    if (!isValidServerId(serverId) || !isValidChannelId(channelId)
+      || typeof messageId !== 'string' || !messageId) return null;
+    const message = (await this.loadMessages(serverId, channelId))
+      .find((item) => item.id === messageId);
+    return message || null;
+  }
+
+  publicMessage(message, viewerDeviceId) {
+    const { authorId, authorDeviceId, reactions = {}, ...publicMessage } = message;
+    const publicReactions = Object.fromEntries(
+      Object.entries(reactions).map(([emoji, deviceIds]) => [
+        emoji,
+        deviceIds.map((deviceId) => this.memberIdFor(deviceId)).filter(Boolean)
+      ]).filter(([, memberIds]) => memberIds.length)
+    );
+    return {
+      ...publicMessage,
+      isOwn: Boolean(viewerDeviceId && authorDeviceId === viewerDeviceId),
+      reactions: publicReactions
+    };
   }
 
   async editMessage(serverId, channelId, messageId, authorId, text) {

@@ -2205,9 +2205,15 @@ function renderMessages() {
   });
 }
 
+function removeEmptyChatState() {
+  els.messages?.querySelector('.chat-empty')?.remove();
+}
+
 function appendMessage(message) {
   if (!els.messages || !message?.id) return false;
   if (!matchesSearch(message)) return false;
+
+  removeEmptyChatState();
 
   const key = dayKey(message.createdAt);
   if (key && key !== state.lastDay) {

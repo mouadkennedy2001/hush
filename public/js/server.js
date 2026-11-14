@@ -68,6 +68,8 @@ const els = {
   serverSettingsSave: $('#server-settings-save'),
   serverSettingsToggle: $('#server-settings-toggle'), serverSettingsToggleLabel: $('#server-settings-toggle-label'),
   serverOwnerTools: $('#server-owner-tools'),
+  replyPreview: $('#server-reply-preview'), replyText: $('#server-reply-text'),
+  replyCancel: $('#server-reply-cancel'),
   serverSettingsNameLabel: $('#server-settings-name-label'), serverSettingsDescLabel: $('#server-settings-desc-label'),
   serverSettingsIconLabel: $('#server-settings-icon-label'), serverSettingsTitle: $('#server-settings-title'),
   roleManager: $('#server-role-manager'), roleForm: $('#server-role-form'), roleId: $('#server-role-id'),
@@ -84,6 +86,7 @@ const state = {
   inviteCode: new URLSearchParams(window.location.search).get('invite') || '',
   socket: null, mesh: null, selfId: null, selfName: '', selfMemberId: '',
   server: null, channelId: null, messages: [],
+  replyTo: null,
   online: new Map(), speaking: new Set(), typingMap: new Map(),
   deviceId: getDeviceId(), inVoice: false, voiceChannelId: null, tempRoomId: null, tempRooms: [], typingTimer: null,
   joined: false, emojiCat: 'all', emojiQuery: '', activeScreenId: null,
@@ -316,6 +319,7 @@ function bindEvents() {
   els.deleteServerBtn?.addEventListener('click', deleteServer);
   els.addChannelForm?.addEventListener('submit', (e) => { e.preventDefault(); addChannel(); });
   els.composer.addEventListener('submit', (e) => { e.preventDefault(); sendFromComposer(); });
+  els.replyCancel?.addEventListener('click', clearReply);
   els.messageInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendFromComposer(); }
   });
@@ -995,6 +999,7 @@ async function selectChannel(channel) {
   saveDraftForCurrent();
   state.channelId = channel.id;
   state.lastTextChannelId = channel.id;
+  clearReply();
   const seq = ++state.loadSeq;
   if (els.messageInput) els.messageInput.value = '';
   renderChannels();
@@ -1132,6 +1137,10 @@ async function deleteServer() { leaveServer(); }
 
 /* ---------------- Chat ---------------- */
 
+function removeEmptyChatState() {
+  els.messages?.querySelector('.chat-empty')?.remove();
+}
+
 function renderMessages() {
   els.messages.replaceChildren();
   if (!state.messages.length) {
@@ -1144,23 +1153,41 @@ function renderMessages() {
 }
 
 function createMessageNode(message) {
-  const isSelf = message.authorDeviceId === state.deviceId || message.authorId === state.selfId;
+  const isSelf = message.isOwn === true || message.authorDeviceId === state.deviceId || message.authorId === state.selfId;
   const article = el('article', 'message');
   article.dataset.messageId = message.id;
   article.classList.toggle('is-self', isSelf);
   if (message.text && isEmojiOnlyMessage(message.text)) article.classList.add('is-emoji-only');
-  const avatar = el('span', `message-avatar tone-${toneFor(message.authorId || message.authorDeviceId || message.id)}`, initials(message.authorName));
+  const avatar = el('span', `message-avatar tone-${toneFor(message.authorName || message.id)}`, initials(message.authorName));
   const body = el('div', 'message-body');
   body.append(el('div', 'message-head'));
   const head = body.firstChild;
   head.append(el('span', 'message-author', message.authorName || t('chat.guest')), el('time', 'message-time', formatTime(message.createdAt)));
   const bubble = el('div', 'message-bubble');
+  if (message.replyTo) {
+    const quote = el('div', 'server-message-quote');
+    quote.append(el('strong', '', t('server.replyingTo', { name: message.replyTo.authorName || t('chat.guest') })));
+    if (message.replyTo.text) quote.append(el('span', '', message.replyTo.text));
+    bubble.append(quote);
+  }
+  if (message.forwardedFrom) {
+    const forwardLabel = el('div', 'server-forward-label', t('server.forwardedFrom', {
+      name: message.forwardedFrom.authorName || t('chat.guest'),
+      channel: message.forwardedFrom.channelName || ''
+    }));
+    bubble.append(forwardLabel);
+    if (message.forwardedFrom.text) {
+      const forwardedText = el('p', 'message-text');
+      renderMessageText(forwardedText, message.forwardedFrom.text);
+      bubble.append(forwardedText);
+    }
+  }
   if (message.text) {
     const p = el('p', 'message-text');
     renderMessageText(p, message.text);
     bubble.append(p);
   }
-  const att = renderAttachment(message.attachment);
+  const att = renderAttachment(message.attachment || message.forwardedFrom?.attachment);
   if (att) bubble.append(att);
   body.append(bubble);
   const meta = el('div', 'message-meta');
@@ -1168,10 +1195,18 @@ function createMessageNode(message) {
   const copy = el('button', 'message-copy'); copy.type = 'button'; copy.title = t('chat.copy'); copy.setAttribute('aria-label', t('chat.copy'));
   copy.append(icon('i-copy'));
   copy.addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(message.text || ''); toast(t('chat.copied'), 'info', 1800); }
+    try { await navigator.clipboard.writeText(message.text || message.forwardedFrom?.text || ''); toast(t('chat.copied'), 'info', 1800); }
     catch { toast(t('chat.copyFailed'), 'error', 2800); }
   });
   meta.append(copy);
+  const reply = el('button', 'message-copy message-action-btn', t('server.reply'));
+  reply.type = 'button'; reply.title = t('server.reply'); reply.setAttribute('aria-label', t('server.reply'));
+  reply.addEventListener('click', () => setReplyTarget(message));
+  meta.append(reply);
+  const forward = el('button', 'message-copy message-action-btn', t('server.forward'));
+  forward.type = 'button'; forward.title = t('server.forward'); forward.setAttribute('aria-label', t('server.forward'));
+  forward.addEventListener('click', () => openForwardDialog(message));
+  meta.append(forward);
   if (REACTIONS.length) {
     const reactBtn = el('button', 'message-react'); reactBtn.type = 'button'; reactBtn.title = t('chat.reactTitle'); reactBtn.setAttribute('aria-label', t('chat.reactTitle'));
     reactBtn.append(customEmojiImage('smile', 'custom-emoji custom-emoji-xs'));
@@ -1181,11 +1216,14 @@ function createMessageNode(message) {
   appendReactionChips(meta, message);
   const canDeleteAny = hasPermission('manage_messages');
   if (isSelf) {
-    const edit = el('button', 'message-copy'); edit.type = 'button'; edit.title = t('chat.edit'); edit.setAttribute('aria-label', t('chat.edit')); edit.append(icon('i-pencil'));
-    edit.addEventListener('click', () => editMessage(message.id));
+    if (!message.forwardedFrom) {
+      const edit = el('button', 'message-copy'); edit.type = 'button'; edit.title = t('chat.edit'); edit.setAttribute('aria-label', t('chat.edit')); edit.append(icon('i-pencil'));
+      edit.addEventListener('click', () => editMessage(message.id));
+      meta.append(edit);
+    }
     const del = el('button', 'message-copy'); del.type = 'button'; del.title = t('chat.delete'); del.setAttribute('aria-label', t('chat.delete')); del.append(icon('i-trash'));
     del.addEventListener('click', () => deleteMessage(message.id));
-    meta.append(edit, del);
+    meta.append(del);
   } else if (canDeleteAny) {
     const delAny = el('button', 'message-copy'); delAny.type = 'button'; delAny.title = t('admin.deleteAny'); delAny.setAttribute('aria-label', t('admin.deleteAny')); delAny.append(icon('i-trash'));
     delAny.addEventListener('click', () => deleteMessageAny(message.id));
@@ -1205,7 +1243,7 @@ function appendReactionChips(meta, message) {
     chip.dataset.emoji = emoji;
     chip.type = 'button';
     chip.title = ids.length === 1 ? t('chat.reactionOne') : t('chat.reactionMany', { count: ids.length });
-    chip.classList.toggle('is-mine', ids.includes(state.deviceId));
+    chip.classList.toggle('is-mine', ids.includes(state.selfMemberId));
     chip.append(customEmojiImage(emoji, 'custom-emoji custom-emoji-xs'), el('span', '', String(ids.length)));
     chip.addEventListener('click', (e) => { e.stopPropagation(); sendReaction(message.id, emoji); });
     meta.append(chip);
@@ -1329,19 +1367,123 @@ function handleMessagesClick(event) {
 }
 
 async function sendFromComposer() {
-  const text = els.messageInput.value.replace(/\s+$/g, '');
+  let text = els.messageInput.value.replace(/\s+$/g, '');
   if (!text.trim()) { els.messageInput.focus(); return; }
+  const command = text.trim().match(/^\/([a-z]+)(?:\s+([\s\S]*))?$/i);
+  if (command) {
+    const name = command[1].toLowerCase();
+    const argument = (command[2] || '').trim();
+    if (name === 'help' || name === 'commands') {
+      stopTyping();
+      showLocalChatNotice(t('server.commandsHelp'));
+      els.messageInput.value = '';
+      try { sessionStorage.removeItem(draftKey()); } catch { /* ignore */ }
+      autosize();
+      return;
+    }
+    if (name === 'clear') {
+      stopTyping();
+      state.messages = [];
+      renderMessages();
+      toast(t('server.clearLocal'), 'info', 3600);
+      els.messageInput.value = '';
+      try { sessionStorage.removeItem(draftKey()); } catch { /* ignore */ }
+      autosize();
+      return;
+    }
+    if (name === 'me') {
+      if (!argument) { toast(t('server.commandUsage'), 'info', 3200); return; }
+      text = `${state.selfName} ${argument}`;
+    } else if (name === 'shrug') {
+      text = [argument, '¯\\_(ツ)_/¯'].filter(Boolean).join(' ');
+    } else {
+      toast(t('server.unknownCommand', { command: `/${name}` }), 'error', 3200);
+      return;
+    }
+  }
   els.messageInput.value = '';
   try { sessionStorage.removeItem(draftKey()); } catch { /* ignore */ }
   autosize();
   stopTyping();
-  const response = await emitAck('server:chat:send', { channelId: state.channelId, text: text.slice(0, 2000) });
+  const response = await emitAck('server:chat:send', {
+    channelId: state.channelId,
+    text: text.slice(0, 2000),
+    replyToId: state.replyTo?.id || ''
+  });
   if (!response?.ok) {
     toast(t(response?.error === 'spam' ? 'error.spam' : 'error.sendFailed'), 'error', 4200);
     els.messageInput.value = text;
     autosize();
+  } else {
+    clearReply();
   }
   els.messageInput.focus();
+}
+
+function showLocalChatNotice(text) {
+  const notice = el('div', 'server-command-notice', text);
+  notice.setAttribute('role', 'status');
+  els.messages.append(notice);
+  scrollLatest('smooth');
+}
+
+function setReplyTarget(message) {
+  state.replyTo = message;
+  els.replyText.textContent = t('server.replyingTo', {
+    name: message.authorName || t('chat.guest')
+  }) + (message.text || message.forwardedFrom?.text ? ` — ${message.text || message.forwardedFrom.text}` : '');
+  els.replyPreview.hidden = false;
+  els.messageInput.focus();
+}
+
+function clearReply() {
+  state.replyTo = null;
+  if (els.replyPreview) els.replyPreview.hidden = true;
+}
+
+function openForwardDialog(message) {
+  const channels = (state.server?.channels || []).filter((channel) =>
+    channel.type === 'text' && channel.id !== state.channelId);
+  if (!channels.length) {
+    toast(t('server.forwardNoChannel'), 'info', 3200);
+    return;
+  }
+  const dialog = document.createElement('dialog');
+  dialog.className = 'server-forward-dialog';
+  const title = el('h2', '', t('server.forwardTitle'));
+  const label = el('label', 'field', t('server.forwardDestination'));
+  const select = document.createElement('select');
+  select.className = 'server-forward-select';
+  for (const channel of channels) {
+    const option = document.createElement('option');
+    option.value = channel.id;
+    option.textContent = `# ${channel.name}`;
+    select.append(option);
+  }
+  label.append(select);
+  const actions = el('div', 'server-forward-actions');
+  const cancel = el('button', 'btn btn-quiet btn-sm', t('chat.cancel'));
+  cancel.type = 'button';
+  const submit = el('button', 'btn btn-primary btn-sm', t('server.forward'));
+  submit.type = 'button';
+  actions.append(cancel, submit);
+  dialog.append(title, label, actions);
+  document.body.append(dialog);
+  const close = () => { if (dialog.open) dialog.close(); dialog.remove(); };
+  dialog.addEventListener('close', () => dialog.remove(), { once: true });
+  cancel.addEventListener('click', close);
+  submit.addEventListener('click', async () => {
+    submit.disabled = true;
+    const result = await emitAck('server:chat:forward', {
+      messageId: message.id,
+      sourceChannelId: message.channelId || state.channelId,
+      targetChannelId: select.value
+    });
+    close();
+    if (!result?.ok) toast(t('server.forwardFailed'), 'error', 3600);
+    else toast(t('server.forwarded'), 'info', 2400);
+  });
+  dialog.showModal();
 }
 
 async function editMessage(messageId) {
@@ -2091,9 +2233,10 @@ function bindSocketEvents(socket) {
     maybeNotifyMention(message);
     if (message.channelId !== state.channelId) return;
     state.messages.push(message);
+    removeEmptyChatState();
     els.messages.append(createMessageNode(message));
     scrollLatest('smooth');
-    if (getSoundsEnabled() && (message.authorDeviceId !== state.deviceId && message.authorId !== state.selfId)) playSound('message');
+    if (getSoundsEnabled() && !message.isOwn) playSound('message');
   });
   socket.on('server:chat:edited', ({ messageId, text, editedAt } = {}) => {
     const message = state.messages.find((m) => m.id === messageId);
@@ -2105,6 +2248,7 @@ function bindSocketEvents(socket) {
   socket.on('server:chat:deleted', ({ messageId } = {}) => {
     state.messages = state.messages.filter((m) => m.id !== messageId);
     [...els.messages.querySelectorAll('.message')].find((n) => n.dataset.messageId === messageId)?.remove();
+    if (!state.messages.length) renderMessages();
   });
   socket.on('server:chat:reaction', ({ channelId, messageId, reactions } = {}) => {
     if (channelId !== state.channelId || !messageId) return;
@@ -2247,6 +2391,7 @@ function bindSocketEvents(socket) {
 
 function maybeNotifyMention(message) {
   try {
+    if (message.isOwn) return;
     if (!getSettings().notifications || !('Notification' in window) || Notification.permission !== 'granted' || !document.hidden) return;
     const self = String(state.selfName || '').toLowerCase();
     const text = String(message?.text || '');

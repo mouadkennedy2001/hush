@@ -69,16 +69,29 @@ test('servers are separate from rooms: permanent, own chat, invite link', async 
       assert.equal(ja.server.id, server.id);
       const jb = await ack(bob, 'server:join', { serverId: server.id, name: 'Bob', deviceId: 'device-nomember1', inviteCode: server.inviteCode });
       assert.equal(jb.ok, true);
+      assert.equal(jb.membersOnline.find((member) => member.id === jb.self.id).deviceId, jb.self.deviceId,
+        'the private join response retains this device id for the current client');
+      assert.ok(jb.membersOnline.filter((member) => member.id !== jb.self.id)
+        .every((member) => !('deviceId' in member)), 'join presence hides other members’ device ids');
       const textChannel = ja.server.channels.find((c) => c.type === 'text');
       const heard = new Promise((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error('server chat relay timeout')), 4000);
         bob.once('server:chat:message', (m) => { clearTimeout(timer); resolve(m); });
       });
+      const heardBySender = new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('sender chat echo timeout')), 4000);
+        alice.once('server:chat:message', (m) => { clearTimeout(timer); resolve(m); });
+      });
       const sent = await ack(alice, 'server:chat:send', { channelId: textChannel.id, text: 'hello server', attachment: null });
       assert.equal(sent.ok, true);
       const message = await heard;
+      const ownMessage = await heardBySender;
       assert.equal(message.text, 'hello server');
       assert.equal(message.channelId, textChannel.id);
+      assert.equal(message.isOwn, false);
+      assert.equal(ownMessage.isOwn, true);
+      assert.equal('authorDeviceId' in message, false, 'private device identifiers are not sent to other members');
+      assert.equal('authorId' in message, false, 'ephemeral socket identifiers are not sent to other members');
       // Edit + delete own message
       const edited = await ack(alice, 'server:chat:edit', { channelId: textChannel.id, messageId: message.id, text: 'edited srv' });
       assert.equal(edited.ok, true);
@@ -102,6 +115,35 @@ test('servers are separate from rooms: permanent, own chat, invite link', async 
         body: JSON.stringify({ name: 'random', type: 'text', deviceId: 'device-server-1' })
       });
       assert.equal(added.status, 201);
+      const addedChannel = await added.json();
+      await new Promise((resolve) => setTimeout(resolve, 900));
+      const reply = await ack(alice, 'server:chat:send', {
+        channelId: textChannel.id, text: 'reply text', replyToId: message.id
+      });
+      assert.equal(reply.ok, true);
+      const aliceReaction = await ack(alice, 'server:chat:react', {
+        channelId: textChannel.id, messageId: message.id, emoji: 'heart'
+      });
+      assert.equal(aliceReaction.ok, true);
+      assert.ok(aliceReaction.reactions.heart.includes(ja.self.memberId));
+      assert.equal(aliceReaction.reactions.heart.includes('device-server-1'), false);
+      const forwarded = await ack(alice, 'server:chat:forward', {
+        messageId: message.id, sourceChannelId: textChannel.id, targetChannelId: addedChannel.channel.id
+      });
+      assert.equal(forwarded.ok, true);
+      const forwardedHistory = await ack(bob, 'server:history', { channelId: addedChannel.channel.id });
+      assert.equal(forwardedHistory.ok, true);
+      assert.equal(forwardedHistory.messages.at(-1).forwardedFrom.text, 'edited srv');
+      assert.equal(forwardedHistory.messages.at(-1).isOwn, false);
+      const replyHistory = await ack(bob, 'server:history', { channelId: textChannel.id });
+      assert.equal(replyHistory.ok, true);
+      assert.equal(replyHistory.messages.find((item) => item.text === 'reply text').replyTo.text, 'edited srv');
+      assert.equal(replyHistory.messages.find((item) => item.text === 'edited srv').isOwn, false);
+      const restHistory = await fetch(`${url}/api/servers/${server.id}/history?channelId=${textChannel.id}`, {
+        headers: { 'X-Session-Token': ownerToken }
+      }).then((response) => response.json());
+      assert.equal(restHistory.messages.find((item) => item.text === 'edited srv').isOwn, true);
+      assert.equal('authorDeviceId' in restHistory.messages.find((item) => item.text === 'edited srv'), false);
       const regen = await fetch(`${url}/api/servers/${server.id}/regenerate-invite`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Session-Token': ownerToken },
         body: JSON.stringify({ deviceId: 'device-server-1' })

@@ -719,9 +719,9 @@ export async function createHushServer({
     const channelId = String(req.query.channelId || '');
     if (!isValidChannelId(channelId)) return res.status(404).json({ error: 'channel-not-found' });
     const channel = server.channels.find((c) => c.id === channelId);
-    if (!channel) return res.status(404).json({ error: 'channel-not-found' });
+    if (!channel || channel.type !== 'text') return res.status(404).json({ error: 'channel-not-found' });
     const messages = await servers.loadMessages(server.id, channelId);
-    res.json({ ok: true, messages });
+    res.json({ ok: true, messages: messages.map((message) => servers.publicMessage(message, viewer)) });
   });
 
   app.post('/api/servers/:id/channels', serverLimit, requireServerSession, async (req, res) => {

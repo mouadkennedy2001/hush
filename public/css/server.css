@@ -155,7 +155,9 @@
 .member-kick .icon { width: 14px; height: 14px; flex: none; }
 .server-channel-count { margin-inline-start: auto; font-size: .625rem; color: var(--color-text-2); flex: none; }
 .server-description { margin-top: 6px; color: var(--color-slate); font-size: .6875rem; line-height: 1.4; }
-.server-stage .messages { scroll-behavior: smooth; }
+.server-stage .messages { scroll-behavior: smooth; padding-inline: clamp(16px, 3.2vw, 46px); gap: 16px; }
+.server-stage .message { width: min(100%, 980px); margin-inline: auto; }
+.server-stage .message-bubble { line-height: 1.55; }
 .message.is-emoji-only .message-bubble { padding: 4px 6px; }
 .emoji-search { width: 100%; }
 .emoji-grid { max-height: 240px; }

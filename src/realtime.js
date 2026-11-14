@@ -164,16 +164,15 @@ export function attachRealtime(io, { rooms, servers, sessions = null, maxPartici
     map.delete(socketId);
     if (!map.size) serverOnline.delete(serverId);
   }
-  function serverOnlineList(serverId, { includeDeviceIds = false } = {}) {
-    // A2/C2: never expose deviceId in broadcast presence lists — ids needed
-    // for kicks stay server-side. The private join ack passes
-    // includeDeviceIds so the new member can still correlate presence dots.
-    // memberId (SHA-256 pseudonym) IS safe to broadcast and lets clients
-    // match presence to the member list — without it, online members all
-    // showed as offline in the members panel.
-    return [...(serverOnline.get(serverId)?.values() ?? [])].map((p) => includeDeviceIds
-      ? ({ id: p.id, name: p.name, deviceId: p.deviceId, memberId: p.memberId })
-      : ({ id: p.id, name: p.name, memberId: p.memberId }));
+  function serverOnlineList(serverId, viewerDeviceId) {
+    // Socket ids are required for realtime signaling. Return a device id only
+    // for the viewer's own socket; member ids identify everyone else.
+    return [...(serverOnline.get(serverId)?.values() ?? [])].map((p) => ({
+      id: p.id,
+      name: p.name,
+      memberId: p.memberId,
+      ...(p.deviceId === viewerDeviceId ? { deviceId: p.deviceId } : {})
+    }));
   }
   // Internal only: full records including deviceId for duplicate-device /
   // eviction logic. Never sent to clients.
@@ -1003,11 +1002,11 @@ export function attachRealtime(io, { rooms, servers, sessions = null, maxPartici
         ok: true,
         self: { id: socket.id, name: participant.name, deviceId: deviceId || '', memberId: servers.memberIdFor(deviceId || '') },
         server: servers.publicSummary(server, deviceId || null),
-        membersOnline: serverOnlineList(serverId, { includeDeviceIds: true }),
+        membersOnline: serverOnlineList(serverId, deviceId),
         tempRooms: listTempRooms(serverId),
         voiceOccupancy: voiceOccupancySnapshot(serverId),
         tempOccupancy: tempOccupancySnapshot(serverId),
-        messages,
+        messages: messages.map((message) => servers.publicMessage(message, deviceId)),
         channelId: firstText?.id ?? null,
         sessionToken
       });
@@ -1027,7 +1026,10 @@ export function attachRealtime(io, { rooms, servers, sessions = null, maxPartici
         const channel = fresh.channels.find((c) => c.id === channelId);
         if (!channel || channel.type !== 'text') return safeAck(ack, { ok: false, error: 'channel-not-found' });
         const messages = await servers.loadMessages(fresh.id, channelId);
-        safeAck(ack, { ok: true, messages });
+        safeAck(ack, {
+          ok: true,
+          messages: messages.map((message) => servers.publicMessage(message, serverMembership.deviceId))
+        });
       } catch (error) {
         console.error('server:history failed', error);
         safeAck(ack, { ok: false, error: 'history-failed' });
@@ -1050,6 +1052,22 @@ export function attachRealtime(io, { rooms, servers, sessions = null, maxPartici
       if (!channel) return safeAck(ack, { ok: false, error: 'channel-not-found' });
       const text = cleanMessageText(stripInvisible(payload.text));
       const attachment = cleanServerAttachment(payload.attachment, server.id, channelId);
+      let replyTo = null;
+      if (payload.replyToId) {
+        let source;
+        try {
+          source = await servers.findMessage(server.id, channelId, String(payload.replyToId));
+        } catch (error) {
+          console.error('server:chat:reply lookup failed', error);
+          return safeAck(ack, { ok: false, error: 'send-failed' });
+        }
+        if (!source) return safeAck(ack, { ok: false, error: 'message-not-found' });
+        replyTo = {
+          messageId: source.id,
+          authorName: source.authorName,
+          text: String(source.forwardedFrom?.text ?? source.text).slice(0, 240)
+        };
+      }
       if (!text && !attachment) return safeAck(ack, { ok: false, error: 'empty-message' });
       if (text.length > MAX_MESSAGE_LENGTH) return safeAck(ack, { ok: false, error: 'message-too-long' });
       const now = Date.now();
@@ -1078,14 +1096,65 @@ export function attachRealtime(io, { rooms, servers, sessions = null, maxPartici
       const message = {
         id: randomUUID(), type: 'text', text, attachment,
         authorId: participant.id, authorDeviceId: deviceId, authorName: participant.name,
-        createdAt: Date.now(), reactions: {}, channelId
+        createdAt: Date.now(), reactions: {}, channelId, replyTo
       };
       try {
         await servers.addMessage(server.id, channelId, message);
-        io.to(serverChannelFor(server.id)).emit('server:chat:message', message);
+        const room = serverChannelFor(server.id);
+        io.to(room).except(socket.id).emit('server:chat:message', servers.publicMessage(message, ''));
+        socket.emit('server:chat:message', servers.publicMessage(message, deviceId));
         safeAck(ack, { ok: true, id: message.id });
       } catch (error) {
         console.error('server:chat:send failed', error);
+        safeAck(ack, { ok: false, error: 'send-failed' });
+      }
+    });
+
+    socket.on('server:chat:forward', async (payload = {}, ack) => {
+      try {
+        if (!servers || !serverMembership) return safeAck(ack, { ok: false, error: 'not-in-server' });
+        if (socket.data.mutedUntil && Date.now() < socket.data.mutedUntil) return safeAck(ack, { ok: false, error: 'muted' });
+        if (!allowRateFor(socket, 'forwardRate', 8)) return safeAck(ack, { ok: false, error: 'rate-limited' });
+        const fresh = servers.get(serverMembership.server.id);
+        if (!fresh) return safeAck(ack, { ok: false, error: 'server-not-found' });
+        serverMembership.server = fresh;
+        const { deviceId, participant } = serverMembership;
+        if (!servers.isMember(fresh, deviceId) || servers.isBanned(fresh, deviceId)) {
+          return safeAck(ack, { ok: false, error: 'not-member' });
+        }
+        const sourceChannelId = String(payload.sourceChannelId ?? '');
+        const targetChannelId = String(payload.targetChannelId ?? '');
+        const sourceChannel = fresh.channels.find((channel) => channel.id === sourceChannelId && channel.type === 'text');
+        const targetChannel = fresh.channels.find((channel) => channel.id === targetChannelId && channel.type === 'text');
+        if (!sourceChannel || !targetChannel) return safeAck(ack, { ok: false, error: 'channel-not-found' });
+        const source = await servers.findMessage(fresh.id, sourceChannelId, String(payload.messageId ?? ''));
+        if (!source) return safeAck(ack, { ok: false, error: 'message-not-found' });
+        const origin = source.forwardedFrom || {
+          authorName: source.authorName,
+          channelName: sourceChannel.name,
+          text: source.text,
+          attachment: source.attachment
+        };
+        const message = {
+          id: randomUUID(), type: 'text', text: '', attachment: null,
+          authorId: participant.id, authorDeviceId: deviceId, authorName: participant.name,
+          createdAt: Date.now(), editedAt: undefined, reactions: {}, channelId: targetChannelId,
+          forwardedFrom: {
+            sourceChannelId: source.forwardedFrom?.sourceChannelId || sourceChannelId,
+            authorName: String(origin.authorName || 'Guest').slice(0, 32),
+            channelName: String(origin.channelName || sourceChannel.name).slice(0, 32),
+            text: String(origin.text || '').slice(0, 1000),
+            attachment: origin.attachment || null
+          }
+        };
+        const stored = await servers.addMessage(fresh.id, targetChannelId, message);
+        if (!stored) return safeAck(ack, { ok: false, error: 'send-failed' });
+        const room = serverChannelFor(fresh.id);
+        io.to(room).except(socket.id).emit('server:chat:message', servers.publicMessage(message, ''));
+        socket.emit('server:chat:message', servers.publicMessage(message, deviceId));
+        safeAck(ack, { ok: true, id: message.id });
+      } catch (error) {
+        console.error('server:chat:forward failed', error);
         safeAck(ack, { ok: false, error: 'send-failed' });
       }
     });
@@ -1174,8 +1243,13 @@ export function attachRealtime(io, { rooms, servers, sessions = null, maxPartici
         if (!isAllowedReaction(emoji) || !messageId || !isValidChannelId(channelId)) return safeAck(ack, { ok: false, error: 'invalid-reaction' });
         const reactions = await servers.toggleReaction(fresh.id, channelId, messageId, emoji, serverMembership.deviceId);
         if (!reactions) return safeAck(ack, { ok: false, error: 'message-not-found' });
-        io.to(serverChannelFor(fresh.id)).emit('server:chat:reaction', { channelId, messageId, reactions });
-        safeAck(ack, { ok: true, reactions });
+        const publicReactions = Object.fromEntries(
+          Object.entries(reactions).map(([key, deviceIds]) => [
+            key, deviceIds.map((id) => servers.memberIdFor(id)).filter(Boolean)
+          ]).filter(([, memberIds]) => memberIds.length)
+        );
+        io.to(serverChannelFor(fresh.id)).emit('server:chat:reaction', { channelId, messageId, reactions: publicReactions });
+        safeAck(ack, { ok: true, reactions: publicReactions });
       } catch (error) {
         console.error('server:chat:react failed', error);
         safeAck(ack, { ok: false, error: 'react-failed' });

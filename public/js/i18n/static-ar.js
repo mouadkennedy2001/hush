@@ -245,7 +245,7 @@ export const staticAr = {
   'Reset zoom (0)': 'إعادة ضبط التكبير (0)',
   'Zoom the shared screen': 'تكبير/تصغير الشاشة المشتركة',
   'Clear search': 'مسح البحث',
-  'No messages yet. Say hello.': 'لا توجد رسائل بعد. ألقِ تحية.',
+  'No messages yet. Say hello.': 'لا توجد رسائل بعد قل السلام عليكم.',
   'Room tools': 'أدوات الغرفة',
   'Save chat': 'حفظ الدردشة',
   'Notification sounds': 'أصوات الإشعارات',

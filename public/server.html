@@ -266,6 +266,12 @@
         </div>
         <div class="messages" id="messages" role="log" aria-live="polite" aria-label="Server messages"></div>
         <div class="typing" id="typing" aria-live="polite"></div>
+        <div class="server-reply-preview" id="server-reply-preview" role="status" hidden>
+          <span id="server-reply-text"></span>
+          <button class="icon-button" id="server-reply-cancel" type="button" aria-label="Cancel reply" title="Cancel reply">
+            <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg>
+          </button>
+        </div>
         <form class="composer" id="composer">
           <div class="emoji-wrap">
             <button class="icon-button composer-attach" id="emoji-btn" type="button" title="Insert emoji" aria-label="Insert emoji" aria-haspopup="true" aria-expanded="false">

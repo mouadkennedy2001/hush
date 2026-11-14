@@ -1343,6 +1343,71 @@ html[data-theme="dark"] .control[aria-pressed="true"] {
   background: var(--wash-sky);
 }
 
+.message-action-btn {
+  width: auto;
+  min-width: 42px;
+  padding: 0 6px;
+  font: inherit;
+  font-size: 0.625rem;
+  cursor: pointer;
+}
+
+.server-message-quote {
+  display: grid;
+  gap: 2px;
+  max-width: 42rem;
+  margin-bottom: 6px;
+  padding-inline-start: 8px;
+  border-inline-start: 2px solid var(--color-signal-blue);
+  color: var(--color-slate);
+  font-size: 0.6875rem;
+  overflow-wrap: anywhere;
+}
+
+.server-message-quote strong { color: var(--color-deep-signal); }
+.server-forward-label { margin-bottom: 5px; color: var(--color-slate); font-size: 0.625rem; }
+.server-command-notice {
+  align-self: center;
+  max-width: min(100%, 48rem);
+  padding: 9px 14px;
+  border: 1px solid var(--color-fog);
+  border-radius: 10px;
+  background: var(--color-surface-2);
+  color: var(--color-text-2);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.server-reply-preview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 14px 6px;
+  padding: 6px 10px;
+  border-inline-start: 3px solid var(--color-signal-blue);
+  border-radius: 6px;
+  background: var(--wash-sky);
+  color: var(--color-ink);
+  font-size: 0.75rem;
+}
+.server-reply-preview[hidden] { display: none; }
+.server-reply-preview > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.server-forward-dialog {
+  width: min(420px, calc(100vw - 32px));
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  padding: 18px;
+  box-shadow: var(--shadow-lg);
+}
+.server-forward-dialog::backdrop { background: rgba(12, 12, 20, .55); backdrop-filter: blur(3px); }
+.server-forward-dialog h2 { margin: 0 0 14px; font-size: 1rem; }
+.server-forward-select { width: 100%; margin-top: 6px; padding: 9px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface-2); color: var(--color-text); font: inherit; }
+.server-forward-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+
 .message-link {
   color: var(--color-deep-signal);
   text-decoration: underline;
